@@ -913,8 +913,24 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Player slots recalculated: {slots}",
     },
     "edit.timeout": {
-        "de": "Zeitüberschreitung. Sitzung beendet.",
-        "en": "Edit session timed out. Session ended.",
+        "de": "Ich bin mir nicht sicher, wohin du gegangen bist. Wir können es später erneut versuchen.",
+        "en": "I'm not sure where you went. We can try again later.",
+    },
+    "edit.cancel_hint": {
+        "de": "'cancel' zum Verlassen",
+        "en": "'cancel' to exit",
+    },
+    "edit.confirm_prompt": {
+        "de": "1 Ja\n2 Nein",
+        "en": "1 Yes\n2 No",
+    },
+    "edit.edit_more_prompt": {
+        "de": "1 Nein, ich bin fertig\n2 Ja, ich möchte weiter bearbeiten",
+        "en": "1 No, I'm done\n2 Yes, I want to continue editing",
+    },
+    "edit.updated": {
+        "de": "Das Event wurde aktualisiert!",
+        "en": "The event has been updated!",
     },
     "edit.reg_start_hint": {
         "de": "Format: TT.MM.JJJJ HH:MM, oder 'sofort'/'now', oder 'leer'/'empty' zum Entfernen",

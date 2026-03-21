@@ -1381,56 +1381,24 @@ def _format_display_value(value, vtype, lang):
     return str(value)
 
 
-class EditConfirmationView(ui.View):
-    def __init__(self, lang):
-        super().__init__(timeout=300)
-        self.result = None
-
-        confirm_btn = ui.Button(label=t("general.confirm", lang), style=discord.ButtonStyle.success)
-        confirm_btn.callback = self._confirm
-        self.add_item(confirm_btn)
-
-        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
-        cancel_btn.callback = self._cancel
-        self.add_item(cancel_btn)
-
-    async def _confirm(self, interaction):
-        self.result = "confirm"
-        await interaction.response.defer()
-        self.stop()
-
-    async def _cancel(self, interaction):
-        self.result = "cancel"
-        await interaction.response.defer()
-        self.stop()
-
-
-class EditMoreView(ui.View):
-    def __init__(self, lang):
-        super().__init__(timeout=300)
-        self.result = None
-
-        more_btn = ui.Button(label=t("edit.yes_more", lang), style=discord.ButtonStyle.primary)
-        more_btn.callback = self._more
-        self.add_item(more_btn)
-
-        done_btn = ui.Button(label=t("edit.no_done", lang), style=discord.ButtonStyle.secondary)
-        done_btn.callback = self._done
-        self.add_item(done_btn)
-
-    async def _more(self, interaction):
-        self.result = "more"
-        await interaction.response.defer()
-        self.stop()
-
-    async def _done(self, interaction):
-        self.result = "done"
-        await interaction.response.defer()
-        self.stop()
-
-
 async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
-    """Run the full DM-based event editing conversation."""
+    """Run the full DM-based event editing conversation (Apollo-style text flow)."""
+
+    class _Cancel(Exception):
+        pass
+
+    async def _wait_reply(check, lang):
+        """Wait for a DM reply; raise _Cancel if user types 'cancel'."""
+        try:
+            msg = await bot.wait_for("message", check=check, timeout=300)
+        except asyncio.TimeoutError:
+            await user.send(t("edit.timeout", lang))
+            raise _Cancel
+        if msg.content.strip().lower() == "cancel":
+            await user.send(t("edit.finished", lang))
+            raise _Cancel
+        return msg
+
     try:
         lang = get_guild_language(guild_id)
 
@@ -1444,36 +1412,20 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                 await user.send(t("general.no_active_event", lang))
                 break
 
-            # Build grouped property list
-            groups = [
-                ("edit.group.general", _EDIT_PROPERTIES[0:4]),
-                ("edit.group.squad_config", _EDIT_PROPERTIES[4:12]),
-                ("edit.group.extras", _EDIT_PROPERTIES[12:15]),
-            ]
+            # Build Apollo-style plain-text property list
+            lines = [t("edit.select_property", lang), ""]
+            for num, key, label_key, vtype, special in _EDIT_PROPERTIES:
+                current = _format_property_value(event, key, vtype, lang)
+                label = t(label_key, lang).split(". ", 1)[-1]
+                lines.append(f"**{num} · {label}**")
+                lines.append(f"{current}")
+                lines.append("")
+            lines.append(t("edit.cancel_hint", lang))
 
-            list_embed = discord.Embed(
-                title=t("edit.title", lang),
-                description=t("edit.select_property", lang),
-                color=discord.Color.blue(),
-            )
-            for group_key, props in groups:
-                field_lines = []
-                for num, key, label_key, vtype, special in props:
-                    current = _format_property_value(event, key, vtype, lang)
-                    field_lines.append(f"`{num:>2}.` {t(label_key, lang).split('. ', 1)[-1]}:  `{current}`")
-                list_embed.add_field(
-                    name=t(group_key, lang),
-                    value="\n".join(field_lines),
-                    inline=False,
-                )
-            await user.send(embed=list_embed)
+            await user.send("\n".join(lines))
 
             # Wait for property number
-            try:
-                reply = await bot.wait_for("message", check=dm_check, timeout=300)
-            except asyncio.TimeoutError:
-                await user.send(t("edit.timeout", lang))
-                break
+            reply = await _wait_reply(dm_check, lang)
 
             try:
                 choice = int(reply.content.strip())
@@ -1500,14 +1452,11 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
             else:
                 prompt += t("edit.enter_new_value", lang)
 
+            prompt += "\n" + t("edit.cancel_hint", lang)
             await user.send(prompt)
 
             # Wait for new value
-            try:
-                value_msg = await bot.wait_for("message", check=dm_check, timeout=300)
-            except asyncio.TimeoutError:
-                await user.send(t("edit.timeout", lang))
-                break
+            value_msg = await _wait_reply(dm_check, lang)
 
             # Validate
             new_value, error_key = _validate_edit_value(value_msg, key, vtype, lang)
@@ -1515,27 +1464,18 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                 await user.send(t(error_key, lang))
                 continue
 
-            # Confirmation embed
+            # Text-based confirmation
             new_display = _format_display_value(new_value, vtype, lang)
-
-            confirm_embed = discord.Embed(
-                title=t("edit.confirm_change", lang),
-                color=discord.Color.orange(),
+            confirm_text = (
+                f"{t('edit.confirm_change', lang)}\n\n"
+                f"{t('edit.old_value', lang)}: `{current_display}`\n"
+                f"{t('edit.new_value', lang)}: `{new_display}`\n\n"
+                f"{t('edit.confirm_prompt', lang)}"
             )
-            confirm_embed.add_field(
-                name=t("edit.old_value", lang), value=f"`{current_display}`", inline=True)
-            confirm_embed.add_field(
-                name=t("edit.new_value", lang), value=f"`{new_display}`", inline=True)
+            await user.send(confirm_text)
 
-            view = EditConfirmationView(lang)
-            await user.send(embed=confirm_embed, view=view)
-
-            timed_out = await view.wait()
-            if timed_out:
-                await user.send(t("edit.timeout", lang))
-                break
-
-            if view.result != "confirm":
+            confirm_reply = await _wait_reply(dm_check, lang)
+            if confirm_reply.content.strip() != "1":
                 await user.send(t("general.cancelled", lang))
                 continue
 
@@ -1574,16 +1514,15 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
 
                 save_event(db_id, event, user_assignments)
 
-            await user.send(t("edit.applied", lang))
-
-            # Slot recalculation notification
-            if special == "recalc_slots":
-                await user.send(t("edit.recalculated", lang, slots=event["max_player_slots"]))
-
             # Update channel display
             await update_event_displays(guild_id, channel_id)
 
-            # Log the edit
+            # Notify + log
+            await user.send(t("edit.updated", lang))
+
+            if special == "recalc_slots":
+                await user.send(t("edit.recalculated", lang, slots=event["max_player_slots"]))
+
             guild = bot.get_guild(guild_id)
             if guild:
                 await send_to_log_channel(
@@ -1593,15 +1532,20 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                       name=event["name"]),
                     guild=guild)
 
-            # Ask "edit more?"
-            more_view = EditMoreView(lang)
-            await user.send(t("edit.edit_more_question", lang), view=more_view)
+            # Ask "edit more?" — text-based
+            more_text = (
+                f"{t('edit.edit_more_question', lang)}\n"
+                f"{t('edit.edit_more_prompt', lang)}"
+            )
+            await user.send(more_text)
 
-            timed_out = await more_view.wait()
-            if timed_out or more_view.result != "more":
+            more_reply = await _wait_reply(dm_check, lang)
+            if more_reply.content.strip() != "2":
                 await user.send(t("edit.finished", lang))
                 break
 
+    except _Cancel:
+        pass
     except discord.Forbidden:
         logger.warning(f"DM edit session: user {user.id} has DMs disabled mid-session")
     except Exception as e:
