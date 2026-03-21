@@ -828,6 +828,110 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Du hast bereits eine aktive Bearbeitungssitzung in deinen DMs.",
         "en": "You already have an active editing session in your DMs.",
     },
+    "edit.property.name": {
+        "de": "1. Event-Name",
+        "en": "1. Event name",
+    },
+    "edit.property.date": {
+        "de": "2. Datum (TT.MM.JJJJ)",
+        "en": "2. Date (DD.MM.YYYY)",
+    },
+    "edit.property.time": {
+        "de": "3. Uhrzeit (HH:MM)",
+        "en": "3. Time (HH:MM)",
+    },
+    "edit.property.description": {
+        "de": "4. Beschreibung",
+        "en": "4. Description",
+    },
+    "edit.property.server_max": {
+        "de": "5. Server max. Spieler",
+        "en": "5. Server max players",
+    },
+    "edit.property.max_casters": {
+        "de": "6. Max. Caster-Plätze",
+        "en": "6. Max caster slots",
+    },
+    "edit.property.max_vehicles": {
+        "de": "7. Max. Fahrzeug-Squads",
+        "en": "7. Max vehicle squads",
+    },
+    "edit.property.max_helis": {
+        "de": "8. Max. Heli-Squads",
+        "en": "8. Max heli squads",
+    },
+    "edit.property.infantry_size": {
+        "de": "9. Infanterie-Squadgröße",
+        "en": "9. Infantry squad size",
+    },
+    "edit.property.vehicle_size": {
+        "de": "10. Fahrzeug-Squadgröße",
+        "en": "10. Vehicle squad size",
+    },
+    "edit.property.heli_size": {
+        "de": "11. Heli-Squadgröße",
+        "en": "11. Heli squad size",
+    },
+    "edit.property.max_squads_user": {
+        "de": "12. Max. Squads pro Spieler",
+        "en": "12. Max squads per player",
+    },
+    "edit.property.reminder": {
+        "de": "13. Erinnerung (Min., 0=aus)",
+        "en": "13. Reminder (min, 0=off)",
+    },
+    "edit.property.reg_start": {
+        "de": "14. Registrierungsstart",
+        "en": "14. Registration start",
+    },
+    "edit.property.image": {
+        "de": "15. Event-Bild (URL)",
+        "en": "15. Event image (URL)",
+    },
+    "edit.image_hint": {
+        "de": "Sende eine HTTPS-URL oder lade ein Bild hoch. Sende 'leer' zum Entfernen.",
+        "en": "Send an HTTPS URL or upload an image. Send 'empty' to remove.",
+    },
+    "edit.invalid_url": {
+        "de": "Ungültige URL. Bitte sende eine gültige HTTPS-URL oder lade ein Bild hoch.",
+        "en": "Invalid URL. Please send a valid HTTPS URL or upload an image.",
+    },
+    "edit.invalid_date": {
+        "de": "Ungültiges Datum. Bitte verwende das Format TT.MM.JJJJ.",
+        "en": "Invalid date. Please use the format DD.MM.YYYY.",
+    },
+    "edit.invalid_time": {
+        "de": "Ungültige Uhrzeit. Bitte verwende das Format HH:MM.",
+        "en": "Invalid time. Please use the format HH:MM.",
+    },
+    "edit.invalid_integer": {
+        "de": "Ungültige Eingabe. Bitte gib eine positive ganze Zahl ein.",
+        "en": "Invalid input. Please enter a positive integer.",
+    },
+    "edit.recalculated": {
+        "de": "Spieler-Slots neu berechnet: {slots}",
+        "en": "Player slots recalculated: {slots}",
+    },
+    "edit.timeout": {
+        "de": "Zeitüberschreitung. Sitzung beendet.",
+        "en": "Edit session timed out. Session ended.",
+    },
+    "edit.reg_start_hint": {
+        "de": "Format: TT.MM.JJJJ HH:MM, oder 'sofort'/'now', oder 'leer'/'empty' zum Entfernen",
+        "en": "Format: DD.MM.YYYY HH:MM, or 'now'/'sofort', or 'empty'/'leer' to remove",
+    },
+    "edit.description_hint": {
+        "de": "Sende die neue Beschreibung, oder 'leer'/'empty' zum Entfernen.",
+        "en": "Send the new description, or 'empty'/'leer' to remove.",
+    },
+    "edit.image_removed": {
+        "de": "Event-Bild entfernt.",
+        "en": "Event image removed.",
+    },
+    "log.event_edited": {
+        "de": "Event bearbeitet: {user} hat '{property}' geändert (Event: {name})",
+        "en": "Event edited: {user} changed '{property}' (Event: {name})",
+    },
 
     # ── Wizard / creation flow ────────────────────────────────────────────
     "wizard.server_capacity": {

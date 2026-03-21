@@ -5,8 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # UID/GID from .env (default 1000)
-ARG PUID=1000
-ARG PGID=1000
+ARG PUID
+ARG PGID
 
 # Set the working directory inside the container
 WORKDIR /app

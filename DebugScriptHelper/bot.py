@@ -80,10 +80,29 @@ bot = EventBot()
 # ---------------------------------------------------------------------------
 # Locks per guild to protect concurrent state mutations
 _guild_locks: dict[int, asyncio.Lock] = {}
-# Track active DM edit sessions
-_active_edit_sessions: set[int] = set()
+# Track active DM edit sessions: user_id -> {guild_id, channel_id}
+_active_edit_sessions: dict[int, dict] = {}
 # Debounced display update tasks per (guild_id, channel_id)
 _display_update_tasks: dict[tuple[int, int], asyncio.Task] = {}
+
+# Data-driven table for the DM edit flow: (number, event_key, i18n_label, value_type, side_effect)
+_EDIT_PROPERTIES = [
+    (1,  "name",                   "edit.property.name",            "string",          None),
+    (2,  "date",                   "edit.property.date",            "date",            None),
+    (3,  "time",                   "edit.property.time",            "time",            None),
+    (4,  "description",            "edit.property.description",     "string_nullable", None),
+    (5,  "server_max_players",     "edit.property.server_max",      "int",             "recalc_slots"),
+    (6,  "max_caster_slots",       "edit.property.max_casters",     "int",             "recalc_slots"),
+    (7,  "max_vehicle_squads",     "edit.property.max_vehicles",    "int",             None),
+    (8,  "max_heli_squads",        "edit.property.max_helis",       "int",             None),
+    (9,  "infantry_squad_size",    "edit.property.infantry_size",   "int",             None),
+    (10, "vehicle_squad_size",     "edit.property.vehicle_size",    "int",             None),
+    (11, "heli_squad_size",        "edit.property.heli_size",       "int",             None),
+    (12, "max_squads_per_user",    "edit.property.max_squads_user", "int",             None),
+    (13, "event_reminder_minutes", "edit.property.reminder",        "int_nullable",    None),
+    (14, "registration_start_time","edit.property.reg_start",       "reg_start",       None),
+    (15, "embed_image_url",        "edit.property.image",           "image",           None),
+]
 
 
 def _get_guild_lock(guild_id: int) -> asyncio.Lock:
@@ -140,6 +159,7 @@ def _ensure_event_keys(event: dict):
         "countdown_seconds": None, "countdown_sent": False, "announcement_sent": False,
         "event_reminder_sent": False,
         "ping_on_open": False, "ping_message_ids": [],
+        "embed_image_url": None, "event_reminder_minutes": None,
     }
     for key, default in defaults.items():
         if key not in event:
@@ -1205,8 +1225,35 @@ class AdminActionView(BaseView):
             self.add_item(btn)
 
     async def _edit(self, interaction):
-        # Placeholder — full edit flow would go here
-        await interaction.response.send_message("Edit flow — coming soon.", ephemeral=True)
+        lang = get_guild_language(self.guild_id)
+
+        if interaction.user.id in _active_edit_sessions:
+            await interaction.response.send_message(
+                t("edit.active_session", lang), ephemeral=True)
+            return
+
+        event, user_assignments, db_id = _get_channel_event(self.guild_id, self.channel_id)
+        if not event:
+            await interaction.response.send_message(
+                t("general.no_active_event", lang), ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            await interaction.user.create_dm()
+        except discord.Forbidden:
+            await interaction.followup.send(
+                t("edit.dm_blocked", lang), ephemeral=True)
+            return
+
+        _active_edit_sessions[interaction.user.id] = {
+            "guild_id": self.guild_id,
+            "channel_id": self.channel_id,
+        }
+        await interaction.followup.send(t("edit.dm_sent", lang), ephemeral=True)
+        bot.loop.create_task(
+            _run_dm_edit_session(interaction.user, self.guild_id, self.channel_id, db_id))
 
     async def _delete(self, interaction):
         lang = get_guild_language(self.guild_id)
@@ -1221,6 +1268,339 @@ class AdminActionView(BaseView):
             color=discord.Color.red())
         view = DeleteConfirmationView(self.guild_id, self.channel_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# DM edit session: helpers, views, main loop
+# ---------------------------------------------------------------------------
+
+def _format_property_value(event, key, vtype, lang):
+    """Format a property value for display in the edit list."""
+    not_set = t("edit.not_set", lang)
+    val = event.get(key)
+    if vtype in ("string", "string_nullable"):
+        return str(val) if val else not_set
+    if vtype == "date":
+        return val if val else not_set
+    if vtype == "time":
+        return val if val else not_set
+    if vtype == "int":
+        return str(val) if val is not None else "0"
+    if vtype == "int_nullable":
+        if val is None or val == 0:
+            return not_set
+        return str(val)
+    if vtype == "reg_start":
+        if event.get("registration_open") and not val:
+            return t("wizard.summary_reg_immediate", lang)
+        if isinstance(val, datetime):
+            return val.strftime("%d.%m.%Y %H:%M")
+        return not_set
+    if vtype == "image":
+        return val if val else not_set
+    return str(val) if val is not None else not_set
+
+
+def _validate_edit_value(message, key, vtype, lang):
+    """Parse and validate a user reply. Returns (parsed_value, error_i18n_key_or_None)."""
+    text = message.content.strip()
+    clear_words = {"leer", "empty", "none", ""}
+
+    if vtype == "string":
+        if not text:
+            return None, "edit.invalid_number"
+        return text, None
+
+    if vtype == "string_nullable":
+        if text.lower() in clear_words:
+            return None, None
+        return text, None
+
+    if vtype == "date":
+        if not parse_date(text):
+            return None, "edit.invalid_date"
+        return text, None
+
+    if vtype == "time":
+        m = re.match(r"^(\d{1,2}):(\d{2})$", text)
+        if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+            return None, "edit.invalid_time"
+        return f"{int(m.group(1)):02d}:{int(m.group(2)):02d}", None
+
+    if vtype == "int":
+        try:
+            val = int(text)
+        except ValueError:
+            return None, "edit.invalid_integer"
+        if val < 1:
+            return None, "edit.invalid_integer"
+        return val, None
+
+    if vtype == "int_nullable":
+        try:
+            val = int(text)
+        except ValueError:
+            return None, "edit.invalid_integer"
+        if val < 0:
+            return None, "edit.invalid_integer"
+        return val if val > 0 else None, None
+
+    if vtype == "reg_start":
+        if text.lower() in clear_words:
+            return None, None
+        if text.lower() in {"sofort", "now", "jetzt", "immediately"}:
+            return "__immediate__", None
+        parsed = parse_registration_start(text)
+        if parsed is None:
+            return None, "edit.invalid_date"
+        return parsed, None
+
+    if vtype == "image":
+        if message.attachments:
+            att = message.attachments[0]
+            if att.content_type and att.content_type.startswith("image/"):
+                return att.url, None
+            return None, "edit.invalid_url"
+        if text.lower() in clear_words:
+            return None, None
+        if text.startswith("https://"):
+            return text, None
+        return None, "edit.invalid_url"
+
+    return text, None
+
+
+def _format_display_value(value, vtype, lang):
+    """Format a parsed value for the confirmation embed."""
+    if value is None:
+        return t("edit.not_set", lang)
+    if value == "__immediate__":
+        return t("wizard.summary_reg_immediate", lang)
+    if isinstance(value, datetime):
+        return value.strftime("%d.%m.%Y %H:%M")
+    return str(value)
+
+
+class EditConfirmationView(ui.View):
+    def __init__(self, lang):
+        super().__init__(timeout=300)
+        self.result = None
+
+        confirm_btn = ui.Button(label=t("general.confirm", lang), style=discord.ButtonStyle.success)
+        confirm_btn.callback = self._confirm
+        self.add_item(confirm_btn)
+
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _confirm(self, interaction):
+        self.result = "confirm"
+        await interaction.response.defer()
+        self.stop()
+
+    async def _cancel(self, interaction):
+        self.result = "cancel"
+        await interaction.response.defer()
+        self.stop()
+
+
+class EditMoreView(ui.View):
+    def __init__(self, lang):
+        super().__init__(timeout=300)
+        self.result = None
+
+        more_btn = ui.Button(label=t("edit.yes_more", lang), style=discord.ButtonStyle.primary)
+        more_btn.callback = self._more
+        self.add_item(more_btn)
+
+        done_btn = ui.Button(label=t("edit.no_done", lang), style=discord.ButtonStyle.secondary)
+        done_btn.callback = self._done
+        self.add_item(done_btn)
+
+    async def _more(self, interaction):
+        self.result = "more"
+        await interaction.response.defer()
+        self.stop()
+
+    async def _done(self, interaction):
+        self.result = "done"
+        await interaction.response.defer()
+        self.stop()
+
+
+async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
+    """Run the full DM-based event editing conversation."""
+    try:
+        lang = get_guild_language(guild_id)
+
+        def dm_check(m):
+            return m.author.id == user.id and isinstance(m.channel, discord.DMChannel)
+
+        while True:
+            # Re-load event fresh each iteration
+            event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
+            if not event:
+                await user.send(t("general.no_active_event", lang))
+                break
+
+            # Build numbered property list
+            lines = []
+            for num, key, label_key, vtype, special in _EDIT_PROPERTIES:
+                current = _format_property_value(event, key, vtype, lang)
+                lines.append(f"**{t(label_key, lang)}**: `{current}`")
+
+            list_embed = discord.Embed(
+                title=t("edit.title", lang),
+                description="\n".join(lines),
+                color=discord.Color.blue(),
+            )
+            await user.send(content=t("edit.select_property", lang), embed=list_embed)
+
+            # Wait for property number
+            try:
+                reply = await bot.wait_for("message", check=dm_check, timeout=300)
+            except asyncio.TimeoutError:
+                await user.send(t("edit.timeout", lang))
+                break
+
+            try:
+                choice = int(reply.content.strip())
+            except ValueError:
+                await user.send(t("edit.invalid_number", lang, max=len(_EDIT_PROPERTIES)))
+                continue
+
+            if choice < 1 or choice > len(_EDIT_PROPERTIES):
+                await user.send(t("edit.invalid_number", lang, max=len(_EDIT_PROPERTIES)))
+                continue
+
+            num, key, label_key, vtype, special = _EDIT_PROPERTIES[choice - 1]
+
+            # Show current value and prompt for new one
+            current_display = _format_property_value(event, key, vtype, lang)
+            prompt = t("edit.current_value", lang, value=current_display) + "\n"
+
+            if vtype == "image":
+                prompt += t("edit.image_hint", lang)
+            elif vtype == "reg_start":
+                prompt += t("edit.reg_start_hint", lang)
+            elif vtype == "string_nullable":
+                prompt += t("edit.description_hint", lang)
+            else:
+                prompt += t("edit.enter_new_value", lang)
+
+            await user.send(prompt)
+
+            # Wait for new value
+            try:
+                value_msg = await bot.wait_for("message", check=dm_check, timeout=300)
+            except asyncio.TimeoutError:
+                await user.send(t("edit.timeout", lang))
+                break
+
+            # Validate
+            new_value, error_key = _validate_edit_value(value_msg, key, vtype, lang)
+            if error_key:
+                await user.send(t(error_key, lang))
+                continue
+
+            # Confirmation embed
+            new_display = _format_display_value(new_value, vtype, lang)
+
+            confirm_embed = discord.Embed(
+                title=t("edit.confirm_change", lang),
+                color=discord.Color.orange(),
+            )
+            confirm_embed.add_field(
+                name=t("edit.old_value", lang), value=f"`{current_display}`", inline=True)
+            confirm_embed.add_field(
+                name=t("edit.new_value", lang), value=f"`{new_display}`", inline=True)
+
+            view = EditConfirmationView(lang)
+            await user.send(embed=confirm_embed, view=view)
+
+            timed_out = await view.wait()
+            if timed_out:
+                await user.send(t("edit.timeout", lang))
+                break
+
+            if view.result != "confirm":
+                await user.send(t("general.cancelled", lang))
+                continue
+
+            # Apply change under guild lock
+            lock = _get_guild_lock(guild_id)
+            async with lock:
+                event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
+                if not event:
+                    await user.send(t("general.no_active_event", lang))
+                    break
+
+                # Handle registration start special case
+                if key == "registration_start_time":
+                    if new_value == "__immediate__":
+                        event["registration_open"] = True
+                        event["registration_start_time"] = None
+                    elif new_value is None:
+                        event["registration_start_time"] = None
+                    elif isinstance(new_value, datetime) and new_value <= datetime.now():
+                        event["registration_open"] = True
+                        event["registration_start_time"] = None
+                    else:
+                        event["registration_start_time"] = new_value
+                        event["registration_open"] = False
+                else:
+                    event[key] = new_value
+
+                # Side effects
+                if special == "recalc_slots":
+                    event["max_player_slots"] = event["server_max_players"] - event["max_caster_slots"]
+
+                if key in ("date", "time"):
+                    new_expiry = compute_expiry_date(event["date"], event.get("time"))
+                    if new_expiry:
+                        event["expiry_date"] = new_expiry
+
+                save_event(db_id, event, user_assignments)
+
+            await user.send(t("edit.applied", lang))
+
+            # Slot recalculation notification
+            if special == "recalc_slots":
+                await user.send(t("edit.recalculated", lang, slots=event["max_player_slots"]))
+
+            # Update channel display
+            await update_event_displays(guild_id, channel_id)
+
+            # Log the edit
+            guild = bot.get_guild(guild_id)
+            if guild:
+                await send_to_log_channel(
+                    t("log.event_edited", lang,
+                      user=user.name,
+                      property=t(label_key, lang),
+                      name=event["name"]),
+                    guild=guild)
+
+            # Ask "edit more?"
+            more_view = EditMoreView(lang)
+            await user.send(t("edit.edit_more_question", lang), view=more_view)
+
+            timed_out = await more_view.wait()
+            if timed_out or more_view.result != "more":
+                await user.send(t("edit.finished", lang))
+                break
+
+    except discord.Forbidden:
+        logger.warning(f"DM edit session: user {user.id} has DMs disabled mid-session")
+    except Exception as e:
+        logger.error(f"Error in DM edit session for user {user.id}: {e}", exc_info=True)
+        try:
+            await user.send(t("general.error", get_guild_language(guild_id), error=str(e)))
+        except Exception:
+            pass
+    finally:
+        _active_edit_sessions.pop(user.id, None)
 
 
 # ---------------------------------------------------------------------------
