@@ -928,6 +928,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Event-Bild entfernt.",
         "en": "Event image removed.",
     },
+    "edit.group.general": {
+        "de": "Allgemein",
+        "en": "General",
+    },
+    "edit.group.squad_config": {
+        "de": "Squad-Konfiguration",
+        "en": "Squad configuration",
+    },
+    "edit.group.extras": {
+        "de": "Registrierung & Extras",
+        "en": "Registration & extras",
+    },
     "log.event_edited": {
         "de": "Event bearbeitet: {user} hat '{property}' geändert (Event: {name})",
         "en": "Event edited: {user} changed '{property}' (Event: {name})",

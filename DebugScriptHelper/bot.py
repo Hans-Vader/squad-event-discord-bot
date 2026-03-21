@@ -1444,18 +1444,29 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                 await user.send(t("general.no_active_event", lang))
                 break
 
-            # Build numbered property list
-            lines = []
-            for num, key, label_key, vtype, special in _EDIT_PROPERTIES:
-                current = _format_property_value(event, key, vtype, lang)
-                lines.append(f"**{t(label_key, lang)}**: `{current}`")
+            # Build grouped property list
+            groups = [
+                ("edit.group.general", _EDIT_PROPERTIES[0:4]),
+                ("edit.group.squad_config", _EDIT_PROPERTIES[4:12]),
+                ("edit.group.extras", _EDIT_PROPERTIES[12:15]),
+            ]
 
             list_embed = discord.Embed(
                 title=t("edit.title", lang),
-                description="\n".join(lines),
+                description=t("edit.select_property", lang),
                 color=discord.Color.blue(),
             )
-            await user.send(content=t("edit.select_property", lang), embed=list_embed)
+            for group_key, props in groups:
+                field_lines = []
+                for num, key, label_key, vtype, special in props:
+                    current = _format_property_value(event, key, vtype, lang)
+                    field_lines.append(f"`{num:>2}.` {t(label_key, lang).split('. ', 1)[-1]}:  `{current}`")
+                list_embed.add_field(
+                    name=t(group_key, lang),
+                    value="\n".join(field_lines),
+                    inline=False,
+                )
+            await user.send(embed=list_embed)
 
             # Wait for property number
             try:
