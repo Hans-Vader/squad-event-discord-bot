@@ -881,6 +881,16 @@ class EventActionView(ui.View):
             await interaction.response.send_message(t(gate_key, lang), ephemeral=True)
             return
 
+        user_id = str(interaction.user.id)
+        max_squads = event.get("max_squads_per_user", 1)
+        current = get_user_squad_names(user_assignments, user_id)
+        if len(current) >= max_squads:
+            if max_squads == 1 and current:
+                await interaction.response.send_message(t("squad.already_assigned", lang, name=current[0]), ephemeral=True)
+            else:
+                await interaction.response.send_message(t("squad.max_reached", lang, current=len(current), max=max_squads), ephemeral=True)
+            return
+
         settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
         view = SquadRegistrationView(gid, cid, event)
         await interaction.response.send_message(
@@ -1545,6 +1555,65 @@ class WizardTimingView(BaseView):
 
     async def _continue(self, interaction):
         self._save_selections()
+        lang = get_guild_language(self.guild_id)
+        default_limit = self.event.get("max_squads_per_user", 1)
+        next_view = WizardSquadLimitView(self.guild_id, self.channel_id, self.event, self.user_assignments,
+                                         self.settings, self.interaction_user)
+        await interaction.response.edit_message(
+            content=f"**{t('wizard.squad_limit_title', lang)}**\n{t('wizard.squad_limit_desc', lang, default=default_limit)}",
+            embed=None, view=next_view)
+
+    async def _skip(self, interaction):
+        lang = get_guild_language(self.guild_id)
+        default_limit = self.event.get("max_squads_per_user", 1)
+        next_view = WizardSquadLimitView(self.guild_id, self.channel_id, self.event, self.user_assignments,
+                                         self.settings, self.interaction_user)
+        await interaction.response.edit_message(
+            content=f"**{t('wizard.squad_limit_title', lang)}**\n{t('wizard.squad_limit_desc', lang, default=default_limit)}",
+            embed=None, view=next_view)
+
+
+class WizardSquadLimitView(BaseView):
+    """Step 4: configure max squads per user for this event."""
+
+    def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
+        super().__init__(timeout=300, title="Wizard Squad Limit")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.event = event
+        self.user_assignments = user_assignments
+        self.settings = settings
+        self.interaction_user = interaction_user
+        lang = get_guild_language(guild_id)
+
+        current_default = event.get("max_squads_per_user", 1)
+        options = []
+        for n in range(1, 11):
+            label = f"{n} Squad" if n == 1 else f"{n} Squads"
+            options.append(discord.SelectOption(label=label, value=str(n), default=(n == current_default)))
+
+        self.limit_select = ui.Select(placeholder=t("wizard.squad_limit_placeholder", lang),
+                                      options=options, min_values=1, max_values=1, row=0)
+        self.limit_select.callback = self._limit_selected
+        self.add_item(self.limit_select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=1)
+        skip_btn.callback = self._skip
+        self.add_item(skip_btn)
+
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=1)
+        continue_btn.callback = self._continue
+        self.add_item(continue_btn)
+
+        self._selected_limit = None
+
+    async def _limit_selected(self, interaction):
+        self._selected_limit = int(self.limit_select.values[0])
+        await interaction.response.defer()
+
+    async def _continue(self, interaction):
+        if self._selected_limit is not None:
+            self.event["max_squads_per_user"] = self._selected_limit
         embed = _build_confirmation_embed(self.event, self.guild_id)
         confirm_view = WizardConfirmationView(
             self.guild_id, self.channel_id, self.event, self.user_assignments,

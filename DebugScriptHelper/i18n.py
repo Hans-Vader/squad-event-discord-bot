@@ -1086,6 +1086,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Nein",
         "en": "No",
     },
+    "wizard.squad_limit_title": {
+        "de": "Squad-Limit pro Spieler (optional)",
+        "en": "Squad Limit per User (optional)",
+    },
+    "wizard.squad_limit_desc": {
+        "de": "Wie viele Squads darf ein Spieler maximal anmelden? Standard: {default}",
+        "en": "How many squads can a user register at most? Default: {default}",
+    },
+    "wizard.squad_limit_placeholder": {
+        "de": "Max. Squads pro Spieler",
+        "en": "Max squads per user",
+    },
     "ping.reg_closed": {
         "de": "**Die Registrierung für {name} ist geschlossen.**",
         "en": "**Registration for {name} is closed.**",
