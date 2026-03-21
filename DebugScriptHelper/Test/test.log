@@ -1,0 +1,346 @@
+2025-03-28 08:34:03,748 - INFO - Starte Testprogramm für Event-Bot
+2025-03-28 08:34:03,748 - INFO - Zeitstempel: 2025-03-28 08:34:03
+2025-03-28 08:34:03,748 - INFO - Test-Daten zurückgesetzt
+2025-03-28 08:34:03,748 - INFO - 
+==================================================
+2025-03-28 08:34:03,749 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,749 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,749 - INFO - Status: Offen
+2025-03-28 08:34:03,749 - INFO - Kapazität: 0/60 Slots verwendet
+2025-03-28 08:34:03,749 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,749 - INFO - 
+ANGEMELDETE TEAMS (0): 
+2025-03-28 08:34:03,749 - INFO - 
+WARTELISTE (0): 
+2025-03-28 08:34:03,749 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (0): 
+2025-03-28 08:34:03,749 - INFO - ==================================================
+
+2025-03-28 08:34:03,749 - INFO - 
+=== Test 1: Teams anmelden bis Event voll ist ===
+2025-03-28 08:34:03,749 - INFO - Eventkapazität: 60 Slots
+2025-03-28 08:34:03,754 - INFO - Team 1: Team 'Alpha Team' wurde erfolgreich mit 10 Teilnehmern registriert.
+2025-03-28 08:34:03,755 - INFO - Team 2: Team 'Beta Squad' wurde erfolgreich mit 15 Teilnehmern registriert.
+2025-03-28 08:34:03,755 - INFO - Team 3: Team 'Gamma Force' wurde erfolgreich mit 12 Teilnehmern registriert.
+2025-03-28 08:34:03,755 - INFO - Team 4: Team 'Delta Crew' wurde erfolgreich mit 8 Teilnehmern registriert.
+2025-03-28 08:34:03,755 - INFO - Team 5: Team 'Epsilon Group' wurde erfolgreich mit 11 Teilnehmern registriert.
+2025-03-28 08:34:03,755 - INFO - 
+==================================================
+2025-03-28 08:34:03,755 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,755 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,755 - INFO - Status: Offen
+2025-03-28 08:34:03,756 - INFO - Kapazität: 56/60 Slots verwendet
+2025-03-28 08:34:03,756 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,756 - INFO - 
+ANGEMELDETE TEAMS (5): 
+2025-03-28 08:34:03,756 - INFO - 1. Alpha Team (Größe: 10, ID: cd8d5f52e4)
+2025-03-28 08:34:03,756 - INFO - 2. Beta Squad (Größe: 15, ID: 9d8eb293c5)
+2025-03-28 08:34:03,756 - INFO - 3. Gamma Force (Größe: 12, ID: fdbd1698c9)
+2025-03-28 08:34:03,756 - INFO - 4. Delta Crew (Größe: 8, ID: 26603ad869)
+2025-03-28 08:34:03,756 - INFO - 5. Epsilon Group (Größe: 11, ID: 5a608dcb0d)
+2025-03-28 08:34:03,756 - INFO - 
+WARTELISTE (0): 
+2025-03-28 08:34:03,756 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (5): 
+2025-03-28 08:34:03,756 - INFO - Benutzer 158802415715699936 -> Team 'Alpha Team'
+2025-03-28 08:34:03,756 - INFO - Benutzer 805369669328150355 -> Team 'Beta Squad'
+2025-03-28 08:34:03,757 - INFO - Benutzer 813984467890906091 -> Team 'Gamma Force'
+2025-03-28 08:34:03,757 - INFO - Benutzer 467996913779943180 -> Team 'Delta Crew'
+2025-03-28 08:34:03,757 - INFO - Benutzer 294728891033796138 -> Team 'Epsilon Group'
+2025-03-28 08:34:03,757 - INFO - ==================================================
+
+2025-03-28 08:34:03,757 - INFO - 
+=== Test 2: Teams auf Warteliste setzen ===
+2025-03-28 08:34:03,757 - INFO - Team 6 (sollte auf Warteliste): Team 'Zeta Squad' wurde auf die Warteliste gesetzt (Position: 1).
+2025-03-28 08:34:03,757 - INFO - Team 7 (sollte auf Warteliste): Team 'Theta Team' wurde auf die Warteliste gesetzt (Position: 2).
+2025-03-28 08:34:03,757 - INFO - 
+==================================================
+2025-03-28 08:34:03,757 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,757 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,758 - INFO - Status: Offen
+2025-03-28 08:34:03,758 - INFO - Kapazität: 56/60 Slots verwendet
+2025-03-28 08:34:03,758 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,758 - INFO - 
+ANGEMELDETE TEAMS (5): 
+2025-03-28 08:34:03,758 - INFO - 1. Alpha Team (Größe: 10, ID: cd8d5f52e4)
+2025-03-28 08:34:03,758 - INFO - 2. Beta Squad (Größe: 15, ID: 9d8eb293c5)
+2025-03-28 08:34:03,758 - INFO - 3. Gamma Force (Größe: 12, ID: fdbd1698c9)
+2025-03-28 08:34:03,758 - INFO - 4. Delta Crew (Größe: 8, ID: 26603ad869)
+2025-03-28 08:34:03,758 - INFO - 5. Epsilon Group (Größe: 11, ID: 5a608dcb0d)
+2025-03-28 08:34:03,758 - INFO - 
+WARTELISTE (2): 
+2025-03-28 08:34:03,758 - INFO - 1. Zeta Squad (Größe: 9, ID: d9a169ee5c)
+2025-03-28 08:34:03,758 - INFO - 2. Theta Team (Größe: 7, ID: 7d3fc5906c)
+2025-03-28 08:34:03,759 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (7): 
+2025-03-28 08:34:03,759 - INFO - Benutzer 158802415715699936 -> Team 'Alpha Team'
+2025-03-28 08:34:03,759 - INFO - Benutzer 805369669328150355 -> Team 'Beta Squad'
+2025-03-28 08:34:03,759 - INFO - Benutzer 813984467890906091 -> Team 'Gamma Force'
+2025-03-28 08:34:03,759 - INFO - Benutzer 467996913779943180 -> Team 'Delta Crew'
+2025-03-28 08:34:03,759 - INFO - Benutzer 294728891033796138 -> Team 'Epsilon Group'
+2025-03-28 08:34:03,759 - INFO - Benutzer 168101291479163304 -> Team 'Zeta Squad'
+2025-03-28 08:34:03,759 - INFO - Benutzer 512083243927458673 -> Team 'Theta Team'
+2025-03-28 08:34:03,759 - INFO - ==================================================
+
+2025-03-28 08:34:03,759 - INFO - 
+=== Test 3: Edge Case - Doppelte Registrierung ===
+2025-03-28 08:34:03,759 - INFO - Doppelte Registrierung: Ein Team mit dem Namen 'alpha team' ist bereits registriert.
+2025-03-28 08:34:03,759 - INFO - 
+=== Test 4: Edge Case - Teamgröße ändern ===
+2025-03-28 08:34:03,760 - INFO - Team 'Alpha Team' von 10 auf 8 verkleinert
+2025-03-28 08:34:03,760 - INFO - Team verkleinern: Team 'Alpha Team' wurde von 10 auf 8 verkleinert.
+2025-03-28 08:34:03,760 - INFO - Team 'Alpha Team' von 8 auf 9 vergrößert
+2025-03-28 08:34:03,760 - INFO - Team leicht vergrößern: Team 'Alpha Team' wurde von 8 auf 9 vergrößert.
+2025-03-28 08:34:03,760 - INFO - Team stark vergrößern: Die maximale Teamgröße ist 12.
+2025-03-28 08:34:03,760 - INFO - Team 'Zeta Squad' auf Warteliste von 9 auf 5 verkleinert
+2025-03-28 08:34:03,760 - INFO - Wartelisten-Team verkleinern: Team 'Zeta Squad' wurde auf der Warteliste von 9 auf 5 verkleinert.
+2025-03-28 08:34:03,761 - INFO - Team 'Theta Team' auf Warteliste von 7 auf 10 vergrößert
+2025-03-28 08:34:03,761 - INFO - Wartelisten-Team vergrößern: Team 'Theta Team' wurde auf der Warteliste von 7 auf 10 vergrößert.
+2025-03-28 08:34:03,761 - INFO - 
+==================================================
+2025-03-28 08:34:03,761 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,761 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,761 - INFO - Status: Offen
+2025-03-28 08:34:03,761 - INFO - Kapazität: 55/60 Slots verwendet
+2025-03-28 08:34:03,761 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,761 - INFO - 
+ANGEMELDETE TEAMS (5): 
+2025-03-28 08:34:03,761 - INFO - 1. Alpha Team (Größe: 9, ID: cd8d5f52e4)
+2025-03-28 08:34:03,762 - INFO - 2. Beta Squad (Größe: 15, ID: 9d8eb293c5)
+2025-03-28 08:34:03,762 - INFO - 3. Gamma Force (Größe: 12, ID: fdbd1698c9)
+2025-03-28 08:34:03,762 - INFO - 4. Delta Crew (Größe: 8, ID: 26603ad869)
+2025-03-28 08:34:03,762 - INFO - 5. Epsilon Group (Größe: 11, ID: 5a608dcb0d)
+2025-03-28 08:34:03,762 - INFO - 
+WARTELISTE (2): 
+2025-03-28 08:34:03,762 - INFO - 1. Zeta Squad (Größe: 5, ID: d9a169ee5c)
+2025-03-28 08:34:03,762 - INFO - 2. Theta Team (Größe: 10, ID: 7d3fc5906c)
+2025-03-28 08:34:03,762 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (7): 
+2025-03-28 08:34:03,762 - INFO - Benutzer 158802415715699936 -> Team 'Alpha Team'
+2025-03-28 08:34:03,762 - INFO - Benutzer 805369669328150355 -> Team 'Beta Squad'
+2025-03-28 08:34:03,762 - INFO - Benutzer 813984467890906091 -> Team 'Gamma Force'
+2025-03-28 08:34:03,762 - INFO - Benutzer 467996913779943180 -> Team 'Delta Crew'
+2025-03-28 08:34:03,763 - INFO - Benutzer 294728891033796138 -> Team 'Epsilon Group'
+2025-03-28 08:34:03,763 - INFO - Benutzer 168101291479163304 -> Team 'Zeta Squad'
+2025-03-28 08:34:03,763 - INFO - Benutzer 512083243927458673 -> Team 'Theta Team'
+2025-03-28 08:34:03,763 - INFO - ==================================================
+
+2025-03-28 08:34:03,763 - INFO - 
+=== Test 5: Edge Case - Team abmelden ===
+2025-03-28 08:34:03,763 - INFO - Team 'Gamma Force' (12 Plätze) vom Event entfernt
+2025-03-28 08:34:03,763 - INFO - Team-Zuweisung für Benutzer 813984467890906091 entfernt
+2025-03-28 08:34:03,763 - INFO - Team aus Event abmelden: Team 'Gamma Force' wurde erfolgreich abgemeldet., Freigewordene Slots: 12
+2025-03-28 08:34:03,763 - INFO - Nach Abmeldung (Warteliste sollte verarbeitet werden):
+2025-03-28 08:34:03,763 - INFO - 
+==================================================
+2025-03-28 08:34:03,763 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,764 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,764 - INFO - Status: Offen
+2025-03-28 08:34:03,764 - INFO - Kapazität: 43/60 Slots verwendet
+2025-03-28 08:34:03,764 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,764 - INFO - 
+ANGEMELDETE TEAMS (4): 
+2025-03-28 08:34:03,764 - INFO - 1. Alpha Team (Größe: 9, ID: cd8d5f52e4)
+2025-03-28 08:34:03,764 - INFO - 2. Beta Squad (Größe: 15, ID: 9d8eb293c5)
+2025-03-28 08:34:03,764 - INFO - 3. Delta Crew (Größe: 8, ID: 26603ad869)
+2025-03-28 08:34:03,764 - INFO - 4. Epsilon Group (Größe: 11, ID: 5a608dcb0d)
+2025-03-28 08:34:03,764 - INFO - 
+WARTELISTE (2): 
+2025-03-28 08:34:03,764 - INFO - 1. Zeta Squad (Größe: 5, ID: d9a169ee5c)
+2025-03-28 08:34:03,764 - INFO - 2. Theta Team (Größe: 10, ID: 7d3fc5906c)
+2025-03-28 08:34:03,764 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (6): 
+2025-03-28 08:34:03,764 - INFO - Benutzer 158802415715699936 -> Team 'Alpha Team'
+2025-03-28 08:34:03,765 - INFO - Benutzer 805369669328150355 -> Team 'Beta Squad'
+2025-03-28 08:34:03,765 - INFO - Benutzer 467996913779943180 -> Team 'Delta Crew'
+2025-03-28 08:34:03,765 - INFO - Benutzer 294728891033796138 -> Team 'Epsilon Group'
+2025-03-28 08:34:03,765 - INFO - Benutzer 168101291479163304 -> Team 'Zeta Squad'
+2025-03-28 08:34:03,765 - INFO - Benutzer 512083243927458673 -> Team 'Theta Team'
+2025-03-28 08:34:03,765 - INFO - ==================================================
+
+2025-03-28 08:34:03,765 - INFO - Team 'Theta Team' (10 Plätze) von der Warteliste entfernt
+2025-03-28 08:34:03,765 - INFO - Team-Zuweisung für Benutzer 512083243927458673 entfernt
+2025-03-28 08:34:03,765 - INFO - Team von Warteliste abmelden: Team 'Theta Team' wurde erfolgreich abgemeldet.
+2025-03-28 08:34:03,765 - INFO - Nicht-existierendes Team abmelden: Team 'Nichtexistierendes Team' ist weder angemeldet noch auf der Warteliste.
+2025-03-28 08:34:03,765 - INFO - 
+==================================================
+2025-03-28 08:34:03,766 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,766 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,766 - INFO - Status: Offen
+2025-03-28 08:34:03,766 - INFO - Kapazität: 43/60 Slots verwendet
+2025-03-28 08:34:03,766 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,766 - INFO - 
+ANGEMELDETE TEAMS (4): 
+2025-03-28 08:34:03,766 - INFO - 1. Alpha Team (Größe: 9, ID: cd8d5f52e4)
+2025-03-28 08:34:03,766 - INFO - 2. Beta Squad (Größe: 15, ID: 9d8eb293c5)
+2025-03-28 08:34:03,766 - INFO - 3. Delta Crew (Größe: 8, ID: 26603ad869)
+2025-03-28 08:34:03,766 - INFO - 4. Epsilon Group (Größe: 11, ID: 5a608dcb0d)
+2025-03-28 08:34:03,766 - INFO - 
+WARTELISTE (1): 
+2025-03-28 08:34:03,766 - INFO - 1. Zeta Squad (Größe: 5, ID: d9a169ee5c)
+2025-03-28 08:34:03,766 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (5): 
+2025-03-28 08:34:03,766 - INFO - Benutzer 158802415715699936 -> Team 'Alpha Team'
+2025-03-28 08:34:03,767 - INFO - Benutzer 805369669328150355 -> Team 'Beta Squad'
+2025-03-28 08:34:03,767 - INFO - Benutzer 467996913779943180 -> Team 'Delta Crew'
+2025-03-28 08:34:03,767 - INFO - Benutzer 294728891033796138 -> Team 'Epsilon Group'
+2025-03-28 08:34:03,767 - INFO - Benutzer 168101291479163304 -> Team 'Zeta Squad'
+2025-03-28 08:34:03,767 - INFO - ==================================================
+
+2025-03-28 08:34:03,767 - INFO - 
+=== Test 6: Edge Case - Event schließen/öffnen ===
+2025-03-28 08:34:03,767 - INFO - Event schließen: Die Anmeldungen für das Event 'Test Event' wurden geschlossen.
+2025-03-28 08:34:03,767 - INFO - Team bei geschlossenem Event anmelden: Die Anmeldungen für dieses Event sind derzeit geschlossen.
+2025-03-28 08:34:03,767 - INFO - Team 'Zeta Squad': 5 Mitglieder von der Warteliste aufgerückt
+2025-03-28 08:34:03,768 - INFO - Event öffnen: Die Anmeldungen für das Event 'Test Event' wurden wieder geöffnet. Folgende Teams sind aufgerückt: Zeta Squad (+5)
+2025-03-28 08:34:03,768 - INFO - Verarbeitete Teams beim Öffnen: [('Zeta Squad', 5)]
+2025-03-28 08:34:03,768 - INFO - Team nach Wiedereröffnung anmelden: Team 'Neueröffnetes Team' wurde erfolgreich mit 7 Teilnehmern registriert.
+2025-03-28 08:34:03,768 - INFO - 
+==================================================
+2025-03-28 08:34:03,768 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,768 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,768 - INFO - Status: Offen
+2025-03-28 08:34:03,768 - INFO - Kapazität: 55/60 Slots verwendet
+2025-03-28 08:34:03,768 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,768 - INFO - 
+ANGEMELDETE TEAMS (6): 
+2025-03-28 08:34:03,769 - INFO - 1. Alpha Team (Größe: 9, ID: cd8d5f52e4)
+2025-03-28 08:34:03,769 - INFO - 2. Beta Squad (Größe: 15, ID: 9d8eb293c5)
+2025-03-28 08:34:03,769 - INFO - 3. Delta Crew (Größe: 8, ID: 26603ad869)
+2025-03-28 08:34:03,769 - INFO - 4. Epsilon Group (Größe: 11, ID: 5a608dcb0d)
+2025-03-28 08:34:03,769 - INFO - 5. Zeta Squad (Größe: 5, ID: d9a169ee5c)
+2025-03-28 08:34:03,769 - INFO - 6. Neueröffnetes Team (Größe: 7, ID: 7f65f19cfa)
+2025-03-28 08:34:03,769 - INFO - 
+WARTELISTE (0): 
+2025-03-28 08:34:03,769 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (6): 
+2025-03-28 08:34:03,769 - INFO - Benutzer 158802415715699936 -> Team 'Alpha Team'
+2025-03-28 08:34:03,769 - INFO - Benutzer 805369669328150355 -> Team 'Beta Squad'
+2025-03-28 08:34:03,769 - INFO - Benutzer 467996913779943180 -> Team 'Delta Crew'
+2025-03-28 08:34:03,769 - INFO - Benutzer 294728891033796138 -> Team 'Epsilon Group'
+2025-03-28 08:34:03,769 - INFO - Benutzer 168101291479163304 -> Team 'Zeta Squad'
+2025-03-28 08:34:03,769 - INFO - Benutzer 104962958468271995 -> Team 'Neueröffnetes Team'
+2025-03-28 08:34:03,769 - INFO - ==================================================
+
+2025-03-28 08:34:03,769 - INFO - 
+=== Test 7: Edge Case - Event-Kapazität erweitern ===
+2025-03-28 08:34:03,770 - INFO - Kapazität erweitern: Event-Kapazität von 60 auf 75 erhöht. Keine Teams auf der Warteliste.
+2025-03-28 08:34:03,770 - INFO - 
+==================================================
+2025-03-28 08:34:03,770 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,770 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,770 - INFO - Status: Offen
+2025-03-28 08:34:03,770 - INFO - Kapazität: 55/75 Slots verwendet
+2025-03-28 08:34:03,770 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,770 - INFO - 
+ANGEMELDETE TEAMS (6): 
+2025-03-28 08:34:03,770 - INFO - 1. Alpha Team (Größe: 9, ID: cd8d5f52e4)
+2025-03-28 08:34:03,770 - INFO - 2. Beta Squad (Größe: 15, ID: 9d8eb293c5)
+2025-03-28 08:34:03,770 - INFO - 3. Delta Crew (Größe: 8, ID: 26603ad869)
+2025-03-28 08:34:03,771 - INFO - 4. Epsilon Group (Größe: 11, ID: 5a608dcb0d)
+2025-03-28 08:34:03,771 - INFO - 5. Zeta Squad (Größe: 5, ID: d9a169ee5c)
+2025-03-28 08:34:03,771 - INFO - 6. Neueröffnetes Team (Größe: 7, ID: 7f65f19cfa)
+2025-03-28 08:34:03,771 - INFO - 
+WARTELISTE (0): 
+2025-03-28 08:34:03,771 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (6): 
+2025-03-28 08:34:03,771 - INFO - Benutzer 158802415715699936 -> Team 'Alpha Team'
+2025-03-28 08:34:03,771 - INFO - Benutzer 805369669328150355 -> Team 'Beta Squad'
+2025-03-28 08:34:03,771 - INFO - Benutzer 467996913779943180 -> Team 'Delta Crew'
+2025-03-28 08:34:03,771 - INFO - Benutzer 294728891033796138 -> Team 'Epsilon Group'
+2025-03-28 08:34:03,771 - INFO - Benutzer 168101291479163304 -> Team 'Zeta Squad'
+2025-03-28 08:34:03,771 - INFO - Benutzer 104962958468271995 -> Team 'Neueröffnetes Team'
+2025-03-28 08:34:03,771 - INFO - ==================================================
+
+2025-03-28 08:34:03,771 - INFO - 
+=== Test 8: Edge Case - Team auf Größe 0 setzen ===
+2025-03-28 08:34:03,771 - INFO - Team 'Delta Crew' (8 Plätze) vom Event entfernt
+2025-03-28 08:34:03,772 - INFO - Team-Zuweisung für Benutzer 467996913779943180 entfernt
+2025-03-28 08:34:03,772 - INFO - Team auf Größe 0 setzen: Team 'Delta Crew' wurde erfolgreich abgemeldet.
+2025-03-28 08:34:03,772 - INFO - 
+==================================================
+2025-03-28 08:34:03,772 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,772 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,772 - INFO - Status: Offen
+2025-03-28 08:34:03,772 - INFO - Kapazität: 47/75 Slots verwendet
+2025-03-28 08:34:03,772 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,772 - INFO - 
+ANGEMELDETE TEAMS (5): 
+2025-03-28 08:34:03,772 - INFO - 1. Alpha Team (Größe: 9, ID: cd8d5f52e4)
+2025-03-28 08:34:03,772 - INFO - 2. Beta Squad (Größe: 15, ID: 9d8eb293c5)
+2025-03-28 08:34:03,772 - INFO - 3. Epsilon Group (Größe: 11, ID: 5a608dcb0d)
+2025-03-28 08:34:03,773 - INFO - 4. Zeta Squad (Größe: 5, ID: d9a169ee5c)
+2025-03-28 08:34:03,773 - INFO - 5. Neueröffnetes Team (Größe: 7, ID: 7f65f19cfa)
+2025-03-28 08:34:03,773 - INFO - 
+WARTELISTE (0): 
+2025-03-28 08:34:03,773 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (5): 
+2025-03-28 08:34:03,773 - INFO - Benutzer 158802415715699936 -> Team 'Alpha Team'
+2025-03-28 08:34:03,773 - INFO - Benutzer 805369669328150355 -> Team 'Beta Squad'
+2025-03-28 08:34:03,773 - INFO - Benutzer 294728891033796138 -> Team 'Epsilon Group'
+2025-03-28 08:34:03,773 - INFO - Benutzer 168101291479163304 -> Team 'Zeta Squad'
+2025-03-28 08:34:03,773 - INFO - Benutzer 104962958468271995 -> Team 'Neueröffnetes Team'
+2025-03-28 08:34:03,773 - INFO - ==================================================
+
+2025-03-28 08:34:03,773 - INFO - 
+=== Test 9: Vollständige Wartelisten-Verarbeitung ===
+2025-03-28 08:34:03,773 - INFO - Team 'Alpha Team' (9 Plätze) vom Event entfernt
+2025-03-28 08:34:03,773 - INFO - Team-Zuweisung für Benutzer 158802415715699936 entfernt
+2025-03-28 08:34:03,774 - INFO - Team 'Beta Squad' (15 Plätze) vom Event entfernt
+2025-03-28 08:34:03,774 - INFO - Team-Zuweisung für Benutzer 805369669328150355 entfernt
+2025-03-28 08:34:03,774 - INFO - Team 'Epsilon Group' (11 Plätze) vom Event entfernt
+2025-03-28 08:34:03,774 - INFO - Team-Zuweisung für Benutzer 294728891033796138 entfernt
+2025-03-28 08:34:03,774 - INFO - Team 'Zeta Squad' (5 Plätze) vom Event entfernt
+2025-03-28 08:34:03,774 - INFO - Team-Zuweisung für Benutzer 168101291479163304 entfernt
+2025-03-28 08:34:03,774 - INFO - Team 'Neueröffnetes Team' (7 Plätze) vom Event entfernt
+2025-03-28 08:34:03,774 - INFO - Team-Zuweisung für Benutzer 104962958468271995 entfernt
+2025-03-28 08:34:03,775 - INFO - Neu aufgesetzte Event-Situation:
+2025-03-28 08:34:03,775 - INFO - 
+==================================================
+2025-03-28 08:34:03,775 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,775 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,776 - INFO - Status: Offen
+2025-03-28 08:34:03,776 - INFO - Kapazität: 55/60 Slots verwendet
+2025-03-28 08:34:03,776 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,776 - INFO - 
+ANGEMELDETE TEAMS (2): 
+2025-03-28 08:34:03,776 - INFO - 1. Team A (Größe: 25, ID: 2fc2858955)
+2025-03-28 08:34:03,776 - INFO - 2. Team B (Größe: 30, ID: a4c99df5f7)
+2025-03-28 08:34:03,776 - INFO - 
+WARTELISTE (3): 
+2025-03-28 08:34:03,776 - INFO - 1. Team C (Größe: 10, ID: 92bef51790)
+2025-03-28 08:34:03,776 - INFO - 2. Team D (Größe: 15, ID: baeccd87de)
+2025-03-28 08:34:03,776 - INFO - 3. Team E (Größe: 20, ID: 00204c7176)
+2025-03-28 08:34:03,776 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (0): 
+2025-03-28 08:34:03,776 - INFO - ==================================================
+
+2025-03-28 08:34:03,777 - INFO - Team 'Team C': 10 Mitglieder von der Warteliste aufgerückt
+2025-03-28 08:34:03,777 - INFO - Team 'Team D': 15 Mitglieder von der Warteliste aufgerückt
+2025-03-28 08:34:03,777 - INFO - Team 'Team E': 20 Mitglieder von der Warteliste aufgerückt
+2025-03-28 08:34:03,777 - INFO - Kapazität stark erweitern: Event-Kapazität von 60 auf 100 erhöht. Folgende Teams sind aufgerückt: Team C (+10), Team D (+15), Team E (+20)
+2025-03-28 08:34:03,777 - INFO - Verarbeitete Teams bei großer Erweiterung: [('Team C', 10), ('Team D', 15), ('Team E', 20)]
+2025-03-28 08:34:03,777 - INFO - 
+==================================================
+2025-03-28 08:34:03,777 - INFO - EVENT-ZUSAMMENFASSUNG: Test Event
+2025-03-28 08:34:03,777 - INFO - Datum: 2025-04-01 20:00
+2025-03-28 08:34:03,778 - INFO - Status: Offen
+2025-03-28 08:34:03,778 - INFO - Kapazität: 100/100 Slots verwendet
+2025-03-28 08:34:03,778 - INFO - Max. Teamgröße: 12
+2025-03-28 08:34:03,778 - INFO - 
+ANGEMELDETE TEAMS (5): 
+2025-03-28 08:34:03,778 - INFO - 1. Team A (Größe: 25, ID: 2fc2858955)
+2025-03-28 08:34:03,778 - INFO - 2. Team B (Größe: 30, ID: a4c99df5f7)
+2025-03-28 08:34:03,778 - INFO - 3. Team C (Größe: 10, ID: 92bef51790)
+2025-03-28 08:34:03,778 - INFO - 4. Team D (Größe: 15, ID: baeccd87de)
+2025-03-28 08:34:03,778 - INFO - 5. Team E (Größe: 20, ID: 00204c7176)
+2025-03-28 08:34:03,778 - INFO - 
+WARTELISTE (0): 
+2025-03-28 08:34:03,778 - INFO - 
+BENUTZER-TEAM-ZUWEISUNGEN (0): 
+2025-03-28 08:34:03,778 - INFO - ==================================================
+
+2025-03-28 08:34:03,778 - INFO - 
+=== TESTSUITE ABGESCHLOSSEN ===
+2025-03-28 08:34:03,779 - INFO - Der Testlauf des Event-Bots wurde erfolgreich abgeschlossen.
+2025-03-28 08:34:03,779 - INFO - Zeitstempel: 2025-03-28 08:34:03
