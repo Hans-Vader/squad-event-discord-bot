@@ -335,7 +335,7 @@ def format_event_details(event: dict, lang: str = "de",
 
     embed = Embed(
         title=t("embed.title", lang, name=event["name"]),
-        description=event.get("description") or t("embed.no_description", lang),
+        description=event.get("description") or None,
         color=discord.Color.blue(),
     )
 
@@ -403,61 +403,47 @@ def format_event_details(event: dict, lang: str = "de",
     infantry_player_slots = server_cap - max_casters - vehicle_player_slots - heli_player_slots
     max_inf_squads = infantry_player_slots // inf_size if inf_size > 0 else 0
 
-    slot_lines = [
-        t("embed.server_slots", lang, cap=server_cap, free=available),
-        t("embed.infantry_squads", lang, count=infantry_count, max=max_inf_squads, size=inf_size),
-        t("embed.vehicle_squads", lang, count=vehicle_count, max=max_vehicles, size=veh_size),
-        t("embed.heli_squads", lang, count=heli_count, max=max_helis, size=heli_size),
-        t("embed.max_squads_per_user", lang, max=max_squads_user),
-    ]
-    embed.add_field(name=t("embed.available_slots", lang), value="\n".join(slot_lines), inline=False)
+    # Slot overview — compact inline grid (row 1: server, caster, max/player)
+    embed.add_field(
+        name=t("embed.server_overview", lang),
+        value=t("embed.server_overview_value", lang, cap=server_cap, free=available),
+        inline=True)
+    embed.add_field(name=t("embed.max_per_user_label", lang, count=max_squads_user), value="\u200b", inline=True)
 
-    # Caster slots
-    if caster_enabled:
-        caster_used = event.get("caster_slots_used", 0)
-        caster_free = max_casters - caster_used
-        embed.add_field(
-            name=t("embed.caster_slots", lang),
-            value=t("embed.caster_slots_value", lang, free=caster_free, used=caster_used, max=max_casters),
-            inline=True,
-        )
-    embed.add_field(name="\u200b", value="\u200b", inline=True)
-
-    # Squads by type
+    # Squad type fields — each type always shown with count/max
     squads = event.get("squads", {})
     infantry_squads = {n: d for n, d in squads.items() if d.get("type") == "infantry"}
     vehicle_squads = {n: d for n, d in squads.items() if d.get("type") == "vehicle"}
     heli_squads = {n: d for n, d in squads.items() if d.get("type") == "heli"}
 
-    for squad_group, type_key, max_count in [
-        (infantry_squads, "infantry", max_inf_squads),
-        (vehicle_squads, "vehicle", max_vehicles),
-        (heli_squads, "heli", max_helis),
+    for squad_group, type_key, count, max_count in [
+        (infantry_squads, "infantry", infantry_count, max_inf_squads),
+        (vehicle_squads, "vehicle", vehicle_count, max_vehicles),
+        (heli_squads, "heli", heli_count, max_helis),
     ]:
+        name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count})"
         if squad_group:
             text = ""
-            label_key = f"embed.{type_key}_label"
             for squad_name, data in squad_group.items():
                 playstyle = data.get("playstyle", "Normal")
                 size = data.get("size", 0)
                 rep = data.get("rep_name")
                 rep_suffix = f" — {rep}" if rep else ""
                 text += f"[{playstyle}] **{squad_name}** ({size}){rep_suffix}\n"
-            embed.add_field(
-                name=t(label_key, lang, count=len(squad_group), max=max_count),
-                value=text,
-                inline=False,
-            )
+            embed.add_field(name=name, value=text, inline=False)
+        else:
+            embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
 
-    if not infantry_squads and not vehicle_squads and not heli_squads:
-        embed.add_field(name=t("embed.squads_label", lang), value=t("embed.no_squads", lang), inline=False)
-
-    # Casters
+    # Caster field — always shown when enabled
     if caster_enabled:
         casters = event.get("casters", {})
+        caster_used = event.get("caster_slots_used", 0)
+        name = t("embed.caster_overview_compact", lang, count=caster_used, max=max_casters)
         if casters:
             caster_text = "\n".join(f"**{d.get('name', '?')}**" for d in casters.values())
-            embed.add_field(name=t("embed.caster_label", lang, count=len(casters)), value=caster_text, inline=False)
+            embed.add_field(name=name, value=caster_text, inline=False)
+        else:
+            embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
 
     # Waitlist
     if waitlist:

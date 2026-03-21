@@ -594,7 +594,7 @@ async def unregister_squad(interaction, guild_id, channel_id, squad_name, is_adm
         event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
         if not event:
             await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-            return False
+            return None
 
         squad_name_lower = squad_name.strip().lower()
         freed_slots = 0
@@ -613,7 +613,7 @@ async def unregister_squad(interaction, guild_id, channel_id, squad_name, is_adm
 
         if found_in_event is None and found_in_waitlist is None:
             await send_feedback(interaction, t("squad.not_found", lang, name=squad_name), ephemeral=True)
-            return False
+            return None
 
         if found_in_event is not None:
             squad_data = event["squads"].pop(found_in_event)
@@ -633,11 +633,12 @@ async def unregister_squad(interaction, guild_id, channel_id, squad_name, is_adm
         if freed_slots > 0:
             await _process_squad_waitlist(event, user_assignments, db_id, guild_id, channel_id, freed_slots)
 
+    await send_feedback(interaction, t("squad.unregistered", lang, name=squad_name), ephemeral=True)
     await send_to_log_channel(
         t("log.squad_unregistered", lang, user=interaction.user.name, squad=squad_name, freed=freed_slots),
         guild=interaction.guild)
     await update_event_displays(guild_id, channel_id)
-    return True
+    return freed_slots
 
 
 async def _process_squad_waitlist(event, user_assignments, db_id, guild_id, channel_id, free_slots):
@@ -776,6 +777,7 @@ async def unregister_caster(interaction, guild_id, channel_id):
             await send_feedback(interaction, t("caster.not_registered", lang), ephemeral=True)
             return False
 
+    await send_feedback(interaction, t("caster.unregistered", lang), ephemeral=True)
     await send_to_log_channel(t("log.caster_unregistered", lang, user=interaction.user.name, uid=user_id), guild=interaction.guild)
     await update_event_displays(guild_id, channel_id)
     return True
@@ -847,7 +849,7 @@ class EventActionView(ui.View):
 
         self.add_item(ui.Button(
             label="Squad", style=discord.ButtonStyle.success,
-            custom_id="event_register_squad", emoji="🎮",
+            custom_id="event_register_squad", emoji="🪖",
         ))
         self.add_item(ui.Button(
             label="Caster", style=discord.ButtonStyle.primary,
@@ -1057,7 +1059,7 @@ class SquadRegistrationView(BaseView):
         self.type_select = ui.Select(
             placeholder=t("squad.type_select", lang),
             options=[
-                discord.SelectOption(label=t("squad.type_infantry", lang, size=sizes["infantry"]), value="infantry"),
+                discord.SelectOption(label=t("squad.type_infantry", lang, size=sizes["infantry"]), value="infantry", ),
                 discord.SelectOption(label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"),
                 discord.SelectOption(label=t("squad.type_heli", lang, size=sizes["heli"]), value="heli"),
             ],
@@ -1216,11 +1218,15 @@ class AdminActionView(BaseView):
         self.channel_id = channel_id
         lang = get_guild_language(guild_id)
 
-        for label_key, style, cb_name in [
-            ("admin.edit_event", discord.ButtonStyle.primary, "_edit"),
-            ("admin.delete_event", discord.ButtonStyle.danger, "_delete"),
+        for label_key, style, cb_name, row in [
+            ("admin.add_squad", discord.ButtonStyle.success, "_add_squad", 0),
+            ("admin.remove_squad", discord.ButtonStyle.danger, "_remove_squad", 0),
+            ("admin.add_caster", discord.ButtonStyle.success, "_add_caster", 1),
+            ("admin.remove_caster", discord.ButtonStyle.danger, "_remove_caster", 1),
+            ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 2),
+            ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 2),
         ]:
-            btn = ui.Button(label=t(label_key, lang), style=style)
+            btn = ui.Button(label=t(label_key, lang), style=style, row=row)
             btn.callback = getattr(self, cb_name)
             self.add_item(btn)
 
@@ -1268,6 +1274,340 @@ class AdminActionView(BaseView):
             color=discord.Color.red())
         view = DeleteConfirmationView(self.guild_id, self.channel_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    async def _add_squad(self, interaction):
+        lang = get_guild_language(self.guild_id)
+        event, _, _ = _get_channel_event(self.guild_id, self.channel_id)
+        if not event:
+            await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
+            return
+        view = _AdminSquadRegView(self.guild_id, self.channel_id, event)
+        await interaction.response.send_message(view=view, ephemeral=True)
+
+    async def _remove_squad(self, interaction):
+        lang = get_guild_language(self.guild_id)
+        event, _, _ = _get_channel_event(self.guild_id, self.channel_id)
+        if not event:
+            await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
+            return
+        squads = event.get("squads", {})
+        waitlist = event.get("waitlist", [])
+        options = []
+        for name, data in squads.items():
+            options.append(discord.SelectOption(label=name, value=name))
+        for entry in waitlist:
+            options.append(discord.SelectOption(label=f"[WL] {entry[0]}", value=entry[0]))
+        if not options:
+            await interaction.response.send_message(t("embed.no_entries", lang), ephemeral=True)
+            return
+        view = _AdminRemoveSquadView(self.guild_id, self.channel_id, options)
+        await interaction.response.send_message(view=view, ephemeral=True)
+
+    async def _add_caster(self, interaction):
+        lang = get_guild_language(self.guild_id)
+        event, _, _ = _get_channel_event(self.guild_id, self.channel_id)
+        if not event:
+            await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
+            return
+        view = _AdminAddCasterView(self.guild_id, self.channel_id)
+        await interaction.response.send_message(view=view, ephemeral=True)
+
+    async def _remove_caster(self, interaction):
+        lang = get_guild_language(self.guild_id)
+        event, _, _ = _get_channel_event(self.guild_id, self.channel_id)
+        if not event:
+            await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
+            return
+        casters = event.get("casters", {})
+        caster_wl = event.get("caster_waitlist", [])
+        options = []
+        for uid, data in casters.items():
+            options.append(discord.SelectOption(label=data.get("name", "?"), value=uid))
+        for uid, name in caster_wl:
+            options.append(discord.SelectOption(label=f"[WL] {name}", value=uid))
+        if not options:
+            await interaction.response.send_message(t("embed.no_entries", lang), ephemeral=True)
+            return
+        view = _AdminRemoveCasterView(self.guild_id, self.channel_id, options)
+        await interaction.response.send_message(view=view, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Admin squad/caster management views
+# ---------------------------------------------------------------------------
+
+class _AdminSquadRegView(BaseView):
+    """Admin add-squad: type select + playstyle select + continue → name modal."""
+    def __init__(self, guild_id, channel_id, event):
+        super().__init__(timeout=300, title="Admin Add Squad")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.event = event
+        self.selected_type = None
+        self.selected_playstyle = None
+        self.selected_user = None
+
+        sizes = _get_squad_sizes(event)
+        lang = get_guild_language(guild_id)
+
+        self.type_select = ui.Select(
+            placeholder=t("squad.type_select", lang),
+            options=[
+                discord.SelectOption(label=t("squad.type_infantry", lang, size=sizes["infantry"]), value="infantry"),
+                discord.SelectOption(label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"),
+                discord.SelectOption(label=t("squad.type_heli", lang, size=sizes["heli"]), value="heli"),
+            ], row=0)
+        self.type_select.callback = self._type_selected
+        self.add_item(self.type_select)
+
+        self.playstyle_select = ui.Select(
+            placeholder=t("squad.playstyle_select", lang),
+            options=[
+                discord.SelectOption(label="Casual", value="Casual"),
+                discord.SelectOption(label="Normal", value="Normal"),
+                discord.SelectOption(label="Focused", value="Focused"),
+            ], row=1)
+        self.playstyle_select.callback = self._playstyle_selected
+        self.add_item(self.playstyle_select)
+
+        self.user_select = ui.UserSelect(
+            placeholder=t("admin.select_rep_user", lang), min_values=1, max_values=1, row=2)
+        self.user_select.callback = self._user_selected
+        self.add_item(self.user_select)
+
+        self.continue_button = ui.Button(
+            label=t("squad.continue", lang), style=discord.ButtonStyle.success, disabled=True, row=3)
+        self.continue_button.callback = self._continue
+        self.add_item(self.continue_button)
+
+    def _build_status(self):
+        lang = get_guild_language(self.guild_id)
+        sizes = _get_squad_sizes(self.event)
+        lines = [f"**{t('squad.step_1_title', lang)}**", t("squad.step_1_desc", lang)]
+        if self.selected_type:
+            type_label = t(f"squad.type_{self.selected_type}", lang, size=sizes.get(self.selected_type, "?"))
+            lines.append(t("squad.selected_type", lang, label=type_label))
+        if self.selected_playstyle:
+            lines.append(t("squad.selected_playstyle", lang, label=self.selected_playstyle))
+        if self.selected_user:
+            lines.append(t("admin.selected_rep_user", lang, user=self.selected_user.display_name))
+        return "\n".join(lines)
+
+    def _all_selected(self):
+        return self.selected_type and self.selected_playstyle and self.selected_user
+
+    async def _type_selected(self, interaction):
+        self.selected_type = self.type_select.values[0]
+        self.continue_button.disabled = not self._all_selected()
+        await interaction.response.edit_message(content=self._build_status(), view=self)
+
+    async def _playstyle_selected(self, interaction):
+        self.selected_playstyle = self.playstyle_select.values[0]
+        self.continue_button.disabled = not self._all_selected()
+        await interaction.response.edit_message(content=self._build_status(), view=self)
+
+    async def _user_selected(self, interaction):
+        self.selected_user = self.user_select.values[0]
+        self.continue_button.disabled = not self._all_selected()
+        await interaction.response.edit_message(content=self._build_status(), view=self)
+
+    async def _continue(self, interaction):
+        if not self._all_selected():
+            return
+        modal = _AdminSquadNameModal(self.guild_id, self.channel_id, self.selected_type, self.selected_playstyle, self.selected_user)
+        await interaction.response.send_modal(modal)
+
+
+class _AdminSquadNameModal(ui.Modal):
+    """Admin add-squad step 2: enter squad name and register."""
+    def __init__(self, guild_id, channel_id, squad_type, playstyle, rep_user):
+        lang = get_guild_language(guild_id)
+        super().__init__(title=t("squad.register_title", lang))
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.squad_type = squad_type
+        self.playstyle = playstyle
+        self.rep_user = rep_user
+        self.squad_name = ui.TextInput(
+            label=t("squad.name_label", lang),
+            placeholder=t("squad.name_placeholder", lang),
+            required=True, min_length=2, max_length=30)
+        self.add_item(self.squad_name)
+
+    async def on_submit(self, interaction):
+        await interaction.response.defer(ephemeral=True)
+        gid = self.guild_id
+        cid = self.channel_id
+        lang = get_guild_language(gid)
+        squad_name = self.squad_name.value.strip()
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
+                return
+
+            existing, _ = _find_squad_name(event, squad_name)
+            if existing is not None:
+                await interaction.followup.send(t("admin.duplicate_squad", lang, name=existing), ephemeral=True)
+                return
+
+            sizes = _get_squad_sizes(event)
+            size = sizes.get(self.squad_type, sizes["infantry"])
+            squad_id = generate_squad_id(squad_name)
+            available = event["max_player_slots"] - event["player_slots_used"]
+
+            rep_name = self.rep_user.display_name
+            rep_uid = str(self.rep_user.id)
+
+            if size <= available:
+                event["squads"][squad_name] = {
+                    "type": self.squad_type, "playstyle": self.playstyle,
+                    "size": size, "id": squad_id, "rep_name": rep_name,
+                }
+                event["player_slots_used"] += size
+                status = t("admin.squad_added_waitlist", lang)
+            else:
+                event["waitlist"].append((squad_name, self.squad_type, self.playstyle, size, squad_id, rep_name))
+                wl_pos = len(event["waitlist"])
+                status = t("admin.squad_added_registered", lang, pos=wl_pos)
+
+            add_user_assignment(user_assignments, rep_uid, squad_name)
+            save_event(db_id, event, user_assignments)
+
+        type_labels = {"infantry": "Infanterie" if lang == "de" else "Infantry",
+                       "vehicle": "Fahrzeug" if lang == "de" else "Vehicle", "heli": "Heli"}
+        type_label = type_labels.get(self.squad_type, self.squad_type)
+        await interaction.followup.send(
+            t("admin.squad_added", lang, name=squad_name, type=type_label, size=size, playstyle=self.playstyle, status=status),
+            ephemeral=True)
+        await send_to_log_channel(
+            t("log.admin_squad_added", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=self.playstyle),
+            guild=interaction.guild)
+        await update_event_displays(gid, cid)
+
+
+class _AdminRemoveSquadView(BaseView):
+    """Admin remove-squad: select menu of all squads + waitlist."""
+    def __init__(self, guild_id, channel_id, options):
+        super().__init__(timeout=120, title="Remove Squad")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        lang = get_guild_language(guild_id)
+        select = ui.Select(placeholder=t("admin.select_squad_remove", lang), options=options, row=0)
+        select.callback = self._selected
+        self.add_item(select)
+
+    async def _selected(self, interaction):
+        selected = interaction.data["values"][0]
+        await interaction.response.defer(ephemeral=True)
+        result = await unregister_squad(interaction, self.guild_id, self.channel_id, selected, is_admin=True)
+        if result is not None:
+            lang = get_guild_language(self.guild_id)
+            await send_feedback(interaction, t("admin.squad_removed", lang, name=selected, freed=result), ephemeral=True)
+
+
+class _AdminAddCasterView(BaseView):
+    """Admin add-caster: user select to pick a Discord user."""
+    def __init__(self, guild_id, channel_id):
+        super().__init__(timeout=120, title="Add Caster")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.user_select = ui.UserSelect(placeholder="Select user", min_values=1, max_values=1, row=0)
+        self.user_select.callback = self._user_selected
+        self.add_item(self.user_select)
+
+    async def _user_selected(self, interaction):
+        selected_user = self.user_select.values[0]
+        await interaction.response.defer(ephemeral=True)
+        gid = self.guild_id
+        cid = self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+
+            user_id = str(selected_user.id)
+            if user_has_caster(user_assignments, user_id):
+                await send_feedback(interaction, t("admin.caster_already_registered", lang, user=selected_user.display_name), ephemeral=True)
+                return
+
+            display_name = selected_user.display_name
+
+            if event["caster_slots_used"] < event["max_caster_slots"]:
+                event["casters"][user_id] = {"name": display_name, "id": user_id}
+                event["caster_slots_used"] += 1
+                add_user_assignment(user_assignments, user_id, "__caster__")
+                save_event(db_id, event, user_assignments)
+                await send_feedback(interaction, t("admin.caster_added", lang, user=display_name), ephemeral=True)
+            else:
+                event["caster_waitlist"].append((user_id, display_name))
+                add_user_assignment(user_assignments, user_id, "__caster__")
+                save_event(db_id, event, user_assignments)
+                wl_pos = len(event["caster_waitlist"])
+                await send_feedback(interaction, t("admin.caster_added_waitlist", lang, user=display_name, pos=wl_pos), ephemeral=True)
+
+        await send_to_log_channel(
+            t("log.admin_caster_added", lang, admin=interaction.user.name, user=display_name),
+            guild=interaction.guild)
+        await update_event_displays(gid, cid)
+
+
+class _AdminRemoveCasterView(BaseView):
+    """Admin remove-caster: select menu of all casters + waitlist."""
+    def __init__(self, guild_id, channel_id, options):
+        super().__init__(timeout=120, title="Remove Caster")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        select = ui.Select(placeholder="Select caster", options=options, row=0)
+        select.callback = self._selected
+        self.add_item(select)
+
+    async def _selected(self, interaction):
+        target_uid = interaction.data["values"][0]
+        await interaction.response.defer(ephemeral=True)
+        gid = self.guild_id
+        cid = self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+
+            caster_name = None
+            if target_uid in event["casters"]:
+                caster_name = event["casters"][target_uid]["name"]
+                del event["casters"][target_uid]
+                event["caster_slots_used"] -= 1
+                remove_user_assignment(user_assignments, target_uid, "__caster__")
+                save_event(db_id, event, user_assignments)
+                await _process_caster_waitlist(event, user_assignments, db_id, gid, cid)
+            else:
+                for i, (uid, name) in enumerate(event.get("caster_waitlist", [])):
+                    if uid == target_uid:
+                        caster_name = name
+                        event["caster_waitlist"].pop(i)
+                        remove_user_assignment(user_assignments, target_uid, "__caster__")
+                        save_event(db_id, event, user_assignments)
+                        break
+
+        if caster_name is None:
+            await send_feedback(interaction, t("admin.caster_not_found", lang), ephemeral=True)
+            return
+
+        await send_feedback(interaction, t("admin.caster_removed", lang, name=caster_name), ephemeral=True)
+        await send_to_log_channel(
+            t("log.admin_caster_removed", lang, admin=interaction.user.name, name=caster_name),
+            guild=interaction.guild)
+        await update_event_displays(gid, cid)
 
 
 # ---------------------------------------------------------------------------
@@ -1381,29 +1721,61 @@ def _format_display_value(value, vtype, lang):
     return str(value)
 
 
+class _EditConfirmView(ui.View):
+    def __init__(self, lang):
+        super().__init__(timeout=300)
+        self.result = None
+        btn_yes = ui.Button(label=t("general.confirm", lang), style=discord.ButtonStyle.success)
+        btn_yes.callback = self._confirm
+        self.add_item(btn_yes)
+        btn_no = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        btn_no.callback = self._cancel
+        self.add_item(btn_no)
+
+    async def _confirm(self, interaction):
+        self.result = "confirm"
+        await interaction.response.defer()
+        self.stop()
+
+    async def _cancel(self, interaction):
+        self.result = "cancel"
+        await interaction.response.defer()
+        self.stop()
+
+
+class _EditMoreView(ui.View):
+    def __init__(self, lang):
+        super().__init__(timeout=300)
+        self.result = None
+        btn_more = ui.Button(label=t("edit.yes_more", lang), style=discord.ButtonStyle.primary)
+        btn_more.callback = self._more
+        self.add_item(btn_more)
+        btn_done = ui.Button(label=t("edit.no_done", lang), style=discord.ButtonStyle.secondary)
+        btn_done.callback = self._done
+        self.add_item(btn_done)
+
+    async def _more(self, interaction):
+        self.result = "more"
+        await interaction.response.defer()
+        self.stop()
+
+    async def _done(self, interaction):
+        self.result = "done"
+        await interaction.response.defer()
+        self.stop()
+
+
 async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
-    """Run the full DM-based event editing conversation (Apollo-style text flow)."""
-
-    class _Cancel(Exception):
-        pass
-
-    async def _wait_reply(check, lang):
-        """Wait for a DM reply; raise _Cancel if user types 'cancel'."""
-        try:
-            msg = await bot.wait_for("message", check=check, timeout=300)
-        except asyncio.TimeoutError:
-            await user.send(t("edit.timeout", lang))
-            raise _Cancel
-        if msg.content.strip().lower() == "cancel":
-            await user.send(t("edit.finished", lang))
-            raise _Cancel
-        return msg
-
+    """Run the full DM-based event editing conversation."""
     try:
         lang = get_guild_language(guild_id)
+        cancel_word = t("edit.cancel_word", lang)
 
         def dm_check(m):
             return m.author.id == user.id and isinstance(m.channel, discord.DMChannel)
+
+        def _is_cancel(msg):
+            return msg.content.strip().lower() == cancel_word
 
         while True:
             # Re-load event fresh each iteration
@@ -1412,20 +1784,40 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                 await user.send(t("general.no_active_event", lang))
                 break
 
-            # Build Apollo-style plain-text property list
-            lines = [t("edit.select_property", lang), ""]
-            for num, key, label_key, vtype, special in _EDIT_PROPERTIES:
-                current = _format_property_value(event, key, vtype, lang)
-                label = t(label_key, lang).split(". ", 1)[-1]
-                lines.append(f"**{num} · {label}**")
-                lines.append(f"{current}")
-                lines.append("")
-            lines.append(t("edit.cancel_hint", lang))
+            # Build grouped embed property list
+            groups = [
+                ("edit.group.general", _EDIT_PROPERTIES[0:4]),
+                ("edit.group.squad_config", _EDIT_PROPERTIES[4:12]),
+                ("edit.group.extras", _EDIT_PROPERTIES[12:15]),
+            ]
+            edit_embed = discord.Embed(
+                title=t("edit.title", lang),
+                description=t("edit.select_property", lang),
+                color=discord.Color.blue(),
+            )
+            for group_key, props in groups:
+                field_lines = []
+                for num, key, label_key, vtype, special in props:
+                    current = _format_property_value(event, key, vtype, lang)
+                    field_lines.append(f"`{num:>2}.` {t(label_key, lang).split('. ', 1)[-1]}:  `{current}`")
+                edit_embed.add_field(
+                    name=t(group_key, lang),
+                    value="\n".join(field_lines),
+                    inline=False,
+                )
+            edit_embed.set_footer(text=t("edit.footer_hint", lang))
 
-            await user.send("\n".join(lines))
+            await user.send(embed=edit_embed)
 
             # Wait for property number
-            reply = await _wait_reply(dm_check, lang)
+            try:
+                reply = await bot.wait_for("message", check=dm_check, timeout=300)
+            except asyncio.TimeoutError:
+                await user.send(t("edit.timeout", lang))
+                break
+
+            if _is_cancel(reply):
+                continue  # back to overview
 
             try:
                 choice = int(reply.content.strip())
@@ -1456,7 +1848,14 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
             await user.send(prompt)
 
             # Wait for new value
-            value_msg = await _wait_reply(dm_check, lang)
+            try:
+                value_msg = await bot.wait_for("message", check=dm_check, timeout=300)
+            except asyncio.TimeoutError:
+                await user.send(t("edit.timeout", lang))
+                break
+
+            if _is_cancel(value_msg):
+                continue  # back to overview
 
             # Validate
             new_value, error_key = _validate_edit_value(value_msg, key, vtype, lang)
@@ -1464,20 +1863,26 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                 await user.send(t(error_key, lang))
                 continue
 
-            # Text-based confirmation
+            # Confirmation embed with buttons
             new_display = _format_display_value(new_value, vtype, lang)
-            confirm_text = (
-                f"{t('edit.confirm_change', lang)}\n\n"
-                f"{t('edit.old_value', lang)}: `{current_display}`\n"
-                f"{t('edit.new_value', lang)}: `{new_display}`\n\n"
-                f"{t('edit.confirm_prompt', lang)}"
+            confirm_embed = discord.Embed(
+                title=t("edit.confirm_change", lang),
+                color=discord.Color.orange(),
             )
-            await user.send(confirm_text)
+            confirm_embed.add_field(
+                name=t("edit.old_value", lang), value=f"`{current_display}`", inline=True)
+            confirm_embed.add_field(
+                name=t("edit.new_value", lang), value=f"`{new_display}`", inline=True)
 
-            confirm_reply = await _wait_reply(dm_check, lang)
-            if confirm_reply.content.strip() != "1":
-                await user.send(t("general.cancelled", lang))
-                continue
+            confirm_view = _EditConfirmView(lang)
+            await user.send(embed=confirm_embed, view=confirm_view)
+
+            timed_out = await confirm_view.wait()
+            if timed_out:
+                await user.send(t("edit.timeout", lang))
+                break
+            if confirm_view.result != "confirm":
+                continue  # back to overview
 
             # Apply change under guild lock
             lock = _get_guild_lock(guild_id)
@@ -1517,9 +1922,7 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
             # Update channel display
             await update_event_displays(guild_id, channel_id)
 
-            # Notify + log
-            await user.send(t("edit.updated", lang))
-
+            # Log the edit
             if special == "recalc_slots":
                 await user.send(t("edit.recalculated", lang, slots=event["max_player_slots"]))
 
@@ -1532,20 +1935,18 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                       name=event["name"]),
                     guild=guild)
 
-            # Ask "edit more?" — text-based
-            more_text = (
-                f"{t('edit.edit_more_question', lang)}\n"
-                f"{t('edit.edit_more_prompt', lang)}"
-            )
-            await user.send(more_text)
+            # Combined "updated + edit more?" with event link and buttons
+            link = _build_event_message_link(event, channel_id, guild_id) or ""
+            more_msg = t("edit.updated", lang, link=link)
+            more_msg += "\n" + t("edit.edit_more_question", lang)
+            more_view = _EditMoreView(lang)
+            await user.send(more_msg, view=more_view)
 
-            more_reply = await _wait_reply(dm_check, lang)
-            if more_reply.content.strip() != "2":
+            timed_out = await more_view.wait()
+            if timed_out or more_view.result != "more":
                 await user.send(t("edit.finished", lang))
                 break
 
-    except _Cancel:
-        pass
     except discord.Forbidden:
         logger.warning(f"DM edit session: user {user.id} has DMs disabled mid-session")
     except Exception as e:
@@ -2332,7 +2733,9 @@ async def check_events_loop():
                                 ping_text = _build_ping_text(event)
                                 ts = int(start_time.timestamp())
                                 content = f"{ping_text}" + t("reg.opens_soon", lang, name=event["name"], ts=ts)
-                                await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True))
+                                countdown_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True))
+                                event["countdown_message_id"] = countdown_msg.id
+                                save_event(db_id, event, user_assignments)
 
                 # ── Open registration (only if NOT closed) ──
                 if not is_open and not is_closed:
@@ -2348,6 +2751,16 @@ async def check_events_loop():
                             except Exception:
                                 ch = None
                         if ch:
+                            # Delete countdown message if it exists
+                            countdown_msg_id = event.pop("countdown_message_id", None)
+                            if countdown_msg_id:
+                                try:
+                                    old_msg = await ch.fetch_message(countdown_msg_id)
+                                    await old_msg.delete()
+                                except Exception:
+                                    pass
+                                save_event(db_id, event, user_assignments)
+
                             caster_enabled = settings.get("caster_registration_enabled", True)
                             await send_event_details(ch, event, db_id, lang, caster_enabled)
                             if event.get("ping_on_open", False):
@@ -2828,38 +3241,6 @@ async def update_command(interaction: discord.Interaction):
 # EVENT REMINDER                #
 # ############################# #
 
-@bot.tree.command(name="set_event_reminder", description="Set event reminder (organizer only)")
-@app_commands.describe(minutes="Minutes before event start for reminder (0 to disable)")
-async def set_event_reminder_cmd(interaction: discord.Interaction, minutes: int):
-    if not await check_organizer(interaction):
-        return
-    gid = interaction.guild.id
-    cid = interaction.channel_id
-    lang = _lang(interaction)
-
-    if minutes < 0:
-        await send_feedback(interaction, t("set.value_too_low", lang, min=0), ephemeral=True)
-        return
-
-    lock = _get_guild_lock(gid)
-    async with lock:
-        event, user_assignments, db_id = _get_channel_event(gid, cid)
-        if not event:
-            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-            return
-        event["event_reminder_minutes"] = minutes if minutes > 0 else None
-        event["event_reminder_sent"] = False
-        save_event(db_id, event, user_assignments)
-
-    if minutes > 0:
-        await send_feedback(interaction, t("reminder.set", lang, minutes=minutes), ephemeral=True)
-    else:
-        await send_feedback(interaction, t("reminder.disabled", lang), ephemeral=True)
-    await update_event_displays(gid, cid)
-    await send_to_log_channel(
-        t("log.reminder_set", lang, user=interaction.user.name, minutes=minutes),
-        guild=interaction.guild)
-
 
 # ############################# #
 # EVENT ROLE MANAGEMENT         #
@@ -3001,85 +3382,6 @@ async def _squad_name_autocomplete(interaction: discord.Interaction, current: st
     return [app_commands.Choice(name=n, value=n) for n in names if current_lower in n.lower()][:25]
 
 
-@bot.tree.command(name="admin_add_squad", description="Add a squad directly (organizer only)")
-@app_commands.describe(
-    squad_name="Name of the squad",
-    squad_type="Squad type",
-    playstyle="Playstyle",
-    discord_user="Discord user to assign as squad rep (optional)",
-)
-@app_commands.choices(
-    squad_type=[
-        app_commands.Choice(name="Infantry", value="infantry"),
-        app_commands.Choice(name="Vehicle", value="vehicle"),
-        app_commands.Choice(name="Heli", value="heli"),
-    ],
-    playstyle=[
-        app_commands.Choice(name="Casual", value="Casual"),
-        app_commands.Choice(name="Normal", value="Normal"),
-        app_commands.Choice(name="Focused", value="Focused"),
-    ],
-)
-async def admin_add_squad_cmd(interaction: discord.Interaction,
-                               squad_name: str,
-                               squad_type: str,
-                               playstyle: str,
-                               discord_user: discord.Member = None):
-    if not await check_organizer(interaction):
-        return
-    gid = interaction.guild.id
-    cid = interaction.channel_id
-    lang = _lang(interaction)
-
-    lock = _get_guild_lock(gid)
-    async with lock:
-        event, user_assignments, db_id = _get_channel_event(gid, cid)
-        if not event:
-            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-            return
-
-        # Duplicate check
-        existing, _ = _find_squad_name(event, squad_name)
-        if existing is not None:
-            await send_feedback(interaction, t("admin.duplicate_squad", lang, name=existing), ephemeral=True)
-            return
-
-        sizes = _get_squad_sizes(event)
-        size = sizes.get(squad_type, sizes["infantry"])
-        squad_id = generate_squad_id(squad_name)
-        available = event["max_player_slots"] - event["player_slots_used"]
-        rep_name = discord_user.display_name if discord_user else "Admin"
-
-        if size <= available:
-            event["squads"][squad_name] = {
-                "type": squad_type, "playstyle": playstyle,
-                "size": size, "id": squad_id, "rep_name": rep_name,
-            }
-            event["player_slots_used"] += size
-            status = t("admin.squad_added_waitlist", lang)  # "Registered"
-        else:
-            event["waitlist"].append((squad_name, squad_type, playstyle, size, squad_id, rep_name))
-            wl_pos = len(event["waitlist"])
-            status = t("admin.squad_added_registered", lang, pos=wl_pos)  # "Waitlist (pos X)"
-
-        if discord_user:
-            add_user_assignment(user_assignments, str(discord_user.id), squad_name)
-
-        save_event(db_id, event, user_assignments)
-
-    type_labels = {"infantry": "Infanterie" if lang == "de" else "Infantry",
-                   "vehicle": "Fahrzeug" if lang == "de" else "Vehicle",
-                   "heli": "Heli"}
-    type_label = type_labels.get(squad_type, squad_type)
-    await send_feedback(interaction,
-        t("admin.squad_added", lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, status=status),
-        ephemeral=True)
-    await send_to_log_channel(
-        t("log.admin_squad_added", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=playstyle),
-        guild=interaction.guild)
-    await update_event_displays(gid, cid)
-
-
 @bot.tree.command(name="admin_edit_squad", description="Edit a squad's size (organizer only)")
 @app_commands.describe(squad_name="Name of the squad", new_size="New squad size")
 async def admin_edit_squad_cmd(interaction: discord.Interaction, squad_name: str, new_size: int):
@@ -3135,78 +3437,6 @@ async def admin_edit_squad_cmd(interaction: discord.Interaction, squad_name: str
 @admin_edit_squad_cmd.autocomplete("squad_name")
 async def admin_edit_squad_autocomplete(interaction, current: str):
     return await _squad_name_autocomplete(interaction, current)
-
-
-@bot.tree.command(name="admin_remove_squad", description="Remove a squad (organizer only)")
-@app_commands.describe(squad_name="Name of the squad to remove")
-async def admin_remove_squad_cmd(interaction: discord.Interaction, squad_name: str):
-    if not await check_organizer(interaction):
-        return
-    gid = interaction.guild.id
-    cid = interaction.channel_id
-    lang = _lang(interaction)
-
-    event, _, _ = _get_channel_event(gid, cid)
-    if not event:
-        await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-        return
-
-    exact_name, location = _find_squad_name(event, squad_name)
-    if exact_name is None:
-        await send_feedback(interaction, t("admin.squad_not_found", lang, name=squad_name), ephemeral=True)
-        return
-
-    result = await unregister_squad(interaction, gid, cid, exact_name, is_admin=True)
-    if result:
-        await send_feedback(interaction,
-            t("admin.squad_removed", lang, name=exact_name, freed=0),
-            ephemeral=True)
-
-@admin_remove_squad_cmd.autocomplete("squad_name")
-async def admin_remove_squad_autocomplete(interaction, current: str):
-    return await _squad_name_autocomplete(interaction, current)
-
-
-@bot.tree.command(name="admin_add_caster", description="Add a caster directly (organizer only)")
-@app_commands.describe(discord_user="The user to add as caster")
-async def admin_add_caster_cmd(interaction: discord.Interaction, discord_user: discord.Member):
-    if not await check_organizer(interaction):
-        return
-    gid = interaction.guild.id
-    cid = interaction.channel_id
-    lang = _lang(interaction)
-
-    lock = _get_guild_lock(gid)
-    async with lock:
-        event, user_assignments, db_id = _get_channel_event(gid, cid)
-        if not event:
-            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-            return
-
-        user_id = str(discord_user.id)
-        if user_has_caster(user_assignments, user_id):
-            await send_feedback(interaction, t("admin.caster_already_registered", lang, user=discord_user.display_name), ephemeral=True)
-            return
-
-        display_name = discord_user.display_name
-
-        if event["caster_slots_used"] < event["max_caster_slots"]:
-            event["casters"][user_id] = {"name": display_name, "id": user_id}
-            event["caster_slots_used"] += 1
-            add_user_assignment(user_assignments, user_id, "__caster__")
-            save_event(db_id, event, user_assignments)
-            await send_feedback(interaction, t("admin.caster_added", lang, user=display_name), ephemeral=True)
-        else:
-            event["caster_waitlist"].append((user_id, display_name))
-            add_user_assignment(user_assignments, user_id, "__caster__")
-            save_event(db_id, event, user_assignments)
-            wl_pos = len(event["caster_waitlist"])
-            await send_feedback(interaction, t("admin.caster_added_waitlist", lang, user=display_name, pos=wl_pos), ephemeral=True)
-
-    await send_to_log_channel(
-        t("log.admin_caster_added", lang, admin=interaction.user.name, user=display_name),
-        guild=interaction.guild)
-    await update_event_displays(gid, cid)
 
 
 @bot.tree.command(name="admin_waitlist", description="Show current waitlist (organizer only)")

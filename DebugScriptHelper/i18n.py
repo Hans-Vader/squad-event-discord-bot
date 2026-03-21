@@ -367,16 +367,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Choose playstyle...",
     },
     "squad.type_infantry": {
-        "de": "Infanterie ({size} Spieler)",
-        "en": "Infantry ({size} players)",
+        "de": "⚔️ Infanterie ({size} Spieler)",
+        "en": "⚔️ Infantry ({size} players)",
     },
     "squad.type_vehicle": {
-        "de": "Fahrzeug ({size} Spieler)",
-        "en": "Vehicle ({size} players)",
+        "de": "🛺 Fahrzeug ({size} Spieler)",
+        "en": "🛺 Vehicle ({size} players)",
     },
     "squad.type_heli": {
-        "de": "Heli ({size} Spieler)",
-        "en": "Heli ({size} players)",
+        "de": "🚁 Heli ({size} Spieler)",
+        "en": "🚁 Heli ({size} players)",
     },
     "squad.playstyle_casual": {
         "de": "Casual",
@@ -527,88 +527,68 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "No description available",
     },
     "embed.event_start": {
-        "de": "Event-Start",
-        "en": "Event start",
+        "de": "📅 Event-Start",
+        "en": "📅 Event start",
     },
     "embed.registration": {
-        "de": "Registrierung",
-        "en": "Registration",
+        "de": "📋 Registrierung",
+        "en": "📋 Registration",
     },
     "embed.reminder": {
-        "de": "Erinnerung",
-        "en": "Reminder",
+        "de": "🔔 Erinnerung",
+        "en": "🔔 Reminder",
     },
     "embed.reminder_value": {
-        "de": "{minutes} Min. vor Event-Start",
-        "en": "{minutes} min before event start",
+        "de": "{minutes} Min. vor Start",
+        "en": "{minutes} min before start",
     },
     "embed.reminder_sent": {
         "de": "{minutes} Min. vorher (gesendet)",
         "en": "{minutes} min before (sent)",
     },
-    "embed.available_slots": {
-        "de": "Verfügbare Plätze",
-        "en": "Available slots",
+    "embed.server_overview": {
+        "de": "🖥️ Server",
+        "en": "🖥️ Server",
     },
-    "embed.server_slots": {
-        "de": "Server: {cap} Plätze ({free} Spielerplätze frei)",
-        "en": "Server: {cap} slots ({free} player slots free)",
+    "embed.server_overview_value": {
+        "de": "{cap} Plätze ({free} frei)",
+        "en": "{cap} slots ({free} free)",
     },
-    "embed.infantry_squads": {
-        "de": "Infanterie-Squads: {count}/{max} ({size} Spieler/Squad)",
-        "en": "Infantry squads: {count}/{max} ({size} players/squad)",
+    "embed.max_per_user_label": {
+        "de": "👤 Max Squads pro Spieler: {count}",
+        "en": "👤 Max squads per user: {count}",
     },
-    "embed.vehicle_squads": {
-        "de": "Fahrzeug-Squads: {count}/{max} ({size} Spieler/Squad)",
-        "en": "Vehicle squads: {count}/{max} ({size} players/squad)",
+    "embed.no_entries": {
+        "de": "-",
+        "en": "-",
     },
-    "embed.heli_squads": {
-        "de": "Heli-Squads: {count}/{max} ({size} Spieler/Squad)",
-        "en": "Heli squads: {count}/{max} ({size} players/squad)",
+    "embed.caster_overview_compact": {
+        "de": "🎙️ Caster ({count}/{max})",
+        "en": "🎙️ Casters ({count}/{max})",
     },
-    "embed.max_squads_per_user": {
-        "de": "Max Squads pro Spieler: {max}",
-        "en": "Max squads per user: {max}",
+    "embed.type_infantry": {
+        "de": "⚔️ Infanterie",
+        "en": "⚔️ Infantry",
     },
-    "embed.caster_slots": {
-        "de": "Caster-Plätze",
-        "en": "Caster slots",
+    "embed.type_vehicle": {
+        "de": "🛺 Fahrzeug",
+        "en": "🛺 Vehicle",
     },
-    "embed.caster_slots_value": {
-        "de": "{free} frei ({used}/{max} belegt)",
-        "en": "{free} free ({used}/{max} taken)",
-    },
-    "embed.infantry_label": {
-        "de": "Infanterie-Squads ({count}/{max})",
-        "en": "Infantry squads ({count}/{max})",
-    },
-    "embed.vehicle_label": {
-        "de": "Fahrzeug-Squads ({count}/{max})",
-        "en": "Vehicle squads ({count}/{max})",
-    },
-    "embed.heli_label": {
-        "de": "Heli-Squads ({count}/{max})",
-        "en": "Heli squads ({count}/{max})",
-    },
-    "embed.caster_label": {
-        "de": "Caster ({count})",
-        "en": "Casters ({count})",
-    },
-    "embed.no_squads": {
-        "de": "Noch keine Squads angemeldet.",
-        "en": "No squads registered yet.",
+    "embed.type_heli": {
+        "de": "🚁 Heli",
+        "en": "🚁 Heli",
     },
     "embed.squads_label": {
         "de": "Squads",
         "en": "Squads",
     },
     "embed.waitlist_label": {
-        "de": "Warteliste ({count})",
-        "en": "Waitlist ({count})",
+        "de": "⏳ Warteliste ({count})",
+        "en": "⏳ Waitlist ({count})",
     },
     "embed.caster_waitlist_label": {
-        "de": "Caster-Warteliste ({count})",
-        "en": "Caster waitlist ({count})",
+        "de": "⏳ Caster-Warteliste ({count})",
+        "en": "⏳ Caster waitlist ({count})",
     },
     "embed.footer": {
         "de": "Nutze die Buttons unten, um dich anzumelden.",
@@ -692,6 +672,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Keine Caster vorhanden.",
         "en": "No casters available.",
     },
+    "admin.select_rep_user": {
+        "de": "Vertreter auswählen",
+        "en": "Select representative",
+    },
+    "admin.selected_rep_user": {
+        "de": "👤 Vertreter: **{user}**",
+        "en": "👤 Representative: **{user}**",
+    },
     "admin.select_squad_remove": {
         "de": "Wähle das Squad, das entfernt werden soll:",
         "en": "Select the squad to remove:",
@@ -767,6 +755,14 @@ _STRINGS: dict[str, dict[str, str]] = {
     "edit.select_property": {
         "de": "Gib die Nummer der Eigenschaft ein, die du ändern möchtest:",
         "en": "Enter the number of the property you want to change:",
+    },
+    "edit.footer_hint": {
+        "de": "Gib eine Zahl ein · 'abbrechen' zum Zurückkehren",
+        "en": "Enter a number · 'cancel' to go back",
+    },
+    "edit.cancel_word": {
+        "de": "abbrechen",
+        "en": "cancel",
     },
     "edit.not_set": {
         "de": "Nicht gesetzt",
@@ -917,8 +913,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "I'm not sure where you went. We can try again later.",
     },
     "edit.cancel_hint": {
-        "de": "'cancel' zum Verlassen",
-        "en": "'cancel' to exit",
+        "de": "'abbrechen' zum Zurückkehren",
+        "en": "'cancel' to go back",
     },
     "edit.confirm_prompt": {
         "de": "1 Ja\n2 Nein",
@@ -929,8 +925,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "1 No, I'm done\n2 Yes, I want to continue editing",
     },
     "edit.updated": {
-        "de": "Das Event wurde aktualisiert!",
-        "en": "The event has been updated!",
+        "de": "Das Event wurde aktualisiert! [Klicke hier um das Event anzusehen.]({link})",
+        "en": "The event has been updated! [Click here to view the event.]({link})",
     },
     "edit.reg_start_hint": {
         "de": "Format: TT.MM.JJJJ HH:MM, oder 'sofort'/'now', oder 'leer'/'empty' zum Entfernen",
@@ -1513,6 +1509,22 @@ _STRINGS: dict[str, dict[str, str]] = {
     "log.admin_caster_added": {
         "de": "Admin: {admin} hat {user} als Caster hinzugefügt",
         "en": "Admin: {admin} added {user} as caster",
+    },
+    "admin.select_caster_add": {
+        "de": "Wähle den Benutzer, der als Caster hinzugefügt werden soll:",
+        "en": "Select the user to add as caster:",
+    },
+    "admin.caster_removed": {
+        "de": "**{name}** wurde als Caster entfernt.",
+        "en": "**{name}** has been removed as caster.",
+    },
+    "admin.caster_not_found": {
+        "de": "Dieser Caster wurde nicht gefunden (möglicherweise bereits entfernt).",
+        "en": "This caster was not found (may have already been removed).",
+    },
+    "log.admin_caster_removed": {
+        "de": "Admin: {admin} hat Caster {name} entfernt",
+        "en": "Admin: {admin} removed caster {name}",
     },
 }
 
