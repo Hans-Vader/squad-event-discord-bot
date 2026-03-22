@@ -153,8 +153,8 @@ Each edit shows old → new value with a confirmation step. The event display up
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/FVollbrecht/CoC-Event-Registration.git
-   cd CoC-Event-Registration
+   git clone https://github.com/Hans-Vader/squad-event-discord-bot.git
+   cd squad-event-discord-bot
    ```
 
 2. Create `.env` (based on `.env.dist`):

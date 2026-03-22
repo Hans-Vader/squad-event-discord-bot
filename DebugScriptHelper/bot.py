@@ -185,7 +185,7 @@ def get_user_assignments(user_assignments: dict, user_id: str) -> list:
 def add_user_assignment(user_assignments: dict, user_id: str, assignment: str):
     uid = str(user_id)
     current = get_user_assignments(user_assignments, uid)
-    if assignment not in current:
+    if not any(a.lower() == assignment.lower() for a in current):
         current.append(assignment)
     user_assignments[uid] = current
 
@@ -618,9 +618,9 @@ async def unregister_squad(interaction, guild_id, channel_id, squad_name, is_adm
         if found_in_event is not None:
             squad_data = event["squads"].pop(found_in_event)
             freed_slots = squad_data.get("size", 0)
-            event["player_slots_used"] -= freed_slots
+            event["player_slots_used"] = max(0, event["player_slots_used"] - freed_slots)
 
-        if found_in_waitlist is not None:
+        elif found_in_waitlist is not None:
             event["waitlist"].pop(found_in_waitlist)
 
         for uid in list(user_assignments.keys()):
@@ -765,7 +765,7 @@ async def unregister_caster(interaction, guild_id, channel_id):
 
         if user_id in event["casters"]:
             del event["casters"][user_id]
-            event["caster_slots_used"] -= 1
+            event["caster_slots_used"] = max(0, event["caster_slots_used"] - 1)
             remove_user_assignment(user_assignments, user_id, "__caster__")
             save_event(db_id, event, user_assignments)
             await _process_caster_waitlist(event, user_assignments, db_id, guild_id, channel_id)
@@ -1309,6 +1309,9 @@ class AdminActionView(BaseView):
         if not event:
             await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
             return
+        if event.get("max_caster_slots", 2) == 0:
+            await interaction.response.send_message(t("caster.disabled", lang), ephemeral=True)
+            return
         view = _AdminAddCasterView(self.guild_id, self.channel_id)
         await interaction.response.send_message(view=view, ephemeral=True)
 
@@ -1467,11 +1470,11 @@ class _AdminSquadNameModal(ui.Modal):
                     "size": size, "id": squad_id, "rep_name": rep_name,
                 }
                 event["player_slots_used"] += size
-                status = t("admin.squad_added_waitlist", lang)
+                status = t("admin.squad_added_registered", lang, pos=0)
             else:
                 event["waitlist"].append((squad_name, self.squad_type, self.playstyle, size, squad_id, rep_name))
                 wl_pos = len(event["waitlist"])
-                status = t("admin.squad_added_registered", lang, pos=wl_pos)
+                status = t("admin.squad_added_waitlist", lang)
 
             add_user_assignment(user_assignments, rep_uid, squad_name)
             save_event(db_id, event, user_assignments)
@@ -1586,7 +1589,7 @@ class _AdminRemoveCasterView(BaseView):
             if target_uid in event["casters"]:
                 caster_name = event["casters"][target_uid]["name"]
                 del event["casters"][target_uid]
-                event["caster_slots_used"] -= 1
+                event["caster_slots_used"] = max(0, event["caster_slots_used"] - 1)
                 remove_user_assignment(user_assignments, target_uid, "__caster__")
                 save_event(db_id, event, user_assignments)
                 await _process_caster_waitlist(event, user_assignments, db_id, gid, cid)
@@ -2028,6 +2031,13 @@ class DeleteConfirmationView(BaseConfirmationView):
             try:
                 ping_msg = await channel.fetch_message(ping_msg_id)
                 await ping_msg.delete()
+            except Exception:
+                pass
+        countdown_msg_id = event.get("countdown_message_id")
+        if countdown_msg_id:
+            try:
+                cd_msg = await channel.fetch_message(countdown_msg_id)
+                await cd_msg.delete()
             except Exception:
                 pass
 
@@ -2587,6 +2597,9 @@ class _EventConfigBridgeView(ui.View):
         self.add_item(btn)
 
     async def _open_config(self, interaction: discord.Interaction):
+        if hasattr(self, "_responded") and self._responded:
+            return
+        self._responded = True
         modal = EventServerConfigModal(
             self.guild_id, self.channel_id, self.settings, self.parsed, self.author)
         await interaction.response.send_modal(modal)
@@ -2660,6 +2673,9 @@ class EventServerConfigModal(ui.Modal):
             veh_size = int(parts[1].strip())
             heli_size = int(parts[2].strip())
         except ValueError:
+            await interaction.response.send_message(t("event.invalid_squad_sizes", lang), ephemeral=True)
+            return
+        if inf_size < 1 or veh_size < 1 or heli_size < 1:
             await interaction.response.send_message(t("event.invalid_squad_sizes", lang), ephemeral=True)
             return
 
@@ -2843,6 +2859,13 @@ async def check_events_loop():
                             try:
                                 ping_msg = await ch.fetch_message(ping_msg_id)
                                 await ping_msg.delete()
+                            except Exception:
+                                pass
+                        countdown_msg_id = event.get("countdown_message_id")
+                        if countdown_msg_id:
+                            try:
+                                cd_msg = await ch.fetch_message(countdown_msg_id)
+                                await cd_msg.delete()
                             except Exception:
                                 pass
 
@@ -3550,7 +3573,7 @@ async def admin_edit_squad_cmd(interaction: discord.Interaction, squad_name: str
             old_size = event["squads"][exact_name]["size"]
             delta = new_size - old_size
             event["squads"][exact_name]["size"] = new_size
-            event["player_slots_used"] += delta
+            event["player_slots_used"] = max(0, min(event["player_slots_used"] + delta, event["max_player_slots"]))
             save_event(db_id, event, user_assignments)
             if delta < 0:
                 await _process_squad_waitlist(event, user_assignments, db_id, gid, cid, abs(delta))

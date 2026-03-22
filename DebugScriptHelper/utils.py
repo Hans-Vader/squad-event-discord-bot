@@ -401,7 +401,7 @@ def format_event_details(event: dict, lang: str = "de",
 
     vehicle_player_slots = max_vehicles * veh_size
     heli_player_slots = max_helis * heli_size
-    infantry_player_slots = server_cap - max_casters - vehicle_player_slots - heli_player_slots
+    infantry_player_slots = max(0, server_cap - max_casters - vehicle_player_slots - heli_player_slots)
     max_inf_squads = infantry_player_slots // inf_size if inf_size > 0 else 0
     unused = server_cap - max_casters - (max_inf_squads * inf_size) - vehicle_player_slots - heli_player_slots
 
