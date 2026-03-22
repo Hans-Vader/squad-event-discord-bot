@@ -32,6 +32,15 @@ ADMIN_IDS = [aid.strip() for aid in _admin_ids_raw.split(",") if aid.strip()]
 
 # ── Background task interval (seconds) ────────────────────────────────────
 REGISTRATION_CHECK_INTERVAL = 10
+REGISTRATION_CHECK_INTERVAL_FAST = 1     # used near registration open
+REGISTRATION_CRITICAL_WINDOW = 60        # how far ahead (seconds) to switch to fast polling
+
+if REGISTRATION_CRITICAL_WINDOW <= REGISTRATION_CHECK_INTERVAL:
+    raise ValueError(
+        f"REGISTRATION_CRITICAL_WINDOW ({REGISTRATION_CRITICAL_WINDOW}s) must be greater than "
+        f"REGISTRATION_CHECK_INTERVAL ({REGISTRATION_CHECK_INTERVAL}s), otherwise the fast polling "
+        f"window may be missed entirely."
+    )
 
 # ── Debug mode ────────────────────────────────────────────────────────────
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"

@@ -21,7 +21,7 @@ import csv
 import io
 import re
 
-from config import TOKEN, ADMIN_IDS, REGISTRATION_CHECK_INTERVAL
+from config import TOKEN, ADMIN_IDS, REGISTRATION_CHECK_INTERVAL, REGISTRATION_CHECK_INTERVAL_FAST, REGISTRATION_CRITICAL_WINDOW
 from database import (
     init_db, get_guild_settings, save_guild_settings, guild_is_configured,
     get_guild_language, get_event_by_channel, get_all_active_events,
@@ -2800,10 +2800,12 @@ class EventCreationModal(ui.Modal):
 async def check_events_loop():
     """Background task: check registration start, reminders, expiry for all events."""
     await bot.wait_until_ready()
+    sleep_interval = REGISTRATION_CHECK_INTERVAL
 
     while not bot.is_closed():
         try:
-            await asyncio.sleep(REGISTRATION_CHECK_INTERVAL)
+            await asyncio.sleep(sleep_interval)
+            sleep_interval = REGISTRATION_CHECK_INTERVAL
 
             for row in get_all_active_events_global():
                 event = row["event"]
@@ -2913,18 +2915,7 @@ async def check_events_loop():
                             except Exception:
                                 ch = None
                         if ch:
-                            # Delete countdown message if it exists
-                            countdown_msg_id = event.pop("countdown_message_id", None)
-                            if countdown_msg_id:
-                                try:
-                                    old_msg = await ch.fetch_message(countdown_msg_id)
-                                    await old_msg.delete()
-                                except Exception:
-                                    pass
-                                save_event(db_id, event, user_assignments)
-
-                            caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
-                            await send_event_details(ch, event, db_id, lang, caster_enabled)
+                            # PRIORITY 1: Send ping immediately
                             if event.get("ping_on_open", False):
                                 ping_text = _build_ping_text(event, include_community_rep=True)
                                 if ping_text:
@@ -2933,7 +2924,25 @@ async def check_events_loop():
                                     event.setdefault("ping_message_ids", []).append(ping_msg.id)
                                     save_event(db_id, event, user_assignments)
 
-                        await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild_id=guild_id)
+                            # PRIORITY 2: Send/update event embed
+                            caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
+                            await send_event_details(ch, event, db_id, lang, caster_enabled)
+
+                            # LOW PRIORITY: Cleanup & log in background
+                            countdown_msg_id = event.pop("countdown_message_id", None)
+                            if countdown_msg_id:
+                                save_event(db_id, event, user_assignments)
+                                async def _delete_countdown(_ch, _msg_id):
+                                    try:
+                                        old_msg = await _ch.fetch_message(_msg_id)
+                                        await old_msg.delete()
+                                    except Exception:
+                                        pass
+                                bot.loop.create_task(_delete_countdown(ch, countdown_msg_id))
+
+                        bot.loop.create_task(
+                            send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild_id=guild_id)
+                        )
 
                 # ── Event reminder ──
                 reminder_minutes = event.get("event_reminder_minutes")
@@ -2963,6 +2972,14 @@ async def check_events_loop():
                                               allowed_mentions=discord.AllowedMentions(roles=True))
                     except ValueError:
                         pass
+
+                # ── Fast polling near registration open ──
+                if not is_open and not is_closed:
+                    start_time = event.get("registration_start_time")
+                    if start_time and isinstance(start_time, datetime):
+                        seconds_until = (start_time - datetime.now()).total_seconds()
+                        if 0 < seconds_until <= REGISTRATION_CRITICAL_WINDOW:
+                            sleep_interval = REGISTRATION_CHECK_INTERVAL_FAST
 
         except Exception as e:
             logger.error(f"Error in events loop: {e}", exc_info=True)
