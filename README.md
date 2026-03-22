@@ -230,7 +230,7 @@ Each edit shows old → new value with a confirmation step. The event display up
     "heli_squad_size": 1,
     "max_player_slots": 98,
     "max_caster_slots": 2,
-    "max_vehicle_squads": 5,
+    "max_vehicle_squads": 6,
     "max_heli_squads": 2,
     "max_squads_per_user": 3,
     "player_slots_used": 42,

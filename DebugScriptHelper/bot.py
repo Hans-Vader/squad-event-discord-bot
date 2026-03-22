@@ -388,7 +388,7 @@ def _get_squad_sizes(event: dict) -> dict:
 def _get_max_infantry_squads(event: dict) -> int:
     server_cap = event.get("server_max_players", 100)
     max_casters = event.get("max_caster_slots", 2)
-    max_vehicles = event.get("max_vehicle_squads", 5)
+    max_vehicles = event.get("max_vehicle_squads", 6)
     max_helis = event.get("max_heli_squads", 2)
     veh_size = event.get("vehicle_squad_size", 2)
     heli_size = event.get("heli_squad_size", 1)
@@ -2439,7 +2439,7 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
     _inf_size = event.get("infantry_squad_size", 6)
     _veh_size = event.get("vehicle_squad_size", 2)
     _heli_size = event.get("heli_squad_size", 1)
-    _max_veh = event.get("max_vehicle_squads", 5)
+    _max_veh = event.get("max_vehicle_squads", 6)
     _max_heli = event.get("max_heli_squads", 2)
     _veh_slots = _max_veh * _veh_size
     _heli_slots = _max_heli * _heli_size
@@ -2627,7 +2627,7 @@ class EventServerConfigModal(ui.Modal):
 
         self.max_vehicles = ui.TextInput(
             label=t("event.max_vehicles_label", lang),
-            default=str(settings.get("max_vehicle_squads", 5)),
+            default=str(settings.get("max_vehicle_squads", 6)),
             required=True, max_length=3)
         self.add_item(self.max_vehicles)
 
