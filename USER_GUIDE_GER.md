@@ -70,31 +70,35 @@ Mit `/settings` wird die aktuelle Serverkonfiguration angezeigt.
 
 ### Event erstellen
 
-Verwende `/event`, um ein Event zu erstellen. Ein 5-Schritte-Wizard führt dich durch:
+Verwende `/event`, um ein Event zu erstellen. Ein mehrstufiger Wizard führt dich durch:
 
 **Schritt 1 — Basis-Informationen (Modal):**
 - Event-Name, Datum, Uhrzeit, Beschreibung
 - Anmeldezeitpunkt (Datum/Uhrzeit oder „sofort"/„jetzt" für sofortige Öffnung)
 
-**Schritt 2 — Squad-Rollen:**
+**Schritt 2 — Server-Konfiguration (Modal):**
+- Server Max Spieler, Max Caster (0 = Caster deaktiviert), Squad-Größen (Inf / Fahr / Heli), Max Fahrzeug-Squads, Max Heli-Squads
+- Alle Werte vorausgefüllt aus den Server-Standardwerten (`/set_defaults`)
+
+**Schritt 3 — Squad-Rollen:**
 - Squad-Rep Rollen/User — Wer Squads anmelden darf (Rollen-Gate, wird bei der Anmeldung geprüft)
 - Community-Rep Rollen/User — Wer Squads **vor** Anmeldungsstart anmelden darf (Early Access)
 - Ping bei Öffnung — Ob diese Rollen bei Anmeldungsstart gepingt werden sollen
 
-**Schritt 3 — Caster-Rollen:**
+**Schritt 4 — Caster-Rollen:**
 - Caster Rollen/User — Wer sich als Caster anmelden darf (Rollen-Gate)
 - Caster-Early-Access Rollen/User — Wer sich als Caster **vor** Anmeldungsstart anmelden darf
 - Ping bei Öffnung
 
-**Schritt 4 — Timing:**
+**Schritt 5 — Timing:**
 - Event-Erinnerung — Benachrichtigung X Minuten vor Event-Start (0 = deaktiviert)
 - Countdown — Nachricht X Sekunden vor Anmeldungsstart (wird bei Öffnung automatisch gelöscht)
 
-**Schritt 5 — Squad-Limit:**
+**Schritt 6 — Squad-Limit:**
 - Max. Squads pro Spieler (1–10)
 
-**Schritt 6 — Bestätigung:**
-- Zusammenfassungs-Embed mit allen Einstellungen — Bestätigen oder Abbrechen
+**Schritt 7 — Bestätigung:**
+- Zusammenfassungs-Embed mit allen Einstellungen inkl. ungenutzter Slots — Bestätigen oder Abbrechen
 
 Jeder Schritt kann übersprungen werden — ohne Auswahl werden die Server-Standardwerte verwendet. Rollen können auch nachträglich mit `/set_event_roles` konfiguriert werden.
 

@@ -89,31 +89,35 @@ The admin panel opens via the **Admin** button and provides 6 actions in 3 rows:
 
 ## Event Creation
 
-Event creation uses a 5-step wizard:
+Event creation uses a multi-step wizard:
 
 **Step 1 — Modal (Basic Info):**
 - Event name, date, time, description
 - Registration start time (date/time or "sofort"/"now" for immediately)
 
-**Step 2 — Squad Roles:**
+**Step 2 — Modal (Server Configuration):**
+- Server max players, max caster slots (0 = casters disabled), squad sizes (Infantry / Vehicle / Heli), max vehicle squads, max heli squads
+- All pre-filled from server defaults (`/set_defaults`)
+
+**Step 3 — Squad Roles:**
 - Squad-Rep roles/users — who can register squads (role gate)
 - Community-Rep roles/users — who can register before registration opens (early access)
 - Ping on open toggle
 
-**Step 3 — Caster Roles:**
+**Step 4 — Caster Roles:**
 - Caster roles/users — who can register as caster (role gate)
 - Caster early-access roles/users
 - Ping on open toggle
 
-**Step 4 — Timing:**
+**Step 5 — Timing:**
 - Event reminder (0–1440 minutes before event start)
 - Registration countdown (0–28800 seconds before registration opens)
 
-**Step 5 — Squad Limit:**
+**Step 6 — Squad Limit:**
 - Max squads per user (1–10)
 
-**Step 6 — Confirmation:**
-- Summary embed with all settings — confirm or cancel
+**Step 7 — Confirmation:**
+- Summary embed with all settings including unused slots — confirm or cancel
 
 Each step can be skipped. Server defaults from `/set_defaults` are used as starting values.
 
@@ -205,7 +209,7 @@ Each edit shows old → new value with a confirmation step. The event display up
 | Infantry squad size | `6` |
 | Vehicle squad size | `2` |
 | Heli squad size | `1` |
-| Max vehicle squads | `5` |
+| Max vehicle squads | `6` |
 | Max heli squads | `2` |
 | Max caster slots | `2` |
 | Max squads per user | `1` |

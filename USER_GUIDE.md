@@ -70,31 +70,35 @@ Use `/settings` to view the current server configuration.
 
 ### Creating an Event
 
-Use `/event` to start event creation. A 5-step wizard guides you through:
+Use `/event` to start event creation. A multi-step wizard guides you through:
 
 **Step 1 — Basic Info (Modal):**
 - Event name, date, time, description
 - Registration start time (date/time or "now"/"sofort" for immediately)
 
-**Step 2 — Squad Roles:**
+**Step 2 — Server Configuration (Modal):**
+- Server max players, max caster slots (0 = casters disabled), squad sizes (Infantry / Vehicle / Heli), max vehicle squads, max heli squads
+- All pre-filled from server defaults (`/set_defaults`)
+
+**Step 3 — Squad Roles:**
 - Squad-Rep roles/users — Who can register squads (role gate, enforced during registration)
 - Community-Rep roles/users — Who can register squads **before** registration opens (early access)
 - Ping on open — Whether to ping these roles when registration opens
 
-**Step 3 — Caster Roles:**
+**Step 4 — Caster Roles:**
 - Caster roles/users — Who can register as caster (role gate)
 - Caster early-access roles/users — Who can register as caster **before** registration opens
 - Ping on open toggle
 
-**Step 4 — Timing:**
+**Step 5 — Timing:**
 - Event reminder — Notification X minutes before event start (0 = disabled)
 - Registration countdown — Message sent X seconds before registration opens (auto-deleted when registration starts)
 
-**Step 5 — Squad Limit:**
+**Step 6 — Squad Limit:**
 - Max squads per user (1–10)
 
-**Step 6 — Confirmation:**
-- Summary embed showing all configured settings — confirm or cancel
+**Step 7 — Confirmation:**
+- Summary embed showing all configured settings including unused slots — confirm or cancel
 
 Each step can be skipped — if skipped, server defaults are used. Roles can also be configured later with `/set_event_roles`.
 
