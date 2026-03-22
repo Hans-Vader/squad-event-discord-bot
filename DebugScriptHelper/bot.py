@@ -3849,7 +3849,9 @@ async def help_command(interaction: discord.Interaction):
             "`/set_language` - Sprache ändern\n"
             "`/set_log_channel` - Log-Kanal setzen\n"
             "`/set_defaults` - Standard-Werte ändern\n"
-            "`/settings` - Aktuelle Einstellungen anzeigen"
+            "`/settings` - Aktuelle Einstellungen anzeigen\n"
+            "`/sync` - Slash-Commands synchronisieren\n"
+            "`/test` - Test-Suite ausführen"
         ), inline=False)
     else:
         embed.add_field(name="Events", value=(
@@ -3877,7 +3879,9 @@ async def help_command(interaction: discord.Interaction):
             "`/set_language` - Change language\n"
             "`/set_log_channel` - Set log channel\n"
             "`/set_defaults` - Change default values\n"
-            "`/settings` - Show current settings"
+            "`/settings` - Show current settings\n"
+            "`/sync` - Sync slash commands\n"
+            "`/test` - Run test suite"
         ), inline=False)
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
