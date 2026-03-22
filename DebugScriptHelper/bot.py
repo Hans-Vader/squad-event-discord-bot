@@ -92,7 +92,7 @@ _EDIT_PROPERTIES = [
     (3,  "time",                   "edit.property.time",            "time",            None),
     (4,  "description",            "edit.property.description",     "string_nullable", None),
     (5,  "server_max_players",     "edit.property.server_max",      "int",             "recalc_slots"),
-    (6,  "max_caster_slots",       "edit.property.max_casters",     "int",             "recalc_slots"),
+    (6,  "max_caster_slots",       "edit.property.max_casters",     "int_zero",        "recalc_slots"),
     (7,  "max_vehicle_squads",     "edit.property.max_vehicles",    "int",             None),
     (8,  "max_heli_squads",        "edit.property.max_helis",       "int",             None),
     (9,  "infantry_squad_size",    "edit.property.infantry_size",   "int",             None),
@@ -443,7 +443,7 @@ async def _do_display_update(guild_id: int, channel_id: int):
                 return
         settings = get_guild_settings(guild_id) or DEFAULT_GUILD_SETTINGS
         lang = settings.get("language", "de")
-        caster_enabled = settings.get("caster_registration_enabled", True)
+        caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
         await send_event_details(channel, event, db_id, lang, caster_enabled)
     except asyncio.CancelledError:
         pass
@@ -927,13 +927,13 @@ class EventActionView(ui.View):
         settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
         lang = settings.get("language", "de")
 
-        if not settings.get("caster_registration_enabled", True):
-            await interaction.response.send_message(t("caster.disabled", lang), ephemeral=True)
-            return
-
         event, user_assignments, _ = _get_channel_event(gid, cid)
         if not event:
             await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
+            return
+
+        if not settings.get("caster_registration_enabled", True) or event.get("max_caster_slots", 2) == 0:
+            await interaction.response.send_message(t("caster.disabled", lang), ephemeral=True)
             return
 
         if user_has_caster(user_assignments, str(interaction.user.id)):
@@ -1676,6 +1676,15 @@ def _validate_edit_value(message, key, vtype, lang):
             return None, "edit.invalid_integer"
         return val, None
 
+    if vtype == "int_zero":
+        try:
+            val = int(text)
+        except ValueError:
+            return None, "edit.invalid_integer"
+        if val < 0:
+            return None, "edit.invalid_integer"
+        return val, None
+
     if vtype == "int_nullable":
         try:
             val = int(text)
@@ -1990,7 +1999,7 @@ class DeleteConfirmationView(BaseConfirmationView):
 
         event_name = event["name"]
         settings = get_guild_settings(self.guild_id) or DEFAULT_GUILD_SETTINGS
-        caster_enabled = settings.get("caster_registration_enabled", True)
+        caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
 
         # 1. Write summary to log channel
         summary_embed = build_event_summary_embed(event, lang)
@@ -2424,15 +2433,31 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
             countdown_val = t("wizard.countdown_none", lang)
         embed.add_field(name=t("wizard.summary_countdown", lang), value=countdown_val, inline=True)
 
+    # Calculate unused slots for confirmation summary
+    _cap = event.get("server_max_players", 100)
+    _max_casters = event.get("max_caster_slots", 2)
+    _inf_size = event.get("infantry_squad_size", 6)
+    _veh_size = event.get("vehicle_squad_size", 2)
+    _heli_size = event.get("heli_squad_size", 1)
+    _max_veh = event.get("max_vehicle_squads", 5)
+    _max_heli = event.get("max_heli_squads", 2)
+    _veh_slots = _max_veh * _veh_size
+    _heli_slots = _max_heli * _heli_size
+    _inf_pool = _cap - _max_casters - _veh_slots - _heli_slots
+    _max_inf = _inf_pool // _inf_size if _inf_size > 0 else 0
+    _unused = _cap - _max_casters - (_max_inf * _inf_size) - _veh_slots - _heli_slots
+    _unused_label = "Ungenutzt" if lang == "de" else "Unused"
+
     server_info = (
-        f"**{t('settings.server_max_players', lang)}:** {event.get('server_max_players', '?')}\n"
-        f"**{t('settings.infantry_squad_size', lang)}:** {event.get('infantry_squad_size', '?')}\n"
-        f"**{t('settings.vehicle_squad_size', lang)}:** {event.get('vehicle_squad_size', '?')}\n"
-        f"**{t('settings.heli_squad_size', lang)}:** {event.get('heli_squad_size', '?')}\n"
-        f"**{t('settings.max_vehicle_squads', lang)}:** {event.get('max_vehicle_squads', '?')}\n"
-        f"**{t('settings.max_heli_squads', lang)}:** {event.get('max_heli_squads', '?')}\n"
-        f"**{t('settings.max_caster_slots', lang)}:** {event.get('max_caster_slots', '?')}\n"
-        f"**{t('settings.max_squads_per_user', lang)}:** {event.get('max_squads_per_user', '?')}"
+        f"**{t('settings.server_max_players', lang)}:** {_cap}\n"
+        f"**{t('settings.infantry_squad_size', lang)}:** {_inf_size}\n"
+        f"**{t('settings.vehicle_squad_size', lang)}:** {_veh_size}\n"
+        f"**{t('settings.heli_squad_size', lang)}:** {_heli_size}\n"
+        f"**{t('settings.max_vehicle_squads', lang)}:** {_max_veh}\n"
+        f"**{t('settings.max_heli_squads', lang)}:** {_max_heli}\n"
+        f"**{t('settings.max_caster_slots', lang)}:** {_max_casters}\n"
+        f"**{t('settings.max_squads_per_user', lang)}:** {event.get('max_squads_per_user', '?')}\n"
+        f"**{_unused_label}:** {_unused}"
     )
     embed.add_field(name=t("wizard.summary_server", lang), value=server_info, inline=False)
 
@@ -2490,7 +2515,7 @@ class WizardConfirmationView(BaseView):
 
         # Send announcement embed to channel first (no DB yet — avoids orphaned records)
         channel = bot.get_channel(self.channel_id) or await bot.fetch_channel(self.channel_id)
-        caster_enabled = self.settings.get("caster_registration_enabled", True)
+        caster_enabled = self.settings.get("caster_registration_enabled", True) and self.event.get("max_caster_slots", 2) > 0
         embed = format_event_details(self.event, lang, caster_enabled)
         view = EventActionView()
         try:
@@ -2546,6 +2571,124 @@ class WizardConfirmationView(BaseView):
 # ############################# #
 # EVENT CREATION                #
 # ############################# #
+
+class _EventConfigBridgeView(ui.View):
+    """Bridge between first modal and server config modal — single Continue button."""
+    def __init__(self, guild_id, channel_id, settings, parsed, author):
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.settings = settings
+        self.parsed = parsed
+        self.author = author
+        lang = get_guild_language(guild_id)
+        btn = ui.Button(label=t("event.config_continue", lang), style=discord.ButtonStyle.success)
+        btn.callback = self._open_config
+        self.add_item(btn)
+
+    async def _open_config(self, interaction: discord.Interaction):
+        modal = EventServerConfigModal(
+            self.guild_id, self.channel_id, self.settings, self.parsed, self.author)
+        await interaction.response.send_modal(modal)
+
+
+class EventServerConfigModal(ui.Modal):
+    """Second modal: server/squad configuration, pre-filled from guild settings."""
+    def __init__(self, guild_id, channel_id, settings, parsed, author):
+        lang = get_guild_language(guild_id)
+        super().__init__(title=t("event.config_title", lang))
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.settings = settings
+        self.parsed = parsed
+        self.author = author
+
+        self.server_max = ui.TextInput(
+            label=t("event.server_max_label", lang),
+            default=str(settings.get("server_max_players", 100)),
+            required=True, max_length=5)
+        self.add_item(self.server_max)
+
+        self.max_casters = ui.TextInput(
+            label=t("event.max_casters_label", lang),
+            default=str(settings.get("max_caster_slots", 2)),
+            required=True, max_length=3)
+        self.add_item(self.max_casters)
+
+        inf = settings.get("infantry_squad_size", 6)
+        veh = settings.get("vehicle_squad_size", 2)
+        heli = settings.get("heli_squad_size", 1)
+        self.squad_sizes = ui.TextInput(
+            label=t("event.squad_sizes_label", lang),
+            default=f"{inf} / {veh} / {heli}",
+            placeholder="6 / 2 / 1",
+            required=True, max_length=20)
+        self.add_item(self.squad_sizes)
+
+        self.max_vehicles = ui.TextInput(
+            label=t("event.max_vehicles_label", lang),
+            default=str(settings.get("max_vehicle_squads", 5)),
+            required=True, max_length=3)
+        self.add_item(self.max_vehicles)
+
+        self.max_helis = ui.TextInput(
+            label=t("event.max_helis_label", lang),
+            default=str(settings.get("max_heli_squads", 2)),
+            required=True, max_length=3)
+        self.add_item(self.max_helis)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        lang = get_guild_language(self.guild_id)
+
+        # Parse and validate all fields
+        try:
+            server_max = int(self.server_max.value.strip())
+            max_casters = int(self.max_casters.value.strip())
+            max_veh = int(self.max_vehicles.value.strip())
+            max_heli = int(self.max_helis.value.strip())
+        except ValueError:
+            await interaction.response.send_message(t("event.invalid_time", lang), ephemeral=True)
+            return
+
+        # Parse combined squad sizes
+        parts = self.squad_sizes.value.split("/")
+        if len(parts) != 3:
+            await interaction.response.send_message(t("event.invalid_squad_sizes", lang), ephemeral=True)
+            return
+        try:
+            inf_size = int(parts[0].strip())
+            veh_size = int(parts[1].strip())
+            heli_size = int(parts[2].strip())
+        except ValueError:
+            await interaction.response.send_message(t("event.invalid_squad_sizes", lang), ephemeral=True)
+            return
+
+        # Build event with overrides from this modal
+        event = build_default_event(
+            self.settings,
+            name=self.parsed["name"],
+            date=self.parsed["date"],
+            time_str=self.parsed["time"],
+            description=self.parsed["description"],
+            registration_open=self.parsed["reg_open"],
+            registration_start_time=self.parsed["reg_start_time"],
+            expiry_date=self.parsed["expiry_date"],
+            server_max_players=server_max,
+            max_caster_slots=max_casters,
+            infantry_squad_size=inf_size,
+            vehicle_squad_size=veh_size,
+            heli_squad_size=heli_size,
+            max_vehicle_squads=max_veh,
+            max_heli_squads=max_heli,
+        )
+
+        # Launch wizard step 1
+        wizard_view = WizardSquadRolesView(
+            self.guild_id, self.channel_id, event, {},
+            self.settings, self.author)
+        wizard_msg = f"**{t('wizard.squad_roles_title', lang)}**\n{t('wizard.squad_roles_desc', lang)}"
+        await interaction.response.send_message(wizard_msg, view=wizard_view, ephemeral=True)
+
 
 class EventCreationModal(ui.Modal):
     def __init__(self, guild_id: int, channel_id: int):
@@ -2619,23 +2762,19 @@ class EventCreationModal(ui.Modal):
                 reg_open = True
                 reg_start_time = None
 
-        event = build_default_event(
-            settings,
-            name=self.event_name.value.strip(),
-            date=date_str,
-            time_str=time_str,
-            description=self.event_desc.value.strip() if self.event_desc.value else None,
-            registration_open=reg_open,
-            registration_start_time=reg_start_time,
-            expiry_date=compute_expiry_date(date_str, time_str),
-        )
-
-        # Launch wizard step 1 (event not yet created — persisted on confirmation)
-        wizard_view = WizardSquadRolesView(
-            self.guild_id, self.channel_id, event, {},
-            settings, interaction.user)
-        wizard_msg = f"**{t('wizard.squad_roles_title', lang)}**\n{t('wizard.squad_roles_desc', lang)}"
-        await interaction.response.send_message(wizard_msg, view=wizard_view, ephemeral=True)
+        # Store parsed data and show bridge to server config modal
+        parsed = {
+            "name": self.event_name.value.strip(),
+            "date": date_str,
+            "time": time_str,
+            "description": self.event_desc.value.strip() if self.event_desc.value else None,
+            "reg_open": reg_open,
+            "reg_start_time": reg_start_time,
+            "expiry_date": compute_expiry_date(date_str, time_str),
+        }
+        bridge = _EventConfigBridgeView(self.guild_id, self.channel_id, settings, parsed, interaction.user)
+        await interaction.response.send_message(
+            t("event.config_prompt", lang), view=bridge, ephemeral=True)
 
 
 # ############################# #
@@ -2728,7 +2867,7 @@ async def check_events_loop():
                                 except Exception:
                                     ch = None
                             if ch:
-                                caster_enabled = settings.get("caster_registration_enabled", True)
+                                caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
                                 await send_event_details(ch, event, db_id, lang, caster_enabled)
                                 ping_text = _build_ping_text(event)
                                 ts = int(start_time.timestamp())
@@ -2761,7 +2900,7 @@ async def check_events_loop():
                                     pass
                                 save_event(db_id, event, user_assignments)
 
-                            caster_enabled = settings.get("caster_registration_enabled", True)
+                            caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
                             await send_event_details(ch, event, db_id, lang, caster_enabled)
                             if event.get("ping_on_open", False):
                                 ping_text = _build_ping_text(event, include_community_rep=True)
@@ -2794,7 +2933,7 @@ async def check_events_loop():
                                 event_ts = int(event_dt.timestamp())
                                 content = (f"{ping_text}**{event['name']}** <t:{event_ts}:R>!\n"
                                            f"Event-Start: <t:{event_ts}:f>")
-                                caster_enabled = settings.get("caster_registration_enabled", True)
+                                caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
                                 embed = format_event_details(event, lang, caster_enabled)
                                 view = EventActionView()
                                 await ch.send(content=content, embed=embed, view=view,

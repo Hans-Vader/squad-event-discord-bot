@@ -194,6 +194,42 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Neues Event erstellen",
         "en": "Create new event",
     },
+    "event.config_title": {
+        "de": "Server-Konfiguration",
+        "en": "Server Configuration",
+    },
+    "event.server_max_label": {
+        "de": "Server Max Spieler",
+        "en": "Server Max Players",
+    },
+    "event.max_casters_label": {
+        "de": "Max Caster (0 = deaktiviert)",
+        "en": "Max Casters (0 = disabled)",
+    },
+    "event.squad_sizes_label": {
+        "de": "Squad-Größen (Inf / Fahr / Heli)",
+        "en": "Squad Sizes (Inf / Veh / Heli)",
+    },
+    "event.max_vehicles_label": {
+        "de": "Max Fahrzeug-Squads",
+        "en": "Max Vehicle Squads",
+    },
+    "event.max_helis_label": {
+        "de": "Max Heli-Squads",
+        "en": "Max Heli Squads",
+    },
+    "event.config_prompt": {
+        "de": "Passe die Server-Konfiguration an:",
+        "en": "Customize server configuration:",
+    },
+    "event.config_continue": {
+        "de": "Weiter",
+        "en": "Continue",
+    },
+    "event.invalid_squad_sizes": {
+        "de": "Ungültiges Format. Verwende: Zahl / Zahl / Zahl (z.B. 6 / 2 / 1)",
+        "en": "Invalid format. Use: Number / Number / Number (e.g. 6 / 2 / 1)",
+    },
     "event.name_label": {
         "de": "Event-Name",
         "en": "Event name",
@@ -551,8 +587,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "🖥️ Server",
     },
     "embed.server_overview_value": {
-        "de": "{cap} Plätze ({free} frei)",
-        "en": "{cap} slots ({free} free)",
+        "de": "{cap} Plätze ({free} frei)\nUngenutzt: {unused}",
+        "en": "{cap} slots ({free} free)\nUnused: {unused}",
     },
     "embed.max_per_user_label": {
         "de": "👤 Max Squads pro Spieler: {count}",

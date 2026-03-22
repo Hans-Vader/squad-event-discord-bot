@@ -380,14 +380,15 @@ def format_event_details(event: dict, lang: str = "de",
     inf_size = event.get("infantry_squad_size", 6)
     veh_size = event.get("vehicle_squad_size", 2)
     heli_size = event.get("heli_squad_size", 1)
-    max_vehicles = event.get("max_vehicle_squads", 5)
+    max_vehicles = event.get("max_vehicle_squads", 6)
     max_helis = event.get("max_heli_squads", 2)
     max_casters = event.get("max_caster_slots", 2)
     max_squads_user = event.get("max_squads_per_user", 1)
 
     player_used = event.get("player_slots_used", 0)
-    max_players = event.get("max_player_slots", server_cap)
-    available = max_players - player_used
+    caster_used = event.get("caster_slots_used", 0) if caster_enabled else 0
+    total_used = player_used + caster_used
+    available = server_cap - total_used
 
     squads_all = event.get("squads", {})
     waitlist = event.get("waitlist", [])
@@ -402,11 +403,12 @@ def format_event_details(event: dict, lang: str = "de",
     heli_player_slots = max_helis * heli_size
     infantry_player_slots = server_cap - max_casters - vehicle_player_slots - heli_player_slots
     max_inf_squads = infantry_player_slots // inf_size if inf_size > 0 else 0
+    unused = server_cap - max_casters - (max_inf_squads * inf_size) - vehicle_player_slots - heli_player_slots
 
     # Slot overview — compact inline grid (row 1: server, caster, max/player)
     embed.add_field(
         name=t("embed.server_overview", lang),
-        value=t("embed.server_overview_value", lang, cap=server_cap, free=available),
+        value=t("embed.server_overview_value", lang, cap=server_cap, free=available, unused=unused),
         inline=True)
     embed.add_field(name=t("embed.max_per_user_label", lang, count=max_squads_user), value="\u200b", inline=True)
 
@@ -416,12 +418,13 @@ def format_event_details(event: dict, lang: str = "de",
     vehicle_squads = {n: d for n, d in squads.items() if d.get("type") == "vehicle"}
     heli_squads = {n: d for n, d in squads.items() if d.get("type") == "heli"}
 
-    for squad_group, type_key, count, max_count in [
-        (infantry_squads, "infantry", infantry_count, max_inf_squads),
-        (vehicle_squads, "vehicle", vehicle_count, max_vehicles),
-        (heli_squads, "heli", heli_count, max_helis),
+    for squad_group, type_key, count, max_count, size in [
+        (infantry_squads, "infantry", infantry_count, max_inf_squads, inf_size),
+        (vehicle_squads, "vehicle", vehicle_count, max_vehicles, veh_size),
+        (heli_squads, "heli", heli_count, max_helis, heli_size),
     ]:
-        name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count})"
+        size_label = "Größe" if lang == "de" else "Size"
+        name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count}) [{size_label}: {size}]"
         if squad_group:
             text = ""
             for squad_name, data in squad_group.items():
