@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Utility functions for the DCN Event Registration Bot.
+Utility functions for the Event Registration Bot.
 
 All formatting functions accept a ``lang`` parameter for i18n.
 """

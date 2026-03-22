@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Database layer for the DCN Event Registration Bot.
+Database layer for the Event Registration Bot.
 
 Uses SQLite with two main tables:
 - guild_settings: per-guild configuration (organizer role, defaults, language, etc.)

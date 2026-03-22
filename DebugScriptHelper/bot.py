@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DCN Event Registration Bot — Multi-guild, multi-event, language-configurable.
+Event Registration Bot — Multi-guild, multi-event, language-configurable.
 
 Architecture:
 - Per-guild settings stored in SQLite (organizer role, defaults, language)
@@ -3673,14 +3673,10 @@ async def help_command(interaction: discord.Interaction):
         ), inline=False)
         embed.add_field(name="Event-Einstellungen (Organisator)", value=(
             "`/set_event_roles` - Event-Rollen setzen\n"
-            "`/clear_event_roles` - Event-Rollen löschen\n"
-            "`/set_event_reminder` - Erinnerung setzen"
+            "`/clear_event_roles` - Event-Rollen löschen"
         ), inline=False)
         embed.add_field(name="Admin-Verwaltung (Organisator)", value=(
-            "`/admin_add_squad` - Squad hinzufügen\n"
-            "`/admin_add_caster` - Caster hinzufügen\n"
             "`/admin_edit_squad` - Squad-Größe ändern\n"
-            "`/admin_remove_squad` - Squad entfernen\n"
             "`/admin_waitlist` - Warteliste anzeigen\n"
             "`/admin_user_assignments` - Zuweisungen anzeigen\n"
             "`/admin_reset_assignment` - Zuweisung zurücksetzen"
@@ -3705,14 +3701,10 @@ async def help_command(interaction: discord.Interaction):
         ), inline=False)
         embed.add_field(name="Event Settings (Organizer)", value=(
             "`/set_event_roles` - Set event roles\n"
-            "`/clear_event_roles` - Clear event roles\n"
-            "`/set_event_reminder` - Set event reminder"
+            "`/clear_event_roles` - Clear event roles"
         ), inline=False)
         embed.add_field(name="Admin Management (Organizer)", value=(
-            "`/admin_add_squad` - Add a squad\n"
-            "`/admin_add_caster` - Add a caster\n"
             "`/admin_edit_squad` - Edit squad size\n"
-            "`/admin_remove_squad` - Remove a squad\n"
             "`/admin_waitlist` - Show waitlist\n"
             "`/admin_user_assignments` - Show assignments\n"
             "`/admin_reset_assignment` - Reset user assignment"

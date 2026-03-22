@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Minimal configuration for the DCN Event Registration Bot.
+Minimal configuration for the Event Registration Bot.
 
 Only the Discord bot token is read from environment variables.
 All server-specific settings (organizer role, squad sizes, language, etc.)

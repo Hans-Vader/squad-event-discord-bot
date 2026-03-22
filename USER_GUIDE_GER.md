@@ -19,7 +19,7 @@ Der Squad-Event-Registration Bot organisiert squad-basierte Events auf Discord. 
 Es gibt zwei Wege, einen Squad anzumelden:
 
 **Per Button (empfohlen):**
-1. Klicke auf **Squad anmelden** in der Event-Anzeige
+1. Klicke auf **Squad** (🪖) in der Event-Anzeige
 2. Wähle den Squad-Typ im Dropdown: Infanterie, Fahrzeug oder Heli
 3. Wähle den Spielstil: Casual, Normal oder Focused
 4. Gib im Modal den Squad-Namen ein
@@ -27,66 +27,76 @@ Es gibt zwei Wege, einen Squad anzumelden:
 
 **Per Slash-Command:**
 - `/register` — Startet denselben geführten Ablauf (Typ → Spielstil → Name)
-- `/register_squad [name]` — Meldet einen Squad mit vordefiniertem Namen an
 
 ### Als Caster anmelden
 
-- Klicke auf **Als Caster anmelden** in der Event-Anzeige, oder
-- Verwende `/register_caster`
+- Klicke auf **Caster** (🎙️) in der Event-Anzeige
 
 Spieler können gleichzeitig als Caster **und** mit Squads angemeldet sein.
 
 ### Status einsehen
 
-- **Mein Squad/Caster** Button — Zeigt deine Zuweisungen und ggf. Wartelistenposition
-- `/squad_list` — Zeigt alle registrierten Squads
-- `/find [name]` — Sucht nach einem Squad oder Spieler
+- **Info** (ℹ️) Button — Zeigt deine Zuweisungen und ggf. Wartelistenposition
+
 ### Abmelden
 
-- Klicke auf **Abmelden** in der Event-Anzeige, oder
+- Klicke auf **Abmelden** (❌) in der Event-Anzeige, oder
 - Verwende `/unregister`
 
-Du erhältst einen Bestätigungsdialog, bevor die Abmeldung durchgeführt wird.
+Du erhältst einen Bestätigungsdialog, bevor die Abmeldung durchgeführt wird. Nach Abschluss erhältst du eine Bestätigungsnachricht.
 
 ### Alle Spieler-Befehle
 
 | Befehl | Beschreibung |
 |---|---|
 | `/register` | Geführte Squad-Anmeldung (Typ → Spielstil → Name) |
-| `/register_squad [name]` | Squad mit vordefiniertem Namen anmelden |
-| `/register_caster` | Als Caster anmelden |
 | `/unregister` | Vom Event abmelden |
-| `/squad_list` | Alle registrierten Squads anzeigen |
-| `/find [name]` | Squad oder Spieler suchen |
 | `/help` | Verfügbare Befehle anzeigen |
 
 ---
 
 ## Für Organisatoren
 
+### Ersteinrichtung des Servers
+
+Bevor Events erstellt werden können, muss ein Admin `/setup` ausführen:
+- **Organisator-Rolle** — welche Rolle Events verwalten darf
+- **Log-Kanal** — wohin der Bot alle Aktionen protokolliert
+- **Sprache** — Deutsch (de) oder Englisch (en)
+
+Mit `/set_defaults` können die Standardwerte für Event-Erstellung angepasst werden (Serverkapazität, Squad-Größen, Limits, Countdown).
+
+Mit `/settings` wird die aktuelle Serverkonfiguration angezeigt.
+
 ### Event erstellen
 
-Verwende `/event`, um ein Event zu erstellen. Ein Modal erfasst die Basisdaten, danach folgt ein optionaler Rollen-Wizard:
+Verwende `/event`, um ein Event zu erstellen. Ein 5-Schritte-Wizard führt dich durch:
 
-**Modal — Basis-Informationen:**
+**Schritt 1 — Basis-Informationen (Modal):**
 - Event-Name, Datum, Uhrzeit, Beschreibung
 - Anmeldezeitpunkt (Datum/Uhrzeit oder „sofort"/„jetzt" für sofortige Öffnung)
 
-Das Event wird sofort nach dem Absenden des Modals erstellt und angezeigt. Server-Konfiguration (Kapazität, Squad-Größen, Limits) verwendet die Server-Standardwerte aus `/set_defaults`. Event-Erinnerungen können nachträglich mit `/set_event_reminder` gesetzt werden.
-
-**Rollen-Wizard nach Erstellung (optional, 2 Schritte):**
-
-Nach der Event-Erstellung erscheint automatisch ein ephemerer Rollen-Wizard:
-
-*Schritt 1 — Squad-Rollen:*
+**Schritt 2 — Squad-Rollen:**
 - Squad-Rep Rollen/User — Wer Squads anmelden darf (Rollen-Gate, wird bei der Anmeldung geprüft)
 - Community-Rep Rollen/User — Wer Squads **vor** Anmeldungsstart anmelden darf (Early Access)
+- Ping bei Öffnung — Ob diese Rollen bei Anmeldungsstart gepingt werden sollen
 
-*Schritt 2 — Caster-Rollen:*
-- Caster Rollen/User — Wer sich als Caster anmelden darf (Rollen-Gate, wird bei der Anmeldung geprüft)
+**Schritt 3 — Caster-Rollen:**
+- Caster Rollen/User — Wer sich als Caster anmelden darf (Rollen-Gate)
 - Caster-Early-Access Rollen/User — Wer sich als Caster **vor** Anmeldungsstart anmelden darf
+- Ping bei Öffnung
 
-Jeder Schritt verwendet Mentionable-Select-Menüs, die sowohl Rollen als auch einzelne User unterstützen. Jeder Schritt kann übersprungen werden — ohne Auswahl wird kein Gate gesetzt und jeder kann sich anmelden. Rollen können auch nachträglich mit `/set_event_roles` konfiguriert werden.
+**Schritt 4 — Timing:**
+- Event-Erinnerung — Benachrichtigung X Minuten vor Event-Start (0 = deaktiviert)
+- Countdown — Nachricht X Sekunden vor Anmeldungsstart (wird bei Öffnung automatisch gelöscht)
+
+**Schritt 5 — Squad-Limit:**
+- Max. Squads pro Spieler (1–10)
+
+**Schritt 6 — Bestätigung:**
+- Zusammenfassungs-Embed mit allen Einstellungen — Bestätigen oder Abbrechen
+
+Jeder Schritt kann übersprungen werden — ohne Auswahl werden die Server-Standardwerte verwendet. Rollen können auch nachträglich mit `/set_event_roles` konfiguriert werden.
 
 **Slot-Berechnung — Beispiel:**
 ```
@@ -100,12 +110,15 @@ Server: 100 Slots
 
 ### Event per DM bearbeiten
 
-Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Menü auf **Event bearbeiten**. Der Bot sendet eine nummerierte Liste mit 15 bearbeitbaren Eigenschaften:
+Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Panel auf **Event bearbeiten**. Der Bot sendet eine gruppierte Eigenschaftenliste:
 
+**Allgemein:**
 1. Event-Name
 2. Datum
 3. Uhrzeit
 4. Beschreibung
+
+**Squad-Konfiguration:**
 5. Server max. Spieler
 6. Max. Caster-Slots
 7. Max. Fahrzeug-Squads
@@ -114,61 +127,67 @@ Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Men
 10. Fahrzeug-Squad-Größe
 11. Heli-Squad-Größe
 12. Max. Squads pro Spieler
+
+**Extras:**
 13. Event-Erinnerung (Minuten, 0 = deaktivieren)
 14. Anmeldezeitpunkt
 15. Event-Bild (Bild hochladen oder HTTPS-URL einfügen)
 
 Jede Änderung zeigt den alten → neuen Wert mit einem Bestätigungsschritt. Die Event-Anzeige im Kanal wird nach jeder Änderung automatisch aktualisiert.
 
-### Rollen-Konfiguration
+### Admin-Panel
 
-Alle Rollen-Befehle funktionieren als Toggle — einmal ausführen fügt hinzu, erneut ausführen entfernt. Jede Rolle unterstützt Mehrfachauswahl (mehrere Discord-Rollen und einzelne User).
+Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu öffnen. Es enthält 6 Buttons in 3 Reihen:
+
+| Reihe | Button | Beschreibung |
+|---|---|---|
+| Squad | **Squad hinzufügen** | Typ, Spielstil und Vertreter auswählen, dann Squad-Name eingeben |
+| Squad | **Squad entfernen** | Squad zum Entfernen auswählen (inkl. Warteliste) |
+| Caster | **Caster hinzufügen** | Discord-User als Caster hinzufügen |
+| Caster | **Caster entfernen** | Caster zum Entfernen auswählen (inkl. Warteliste) |
+| Event | **Event bearbeiten** | Öffnet DM-basierte Bearbeitungssitzung (siehe oben) |
+| Event | **Event löschen** | Event mit Bestätigung löschen |
+
+Beim Hinzufügen eines Squads als Admin wird der ausgewählte Vertreter für das Squad-Limit des Users gezählt, aber das Limit wird nicht erzwungen — Admins können immer hinzufügen.
+
+### Rollen-Konfiguration
 
 | Befehl | Beschreibung |
 |---|---|
-| `/set_squad_rep_role [role] [user]` | Squad-Rep Rolle/User hinzufügen oder entfernen |
-| `/set_community_rep_role [role] [user]` | Community-Rep Rolle/User hinzufügen oder entfernen (Early Access) |
-| `/set_caster_role [role] [user]` | Caster Rolle/User hinzufügen oder entfernen |
-| `/set_streamer_role [role] [user]` | Streamer Rolle/User hinzufügen oder entfernen |
-| `/set_ping_role [roles]` | Rollen für Ping bei Anmeldungsstart setzen (bis zu 3) |
+| `/set_event_roles` | Rollen zum Event hinzufügen (Ping, Squad-Rep, Community-Rep, Caster, Caster Early-Access) |
+| `/clear_event_roles` | Event-Rollen löschen — alle auf einmal oder nach Kategorie |
 
 ### Event-Verwaltung
 
 | Befehl | Beschreibung |
 |---|---|
 | `/event` | Neues Event erstellen (geführter Wizard) |
-| `/show_event` | Event mit interaktiven Buttons anzeigen |
 | `/open` | Anmeldung sofort öffnen |
 | `/close` | Anmeldung schließen |
 | `/delete_event` | Event löschen |
-| `/set_channel` | Kanal für Event-Updates setzen |
-| `/set_event_reminder [minutes]` | Erinnerung X Minuten vor Event-Start (0 = deaktivieren) |
-| `/set_max_squads [count]` | Max. Squads pro Spieler setzen |
 | `/update` | Event-Anzeige aktualisieren |
 
 ### Admin-Tools
 
 | Befehl | Beschreibung |
 |---|---|
-| `/admin_add_squad` | Squad hinzufügen (geführter Ablauf mit Dropdown) |
-| `/admin_add_caster [user]` | Caster hinzufügen (umgeht Zeit-/Rollenbeschränkungen) |
-| `/admin_remove_caster` | Caster entfernen (Dropdown-Auswahl) |
-| `/admin_squad_remove` | Squad entfernen (Dropdown-Auswahl) |
+| `/admin_edit_squad` | Squad-Größe bearbeiten |
 | `/admin_waitlist` | Vollständige Warteliste anzeigen |
 | `/admin_user_assignments` | Alle User-Zuweisungen anzeigen |
-| `/admin_user_info [user]` | Discord-ID, Username und Squad-/Caster-Zuweisung anzeigen |
-| `/reset_team_assignment [user]` | Zuweisung eines Users zurücksetzen |
+| `/admin_reset_assignment` | Zuweisung eines Users zurücksetzen |
 | `/export_csv` | Squad-Liste als CSV exportieren |
-| `/admin_help` | Admin-Hilfe anzeigen |
 
-### System-Befehle
+### Server-Setup-Befehle (nur Admin)
 
 | Befehl | Beschreibung |
 |---|---|
-| `/sync` | Slash-Commands synchronisieren |
-| `/export_log` | Log-Datei exportieren |
-| `/clear_log` | Log-Datei leeren |
-| `/clear_messages [count]` | Nachrichten im Kanal löschen |
+| `/setup` | Ersteinrichtung (Organisator-Rolle, Log-Kanal, Sprache) |
+| `/set_organizer_role` | Organisator-Rolle setzen |
+| `/set_language` | Bot-Sprache setzen (de/en) |
+| `/set_log_channel` | Log-Kanal setzen |
+| `/set_defaults` | Server-weite Standardwerte setzen |
+| `/settings` | Aktuelle Servereinstellungen anzeigen |
+| `/sync` | Slash-Commands mit Discord synchronisieren |
 
 ---
 
@@ -178,11 +197,11 @@ Die Event-Anzeige enthält folgende Buttons. Alle Buttons sind für jeden sichtb
 
 | Button | Funktion |
 |---|---|
-| **Squad anmelden** | Startet die geführte Anmeldung (Typ → Spielstil → Name) |
-| **Als Caster anmelden** | Direkte Caster-Anmeldung |
-| **Mein Squad/Caster** | Zeigt eigene Zuweisungen und Wartelistenposition |
-| **Abmelden** | Squad/Caster abmelden mit Bestätigung |
-| **Admin** | Öffnet Admin-Aktionen (Squad hinzufügen/entfernen, Event per DM bearbeiten, Event löschen) |
+| **Squad** (🪖) | Startet die geführte Anmeldung (Typ → Spielstil → Name) |
+| **Caster** (🎙️) | Direkte Caster-Anmeldung |
+| **Info** (ℹ️) | Zeigt eigene Zuweisungen und Wartelistenposition |
+| **Abmelden** (❌) | Squad/Caster abmelden mit Bestätigung |
+| **Admin** (⚙️) | Öffnet Admin-Panel (nur Organisator) |
 
 ---
 
@@ -192,14 +211,14 @@ Die Event-Anzeige enthält folgende Buttons. Alle Buttons sind für jeden sichtb
 - **Automatisches Nachrücken** — Sobald ein Platz frei wird (z.B. durch Abmeldung), rückt der nächste Squad auf der Warteliste automatisch nach.
 - **Reihenfolge** — Squads auf der Warteliste werden nach Anmeldezeitpunkt sortiert (First Come, First Served).
 - **DM-Benachrichtigung** — Wenn ein Squad von der Warteliste ins Event nachrückt, erhält der Spieler eine automatische DM-Benachrichtigung.
-- **Warteliste einsehen** — Spieler sehen ihre Position über den **Mein Squad/Caster** Button. Organisatoren sehen die vollständige Warteliste mit `/admin_waitlist`.
+- **Warteliste einsehen** — Spieler sehen ihre Position über den **Info** Button. Organisatoren sehen die vollständige Warteliste mit `/admin_waitlist`.
 
 ---
 
 ## Häufig gestellte Fragen
 
 **F: Wie melde ich meinen Squad an?**
-A: Klicke auf **Squad anmelden** in der Event-Anzeige oder verwende `/register`. Du wirst durch Typ, Spielstil und Namenswahl geführt.
+A: Klicke auf **Squad** (🪖) in der Event-Anzeige oder verwende `/register`. Du wirst durch Typ, Spielstil und Namenswahl geführt.
 
 **F: Kann ich gleichzeitig Caster und Squad-Mitglied sein?**
 A: Ja. Du kannst dich als Caster anmelden und parallel Squads registrieren.
@@ -208,7 +227,7 @@ A: Ja. Du kannst dich als Caster anmelden und parallel Squads registrieren.
 A: Dein Squad wird automatisch auf die Warteliste gesetzt. Du rückst nach, sobald ein Platz frei wird, und wirst per DM benachrichtigt.
 
 **F: Wie viele Squads kann ich anmelden?**
-A: Das hängt von der Event-Konfiguration ab. Der Organisator legt die maximale Anzahl Squads pro Spieler fest (Standard: 1).
+A: Das hängt von der Event-Konfiguration ab. Der Organisator legt die maximale Anzahl Squads pro Spieler fest (Standard: 1, Maximum: 10).
 
 **F: Was ist der Unterschied zwischen Infanterie, Fahrzeug und Heli?**
 A: Die drei Squad-Typen haben unterschiedliche Größen und separate Slot-Kontingente. Infanterie-Squads sind typischerweise am größten (z.B. 6 Spieler), Fahrzeug-Squads kleiner (z.B. 2) und Heli-Squads am kleinsten (z.B. 1).
@@ -220,7 +239,10 @@ A: Spieler mit Community-Rep- oder Caster-Early-Access-Rolle können sich bereit
 A: Prüfe, ob du die nötige Rolle hast (z.B. Squad-Rep für Squad-Anmeldung) und ob die Anmeldung bereits geöffnet ist. Ohne konfigurierte Rollen kann sich jeder anmelden.
 
 **F: Wie bearbeite ich ein laufendes Event?**
-A: Klicke im Admin-Menü auf **Event bearbeiten**. Der Bot sendet dir eine DM mit einer nummerierten Liste aller Eigenschaften. Antworte mit der Nummer der Eigenschaft, die du ändern möchtest.
+A: Klicke auf **Admin** → **Event bearbeiten**. Der Bot sendet dir eine DM mit einer nummerierten Liste aller Eigenschaften. Antworte mit der Nummer der Eigenschaft, die du ändern möchtest.
+
+**F: Wie richte ich den Bot erstmalig ein?**
+A: Ein Admin führt `/setup` aus, um Organisator-Rolle, Log-Kanal und Sprache zu konfigurieren. Dann `/set_defaults` für Serverkapazität und Squad-Größen. Danach können Organisatoren Events mit `/event` erstellen.
 
 **F: Warum werden meine Slash-Befehle nicht angezeigt?**
 A: Ein Administrator muss `/sync` ausführen, um die Befehle mit Discord zu synchronisieren.

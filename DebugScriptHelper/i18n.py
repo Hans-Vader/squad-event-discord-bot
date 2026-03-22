@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Internationalization module for the DCN Event Registration Bot.
+Internationalization module for the Event Registration Bot.
 Supports German (de) and English (en). Default language: German.
 """
 
