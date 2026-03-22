@@ -5,7 +5,7 @@ Event Registration Bot — Multi-guild, multi-event, language-configurable.
 Architecture:
 - Per-guild settings stored in SQLite (organizer role, defaults, language)
 - Events are channel-bound: one active event per channel, multiple channels per guild
-- All configuration via /setup (initial) and /set commands (ongoing)
+- All configuration via /setup (initial) and /set_* commands (ongoing)
 - Discord administrators can always configure the bot
 - Organizer role can manage events
 """
@@ -3047,7 +3047,7 @@ async def language_autocomplete(interaction, current: str):
     ]
 
 
-# ── /set commands ──
+# ── /set_* commands ──
 
 @bot.tree.command(name="set_organizer_role", description="Set the organizer role (admin only)")
 @app_commands.describe(role="The role that can manage events")

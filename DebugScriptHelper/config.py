@@ -4,7 +4,7 @@ Minimal configuration for the Event Registration Bot.
 
 Only the Discord bot token is read from environment variables.
 All server-specific settings (organizer role, squad sizes, language, etc.)
-are stored per-guild in the database and managed via /setup and /set commands.
+are stored per-guild in the database and managed via /setup and /set_* commands.
 """
 
 import os

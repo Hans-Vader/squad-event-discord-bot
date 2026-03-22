@@ -93,12 +93,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Log channel set to **#{channel}**.",
     },
     "setup.complete": {
-        "de": "Setup abgeschlossen! Du kannst die Einstellungen jederzeit mit `/set` ändern.",
-        "en": "Setup complete! You can change settings anytime with `/set`.",
+        "de": "Setup abgeschlossen! Du kannst die Einstellungen jederzeit mit `/set_*` ändern.",
+        "en": "Setup complete! You can change settings anytime with `/set_*`.",
     },
     "setup.already_configured": {
-        "de": "Dieser Server ist bereits konfiguriert. Nutze `/set` um Einstellungen zu ändern.",
-        "en": "This server is already configured. Use `/set` to change settings.",
+        "de": "Dieser Server ist bereits konfiguriert. Nutze `/set_*` um Einstellungen zu ändern.",
+        "en": "This server is already configured. Use `/set_*` to change settings.",
     },
     "setup.not_configured": {
         "de": "Dieser Server ist noch nicht konfiguriert. Ein Administrator muss zuerst `/setup` ausführen.",
