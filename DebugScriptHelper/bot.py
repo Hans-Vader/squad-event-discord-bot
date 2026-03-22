@@ -463,7 +463,7 @@ async def send_event_details(channel, event, db_id, lang="de", caster_enabled=Tr
     """Send or edit event embed in channel."""
     try:
         embed = format_event_details(event, lang, caster_enabled)
-        view = EventActionView()
+        view = EventActionView(lang)
 
         if not isinstance(embed, discord.Embed):
             await channel.send(str(embed), view=view)
@@ -844,27 +844,27 @@ class BaseConfirmationView(BaseView):
 
 class EventActionView(ui.View):
     """Persistent view with event action buttons."""
-    def __init__(self):
+    def __init__(self, lang="de"):
         super().__init__(timeout=None)
 
         self.add_item(ui.Button(
-            label="Squad", style=discord.ButtonStyle.success,
+            label=t("button.register_squad", lang), style=discord.ButtonStyle.success,
             custom_id="event_register_squad", emoji="🪖",
         ))
         self.add_item(ui.Button(
-            label="Caster", style=discord.ButtonStyle.primary,
+            label=t("button.register_caster", lang), style=discord.ButtonStyle.primary,
             custom_id="event_register_caster", emoji="🎙️",
         ))
         self.add_item(ui.Button(
-            label="Info", style=discord.ButtonStyle.secondary,
+            label=t("button.my_info", lang), style=discord.ButtonStyle.secondary,
             custom_id="event_info", emoji="ℹ️",
         ))
         self.add_item(ui.Button(
-            label="Abmelden", style=discord.ButtonStyle.danger,
+            label=t("button.unregister", lang), style=discord.ButtonStyle.danger,
             custom_id="event_unregister", emoji="❌",
         ))
         self.add_item(ui.Button(
-            label="Admin", style=discord.ButtonStyle.secondary,
+            label=t("button.admin", lang), style=discord.ButtonStyle.secondary,
             custom_id="event_admin", emoji="⚙️",
         ))
 
@@ -2527,7 +2527,7 @@ class WizardConfirmationView(BaseView):
         channel = bot.get_channel(self.channel_id) or await bot.fetch_channel(self.channel_id)
         caster_enabled = self.settings.get("caster_registration_enabled", True) and self.event.get("max_caster_slots", 2) > 0
         embed = format_event_details(self.event, lang, caster_enabled)
-        view = EventActionView()
+        view = EventActionView(lang)
         try:
             msg = await channel.send(embed=embed, view=view)
             self.event["event_message_id"] = msg.id
@@ -2967,7 +2967,7 @@ async def check_events_loop():
                                            f"Event-Start: <t:{event_ts}:f>")
                                 caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
                                 embed = format_event_details(event, lang, caster_enabled)
-                                view = EventActionView()
+                                view = EventActionView(lang)
                                 await ch.send(content=content, embed=embed, view=view,
                                               allowed_mentions=discord.AllowedMentions(roles=True))
                     except ValueError:
