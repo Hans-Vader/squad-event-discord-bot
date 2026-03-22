@@ -641,8 +641,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Register as caster",
     },
     "button.my_info": {
-        "de": "Mein Squad/Caster",
-        "en": "My squad/caster",
+        "de": "Info",
+        "en": "Info",
     },
     "button.unregister": {
         "de": "Abmelden",
