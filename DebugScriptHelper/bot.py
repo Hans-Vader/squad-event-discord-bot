@@ -2218,7 +2218,7 @@ class WizardCasterRolesView(BaseView):
             self.event["caster_community_user_ids"] = self._caster_early_users
         self.event["ping_on_open"] = self._ping_on_open
 
-    async def _done(self, interaction):
+    async def _continue(self, interaction):
         self._save_selections()
         lang = get_guild_language(self.guild_id)
         next_view = WizardTimingView(self.guild_id, self.channel_id, self.event, self.user_assignments,
