@@ -74,6 +74,26 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Fertig",
         "en": "Done",
     },
+    "time.seconds": {
+        "de": "{n} Sekunden",
+        "en": "{n} seconds",
+    },
+    "time.minute": {
+        "de": "1 Minute",
+        "en": "1 minute",
+    },
+    "time.minutes": {
+        "de": "{n} Minuten",
+        "en": "{n} minutes",
+    },
+    "time.hour": {
+        "de": "1 Stunde",
+        "en": "1 hour",
+    },
+    "time.hours": {
+        "de": "{n} Stunden",
+        "en": "{n} hours",
+    },
 
     # ── Setup ─────────────────────────────────────────────────────────────
     "setup.welcome": {
@@ -357,8 +377,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "**Registration for {name} is now open!**\nRegister your squads!",
     },
     "reg.opens_soon": {
-        "de": "**Die Anmeldung für {name} öffnet um <t:{ts}:f>!**\n\nEs wird eine Nachricht gesendet, sobald die Anmeldung geöffnet ist.\n_Die Eröffnung kann sich aufgrund von Netzwerkverzögerung um einige Sekunden verzögern._",
-        "en": "**Registration for {name} opens at <t:{ts}:f>!**\n\nA message will be sent when registration opens.\n_The opening may be delayed by a few seconds due to network latency. _",
+        "de": "**Die Anmeldung für {name} öffnet um <t:{ts}:f> in {remaining}!**\n\n**Es wird eine Nachricht gesendet, sobald die Anmeldung geöffnet ist!**\n_Die Eröffnung kann sich aufgrund von Netzwerkverzögerung um einige Sekunden verzögern._",
+        "en": "**Registration for {name} opens at <t:{ts}:f> in {remaining}!**\n\n**A message will be sent when registration opens!**\n_The opening may be delayed by a few seconds due to network latency._",
     },
     "reg.opened_now": {
         "de": "Registrierung ist sofort geöffnet.",

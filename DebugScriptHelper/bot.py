@@ -2896,7 +2896,18 @@ async def check_events_loop():
                                 await send_event_details(ch, event, db_id, lang, caster_enabled)
                                 ping_text = _build_ping_text(event)
                                 ts = int(start_time.timestamp())
-                                content = f"{ping_text}" + t("reg.opens_soon", lang, name=event["name"], ts=ts)
+                                remaining_secs = max(0, int((start_time - datetime.now()).total_seconds()))
+                                if remaining_secs < 60:
+                                    remaining = t("time.seconds", lang, n=remaining_secs)
+                                elif remaining_secs < 3600:
+                                    mins = remaining_secs // 60
+                                    remaining = t("time.minute", lang) if mins == 1 else t("time.minutes", lang, n=mins)
+                                else:
+                                    hours = remaining_secs // 3600
+                                    mins = (remaining_secs % 3600) // 60
+                                    h_str = t("time.hour", lang) if hours == 1 else t("time.hours", lang, n=hours)
+                                    remaining = f"{h_str} {t('time.minutes', lang, n=mins)}" if mins else h_str
+                                content = f"{ping_text}" + t("reg.opens_soon", lang, name=event["name"], ts=ts, remaining=remaining)
                                 countdown_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True))
                                 event["countdown_message_id"] = countdown_msg.id
                                 save_event(db_id, event, user_assignments)
