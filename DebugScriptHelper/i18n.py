@@ -337,8 +337,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Not open yet",
     },
     "reg.opens_at": {
-        "de": "Öffnet <t:{ts}:f> (<t:{ts}:R>)",
-        "en": "Opens <t:{ts}:f> (<t:{ts}:R>)",
+        "de": "Öffnet <t:{ts}:f>",
+        "en": "Opens <t:{ts}:f>",
     },
     "reg.closed_message": {
         "de": "Die Anmeldungen für dieses Event sind geschlossen.",
@@ -357,16 +357,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "**Registration for {name} is now open!**\nRegister your squads!",
     },
     "reg.opens_soon": {
-        "de": "**Die Anmeldung für {name} öffnet <t:{ts}:R>!**\nStart: <t:{ts}:f>",
-        "en": "**Registration for {name} opens <t:{ts}:R>!**\nStart: <t:{ts}:f>",
+        "de": "**Die Anmeldung für {name} öffnet um <t:{ts}:f>!**\nEs wird eine Nachricht gesendet, sobald die Anmeldung geöffnet ist.\n_Die Öffnung kann sich aufgrund von Discords Verzögerung um wenige Sekunden verzögern._",
+        "en": "**Registration for {name} opens at <t:{ts}:f>!**\nA message will be sent when registration opens.\n_Opening may be delayed a few seconds because of the Discord delay. _",
     },
     "reg.opened_now": {
         "de": "Registrierung ist sofort geöffnet.",
         "en": "Registration is open immediately.",
     },
     "reg.opens_at_info": {
-        "de": "Registrierung öffnet <t:{ts}:f> (<t:{ts}:R>).",
-        "en": "Registration opens <t:{ts}:f> (<t:{ts}:R>).",
+        "de": "Registrierung öffnet <t:{ts}:f>.",
+        "en": "Registration opens <t:{ts}:f>.",
     },
     "reg.manually_opened": {
         "de": "Die Registrierung für '{name}' wurde geöffnet!",

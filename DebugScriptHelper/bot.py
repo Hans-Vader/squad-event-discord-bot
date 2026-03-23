@@ -2239,7 +2239,7 @@ class WizardCasterRolesView(BaseView):
 class WizardTimingView(BaseView):
     """Step 3: configure event reminder and registration countdown."""
     REMINDER_OPTIONS = [0, 15, 30, 60, 120, 240, 480, 1440]
-    COUNTDOWN_OPTIONS = [0, 10, 60, 300, 600, 900, 1800, 3600, 7200, 14400, 28800]  # seconds
+    COUNTDOWN_OPTIONS = [0, 60, 300, 600, 900, 1800, 3600, 7200, 14400, 28800]  # seconds
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
         super().__init__(timeout=300, title="Wizard Timing")
@@ -2403,7 +2403,7 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
         event_dt = datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
         event_ts = int(event_dt.timestamp())
         embed.add_field(name=t("wizard.summary_datetime", lang),
-                        value=f"<t:{event_ts}:f> (<t:{event_ts}:R>)", inline=True)
+                        value=f"<t:{event_ts}:f>", inline=True)
     except ValueError:
         embed.add_field(name=t("wizard.summary_datetime", lang),
                         value=f"{date_str} {time_str}", inline=True)
@@ -2920,9 +2920,20 @@ async def check_events_loop():
                                 ping_text = _build_ping_text(event, include_community_rep=True)
                                 if ping_text:
                                     content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
-                                    ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-                                    event.setdefault("ping_message_ids", []).append(ping_msg.id)
-                                    save_event(db_id, event, user_assignments)
+                                    ping_msg = None
+                                    for attempt in range(2):
+                                        try:
+                                            ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
+                                            break
+                                        except Exception as e:
+                                            logger.warning(f"Attempt {attempt+1} to send open announcement for '{event['name']}' failed: {e}")
+                                            if attempt == 0:
+                                                await asyncio.sleep(1)
+                                    if ping_msg:
+                                        event.setdefault("ping_message_ids", []).append(ping_msg.id)
+                                        save_event(db_id, event, user_assignments)
+                                    else:
+                                        logger.error(f"Failed to send open announcement for '{event['name']}' after 2 attempts")
 
                             # PRIORITY 2: Send/update event embed
                             caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
