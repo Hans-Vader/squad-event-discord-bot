@@ -2185,9 +2185,9 @@ class WizardCasterRolesView(BaseView):
         skip_btn.callback = self._skip
         self.add_item(skip_btn)
 
-        done_btn = ui.Button(label=t("general.done", lang), style=discord.ButtonStyle.success, row=3)
-        done_btn.callback = self._done
-        self.add_item(done_btn)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=3)
+        continue_btn.callback = self._continue
+        self.add_item(continue_btn)
 
         self._caster_roles = []
         self._caster_users = []
