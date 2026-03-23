@@ -357,8 +357,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "**Registration for {name} is now open!**\nRegister your squads!",
     },
     "reg.opens_soon": {
-        "de": "**Die Anmeldung für {name} öffnet um <t:{ts}:f>!**\nEs wird eine Nachricht gesendet, sobald die Anmeldung geöffnet ist.\n_Die Öffnung kann sich aufgrund von Discords Verzögerung um wenige Sekunden verzögern._",
-        "en": "**Registration for {name} opens at <t:{ts}:f>!**\nA message will be sent when registration opens.\n_Opening may be delayed a few seconds because of the Discord delay. _",
+        "de": "**Die Anmeldung für {name} öffnet um <t:{ts}:f>!**\n\nEs wird eine Nachricht gesendet, sobald die Anmeldung geöffnet ist.\n_Die Eröffnung kann sich aufgrund von Netzwerkverzögerung um einige Sekunden verzögern._",
+        "en": "**Registration for {name} opens at <t:{ts}:f>!**\n\nA message will be sent when registration opens.\n_The opening may be delayed by a few seconds due to network latency. _",
     },
     "reg.opened_now": {
         "de": "Registrierung ist sofort geöffnet.",
