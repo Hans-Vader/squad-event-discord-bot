@@ -2896,7 +2896,7 @@ async def check_events_loop():
                                 await send_event_details(ch, event, db_id, lang, caster_enabled)
                                 ping_text = _build_ping_text(event)
                                 ts = int(start_time.timestamp())
-                                remaining_secs = max(0, int((start_time - datetime.now()).total_seconds()))
+                                remaining_secs = effective_countdown
                                 if remaining_secs < 60:
                                     remaining = t("time.seconds", lang, n=remaining_secs)
                                 elif remaining_secs < 3600:
