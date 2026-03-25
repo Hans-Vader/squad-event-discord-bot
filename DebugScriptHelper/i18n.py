@@ -278,6 +278,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Ungültiges Datumsformat. Bitte verwende TT.MM.JJJJ.",
         "en": "Invalid date format. Please use DD.MM.YYYY.",
     },
+    "event.reg_after_event": {
+        "de": "Der Anmeldebeginn muss vor dem Eventstart liegen.",
+        "en": "Registration start must be before the event start.",
+    },
     "event.invalid_time": {
         "de": "Ungültige Uhrzeit. Format: HH:MM (z.B. 20:00)",
         "en": "Invalid time. Format: HH:MM (e.g. 20:00)",
@@ -1463,6 +1467,14 @@ _STRINGS: dict[str, dict[str, str]] = {
     "admin.squad_edited": {
         "de": "Squad **{name}** Größe geändert: {old} → {new}",
         "en": "Squad **{name}** size changed: {old} → {new}",
+    },
+    "admin.confirm_remove_squad": {
+        "de": "Squad **{name}** wirklich entfernen?",
+        "en": "Remove squad **{name}**?",
+    },
+    "admin.confirm_remove_caster": {
+        "de": "Caster **{name}** wirklich entfernen?",
+        "en": "Remove caster **{name}**?",
     },
     "admin.squad_removed": {
         "de": "Squad **{name}** wurde entfernt ({freed} Slots freigegeben).",

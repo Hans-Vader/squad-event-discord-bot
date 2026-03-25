@@ -1602,11 +1602,11 @@ class _AdminRemoveSquadView(BaseView):
 
     async def _selected(self, interaction):
         selected = interaction.data["values"][0]
-        await interaction.response.defer(ephemeral=True)
-        result = await unregister_squad(interaction, self.guild_id, self.channel_id, selected, is_admin=True)
-        if result is not None:
-            lang = get_guild_language(self.guild_id)
-            await send_feedback(interaction, t("admin.squad_removed", lang, name=selected, freed=result), ephemeral=True)
+        lang = get_guild_language(self.guild_id)
+        view = _ConfirmRemoveView(self.guild_id, self.channel_id, selected, "squad", lang)
+        await interaction.response.send_message(
+            t("admin.confirm_remove_squad", lang, name=selected),
+            view=view, ephemeral=True)
 
 
 class _AdminAddCasterView(BaseView):
@@ -1671,44 +1671,91 @@ class _AdminRemoveCasterView(BaseView):
 
     async def _selected(self, interaction):
         target_uid = interaction.data["values"][0]
-        await interaction.response.defer(ephemeral=True)
-        gid = self.guild_id
-        cid = self.channel_id
-        lang = get_guild_language(gid)
-
-        lock = _get_guild_lock(gid)
-        async with lock:
-            event, user_assignments, db_id = _get_channel_event(gid, cid)
-            if not event:
-                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-                return
-
-            caster_name = None
-            if target_uid in event["casters"]:
-                caster_name = event["casters"][target_uid]["name"]
-                del event["casters"][target_uid]
-                event["caster_slots_used"] = max(0, event["caster_slots_used"] - 1)
-                remove_user_assignment(user_assignments, target_uid, "__caster__")
-                save_event(db_id, event, user_assignments)
-                await _process_caster_waitlist(event, user_assignments, db_id, gid, cid)
+        lang = get_guild_language(self.guild_id)
+        # Resolve display name from event data
+        event, _, _ = _get_channel_event(self.guild_id, self.channel_id)
+        caster_name = target_uid
+        if event:
+            if target_uid in event.get("casters", {}):
+                caster_name = event["casters"][target_uid].get("name", target_uid)
             else:
-                for i, (uid, name) in enumerate(event.get("caster_waitlist", [])):
+                for uid, name in event.get("caster_waitlist", []):
                     if uid == target_uid:
                         caster_name = name
-                        event["caster_waitlist"].pop(i)
-                        remove_user_assignment(user_assignments, target_uid, "__caster__")
-                        save_event(db_id, event, user_assignments)
                         break
+        view = _ConfirmRemoveView(self.guild_id, self.channel_id, target_uid, "caster", lang,
+                                  display_name=caster_name)
+        await interaction.response.send_message(
+            t("admin.confirm_remove_caster", lang, name=caster_name),
+            view=view, ephemeral=True)
 
-        if caster_name is None:
-            await send_feedback(interaction, t("admin.caster_not_found", lang), ephemeral=True)
-            return
 
-        await send_feedback(interaction, t("admin.caster_removed", lang, name=caster_name), ephemeral=True)
-        await send_to_log_channel(
-            t("log.admin_caster_removed", lang, admin=interaction.user.name, name=caster_name),
-            guild=interaction.guild)
-        await update_event_displays(gid, cid)
+class _ConfirmRemoveView(BaseView):
+    """Confirmation prompt before removing a squad or caster."""
+    def __init__(self, guild_id, channel_id, target, remove_type, lang, display_name=None):
+        super().__init__(timeout=60, title="Confirm Remove")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.target = target  # squad name or caster uid
+        self.remove_type = remove_type  # "squad" or "caster"
+        self.display_name = display_name or target
+
+        confirm_btn = ui.Button(label=t("general.confirm", lang), style=discord.ButtonStyle.danger, row=0)
+        confirm_btn.callback = self._confirm
+        self.add_item(confirm_btn)
+
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary, row=0)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _confirm(self, interaction):
+        await interaction.response.defer(ephemeral=True)
+        lang = get_guild_language(self.guild_id)
+
+        if self.remove_type == "squad":
+            result = await unregister_squad(interaction, self.guild_id, self.channel_id, self.target, is_admin=True)
+            if result is not None:
+                await send_feedback(interaction, t("admin.squad_removed", lang, name=self.target, freed=result), ephemeral=True)
+        else:
+            # Caster removal
+            gid, cid = self.guild_id, self.channel_id
+            lock = _get_guild_lock(gid)
+            async with lock:
+                event, user_assignments, db_id = _get_channel_event(gid, cid)
+                if not event:
+                    await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                    return
+
+                caster_name = None
+                if self.target in event["casters"]:
+                    caster_name = event["casters"][self.target]["name"]
+                    del event["casters"][self.target]
+                    event["caster_slots_used"] = max(0, event["caster_slots_used"] - 1)
+                    remove_user_assignment(user_assignments, self.target, "__caster__")
+                    save_event(db_id, event, user_assignments)
+                    await _process_caster_waitlist(event, user_assignments, db_id, gid, cid)
+                else:
+                    for i, (uid, name) in enumerate(event.get("caster_waitlist", [])):
+                        if uid == self.target:
+                            caster_name = name
+                            event["caster_waitlist"].pop(i)
+                            remove_user_assignment(user_assignments, self.target, "__caster__")
+                            save_event(db_id, event, user_assignments)
+                            break
+
+            if caster_name is None:
+                await send_feedback(interaction, t("admin.caster_not_found", lang), ephemeral=True)
+                return
+
+            await send_feedback(interaction, t("admin.caster_removed", lang, name=caster_name), ephemeral=True)
+            await send_to_log_channel(
+                t("log.admin_caster_removed", lang, admin=interaction.user.name, name=caster_name),
+                guild=interaction.guild)
+            await update_event_displays(gid, cid)
+
+    async def _cancel(self, interaction):
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
 
 
 # ---------------------------------------------------------------------------
@@ -2012,6 +2059,16 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                     elif isinstance(new_value, datetime) and new_value <= datetime.now():
                         event["registration_open"] = True
                         event["registration_start_time"] = None
+                    elif isinstance(new_value, datetime):
+                        event_dt = parse_date(event["date"])
+                        if event_dt and event.get("time"):
+                            h, m = map(int, event["time"].split(":"))
+                            event_dt = event_dt.replace(hour=h, minute=m)
+                        if event_dt and new_value >= event_dt:
+                            await dm_channel.send(t("event.reg_after_event", lang))
+                            break
+                        event["registration_start_time"] = new_value
+                        event["registration_open"] = False
                     else:
                         event["registration_start_time"] = new_value
                         event["registration_open"] = False
@@ -2441,7 +2498,7 @@ class WizardSquadLimitView(BaseView):
 
         current_default = event.get("max_squads_per_user", 1)
         options = []
-        for n in range(1, 11):
+        for n in range(1, 21):
             label = f"{n} Squad" if n == 1 else f"{n} Squads"
             options.append(discord.SelectOption(label=label, value=str(n), default=(n == current_default)))
 
@@ -2875,6 +2932,16 @@ class EventCreationModal(ui.Modal):
             if reg_start_time <= datetime.now():
                 reg_open = True
                 reg_start_time = None
+
+        # Validate registration start is before event start
+        if reg_start_time is not None:
+            event_dt = parse_date(date_str)
+            if event_dt and time_str:
+                hours, minutes = map(int, time_str.split(":"))
+                event_dt = event_dt.replace(hour=hours, minute=minutes)
+            if event_dt and reg_start_time >= event_dt:
+                await interaction.response.send_message(t("event.reg_after_event", lang), ephemeral=True)
+                return
 
         # Store parsed data and show bridge to server config modal
         parsed = {
