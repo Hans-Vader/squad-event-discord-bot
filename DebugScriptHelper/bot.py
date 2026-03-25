@@ -1369,15 +1369,31 @@ class AdminActionView(BaseView):
             await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
             return
         squads = event.get("squads", {})
-        options = []
-        for name, data in squads.items():
-            options.append(discord.SelectOption(label=name, value=name))
+        type_labels = {
+            "infantry": t("embed.type_infantry", lang),
+            "vehicle": t("embed.type_vehicle", lang),
+            "heli": t("embed.type_heli", lang),
+        }
+        type_abbrev = {"infantry": "Inf", "vehicle": "Veh", "heli": "Heli"}
+        select_groups = []  # [(placeholder, [SelectOption, ...])]
+        # Registered squads per type
+        for st in SQUAD_TYPES:
+            opts = [discord.SelectOption(label=name, value=name)
+                    for name, data in squads.items() if data.get("type") == st]
+            if opts:
+                select_groups.append((type_labels[st], opts[:25]))
+        # Combined waitlist across all types
+        wl_opts = []
         for entry in _all_squad_waitlist_entries(event):
-            options.append(discord.SelectOption(label=f"[WL] {entry[0]}", value=entry[0]))
-        if not options:
+            abbr = type_abbrev.get(entry[1], "?")
+            wl_opts.append(discord.SelectOption(label=f"[WL-{abbr}] {entry[0]}", value=entry[0]))
+        if wl_opts:
+            wl_label = t("embed.waitlist_label", lang, count=len(wl_opts))
+            select_groups.append((wl_label, wl_opts[:25]))
+        if not select_groups:
             await interaction.response.send_message(t("embed.no_entries", lang), ephemeral=True)
             return
-        view = _AdminRemoveSquadView(self.guild_id, self.channel_id, options)
+        view = _AdminRemoveSquadView(self.guild_id, self.channel_id, select_groups)
         await interaction.response.send_message(view=view, ephemeral=True)
 
     async def _add_caster(self, interaction):
@@ -1574,15 +1590,15 @@ class _AdminSquadNameModal(ui.Modal):
 
 
 class _AdminRemoveSquadView(BaseView):
-    """Admin remove-squad: select menu of all squads + waitlist."""
-    def __init__(self, guild_id, channel_id, options):
+    """Admin remove-squad: per-type select menus for registered + combined waitlist."""
+    def __init__(self, guild_id, channel_id, select_groups):
         super().__init__(timeout=120, title="Remove Squad")
         self.guild_id = guild_id
         self.channel_id = channel_id
-        lang = get_guild_language(guild_id)
-        select = ui.Select(placeholder=t("admin.select_squad_remove", lang), options=options, row=0)
-        select.callback = self._selected
-        self.add_item(select)
+        for row, (placeholder, options) in enumerate(select_groups):
+            select = ui.Select(placeholder=placeholder, options=options, row=row)
+            select.callback = self._selected
+            self.add_item(select)
 
     async def _selected(self, interaction):
         selected = interaction.data["values"][0]
