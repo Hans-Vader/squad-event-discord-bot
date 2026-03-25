@@ -474,6 +474,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Nicht genügend Plätze! Squad **{name}** ({type}, {size} Spieler, {playstyle}) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
         "en": "Not enough slots! Squad **{name}** ({type}, {size} players, {playstyle}) has been waitlisted (position {pos}). {info}",
     },
+    "squad.type_full": {
+        "de": "Alle {type}-Plätze sind belegt! Squad **{name}** ({type}, {size} Spieler, {playstyle}) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
+        "en": "All {type} slots are taken! Squad **{name}** ({type}, {size} players, {playstyle}) has been waitlisted (position {pos}). {info}",
+    },
     "squad.duplicate_name": {
         "de": "Ein Squad mit dem Namen '{name}' existiert bereits.",
         "en": "A squad with the name '{name}' already exists.",
@@ -765,6 +769,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "log.squad_waitlisted": {
         "de": "Squad auf Warteliste: {user} hat Squad '{squad}' auf Warteliste gesetzt",
         "en": "Squad waitlisted: {user} put squad '{squad}' on waitlist",
+    },
+    "log.squad_type_full_waitlisted": {
+        "de": "Squad auf Warteliste ({type}-Plätze voll): {user} hat Squad '{squad}' auf Warteliste gesetzt",
+        "en": "Squad waitlisted ({type} slots full): {user} put squad '{squad}' on waitlist",
     },
     "log.squad_unregistered": {
         "de": "Squad abgemeldet: {user} hat Squad '{squad}' abgemeldet (freigegebene Slots: {freed})",
@@ -1437,12 +1445,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Squad **{name}** ({type}, {size} players, {playstyle}) added. Status: {status}",
     },
     "admin.squad_added_waitlist": {
+        "de": "Warteliste (Position {pos})",
+        "en": "Waitlist (position {pos})",
+    },
+    "admin.squad_added_registered": {
         "de": "Angemeldet",
         "en": "Registered",
     },
-    "admin.squad_added_registered": {
-        "de": "Warteliste (Position {pos})",
-        "en": "Waitlist (position {pos})",
+    "admin.squad_type_full_waitlist": {
+        "de": "Warteliste ({type}-Plätze voll)",
+        "en": "Waitlist ({type} slots full)",
     },
     "admin.squad_edited": {
         "de": "Squad **{name}** Größe geändert: {old} → {new}",

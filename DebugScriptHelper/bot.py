@@ -397,6 +397,25 @@ def _get_max_infantry_squads(event: dict) -> int:
     return remaining // inf_size if inf_size > 0 else 0
 
 
+def _count_registered_squads_of_type(event: dict, squad_type: str) -> int:
+    """Count registered (not waitlisted) squads of the given type."""
+    return sum(1 for d in event.get("squads", {}).values() if d.get("type") == squad_type)
+
+
+def _get_max_squads_for_type(event: dict, squad_type: str) -> int:
+    """Return the max squad count for the given type."""
+    if squad_type == "vehicle":
+        return event.get("max_vehicle_squads", 6)
+    elif squad_type == "heli":
+        return event.get("max_heli_squads", 2)
+    return _get_max_infantry_squads(event)
+
+
+def _is_squad_type_full(event: dict, squad_type: str) -> bool:
+    """Check if a squad type has reached its registration limit."""
+    return _count_registered_squads_of_type(event, squad_type) >= _get_max_squads_for_type(event, squad_type)
+
+
 def _build_ping_text(event, include_community_rep=False):
     role_ids = set()
     user_ids = set()
@@ -540,7 +559,13 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
         available = event["max_player_slots"] - event["player_slots_used"]
         rep_name = interaction.user.display_name
 
-        if size <= available:
+        if _is_squad_type_full(event, squad_type):
+            event["waitlist"].append((squad_name, squad_type, playstyle, size, squad_id, rep_name))
+            add_user_assignment(user_assignments, user_id, squad_name)
+            save_event(db_id, event, user_assignments)
+            result = "type_full_waitlisted"
+            wl_pos = len(event["waitlist"])
+        elif size <= available:
             event["squads"][squad_name] = {
                 "type": squad_type, "playstyle": playstyle,
                 "size": size, "id": squad_id, "rep_name": rep_name,
@@ -570,6 +595,13 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
             ephemeral=True)
         await send_to_log_channel(
             t("log.squad_registered", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=playstyle),
+            guild=interaction.guild)
+    elif result == "type_full_waitlisted":
+        await send_feedback(interaction,
+            t("squad.type_full", lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
+            ephemeral=True)
+        await send_to_log_channel(
+            t("log.squad_type_full_waitlisted", lang, user=interaction.user.name, squad=squad_name, type=type_label),
             guild=interaction.guild)
     else:
         await send_feedback(interaction,
@@ -655,7 +687,7 @@ async def _process_squad_waitlist(event, user_assignments, db_id, guild_id, chan
             break
         squad_name, squad_type, playstyle, size, squad_id, *_rest = entry
         rep_name = _rest[0] if _rest else None
-        if size <= remaining:
+        if size <= remaining and not _is_squad_type_full(event, squad_type):
             squad_data = {"type": squad_type, "playstyle": playstyle, "size": size, "id": squad_id}
             if rep_name:
                 squad_data["rep_name"] = rep_name
@@ -1464,17 +1496,21 @@ class _AdminSquadNameModal(ui.Modal):
             rep_name = self.rep_user.display_name
             rep_uid = str(self.rep_user.id)
 
-            if size <= available:
+            if _is_squad_type_full(event, self.squad_type):
+                event["waitlist"].append((squad_name, self.squad_type, self.playstyle, size, squad_id, rep_name))
+                wl_pos = len(event["waitlist"])
+                status = t("admin.squad_type_full_waitlist", lang, type=self.squad_type)
+            elif size <= available:
                 event["squads"][squad_name] = {
                     "type": self.squad_type, "playstyle": self.playstyle,
                     "size": size, "id": squad_id, "rep_name": rep_name,
                 }
                 event["player_slots_used"] += size
-                status = t("admin.squad_added_registered", lang, pos=0)
+                status = t("admin.squad_added_registered", lang)
             else:
                 event["waitlist"].append((squad_name, self.squad_type, self.playstyle, size, squad_id, rep_name))
                 wl_pos = len(event["waitlist"])
-                status = t("admin.squad_added_waitlist", lang)
+                status = t("admin.squad_added_waitlist", lang, pos=wl_pos)
 
             add_user_assignment(user_assignments, rep_uid, squad_name)
             save_event(db_id, event, user_assignments)
