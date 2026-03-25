@@ -270,10 +270,10 @@ def build_event_summary_embed(event: dict, lang: str = "de") -> Embed:
     embed.add_field(name=t("event.summary_date", lang), value=f"{date_str} {time_str}", inline=True)
 
     squads = event.get("squads", {})
-    waitlist = event.get("waitlist", [])
+    total_wl = sum(len(event.get(f"{st}_waitlist", [])) for st in ("infantry", "vehicle", "heli"))
     embed.add_field(
         name=t("event.summary_squads", lang),
-        value=f"{len(squads)} (+{len(waitlist)} {t('embed.waitlist_label', lang, count=len(waitlist))})",
+        value=f"{len(squads)} (+{total_wl} {t('embed.waitlist_label', lang, count=total_wl)})",
         inline=True,
     )
 
@@ -391,13 +391,9 @@ def format_event_details(event: dict, lang: str = "de",
     available = server_cap - total_used
 
     squads_all = event.get("squads", {})
-    waitlist = event.get("waitlist", [])
     vehicle_count = sum(1 for d in squads_all.values() if d.get("type") == "vehicle")
-    vehicle_count += sum(1 for e in waitlist if e[1] == "vehicle")
     heli_count = sum(1 for d in squads_all.values() if d.get("type") == "heli")
-    heli_count += sum(1 for e in waitlist if e[1] == "heli")
     infantry_count = sum(1 for d in squads_all.values() if d.get("type") == "infantry")
-    infantry_count += sum(1 for e in waitlist if e[1] == "infantry")
 
     vehicle_player_slots = max_vehicles * veh_size
     heli_player_slots = max_helis * heli_size
@@ -437,6 +433,19 @@ def format_event_details(event: dict, lang: str = "de",
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
 
+        # Type waitlist — directly below its registered entries
+        wl = event.get(f"{type_key}_waitlist", [])
+        if wl:
+            wl_text = ""
+            for i, entry in enumerate(wl):
+                squad_name, _squad_type, playstyle, size, _squad_id, *_rest = entry
+                rep_name = _rest[0] if _rest else None
+                rep_suffix = f" — {rep_name}" if rep_name else ""
+                wl_text += f"{i+1}. [{playstyle}] **{squad_name}** ({size}){rep_suffix}\n"
+            embed.add_field(
+                name=t("embed.type_waitlist_label", lang, type=t(f"embed.type_{type_key}", lang), count=len(wl)),
+                value=wl_text, inline=False)
+
     # Caster field — always shown when enabled
     if caster_enabled:
         casters = event.get("casters", {})
@@ -448,20 +457,7 @@ def format_event_details(event: dict, lang: str = "de",
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
 
-    # Waitlist
-    if waitlist:
-        wl_text = ""
-        for i, entry in enumerate(waitlist):
-            squad_name, squad_type, playstyle, size, squad_id, *_rest = entry
-            rep_name = _rest[0] if _rest else None
-            type_map = {"infantry": "Inf.", "vehicle": "Veh.", "heli": "Heli"}
-            tl = type_map.get(squad_type, squad_type)
-            rep_suffix = f" — {rep_name}" if rep_name else ""
-            wl_text += f"{i+1}. [{playstyle}] **{squad_name}** ({tl}, {size}){rep_suffix}\n"
-        embed.add_field(name=t("embed.waitlist_label", lang, count=len(waitlist)), value=wl_text, inline=False)
-
-    # Caster waitlist
-    if caster_enabled:
+        # Caster waitlist — directly below caster entries
         caster_wl = event.get("caster_waitlist", [])
         if caster_wl:
             cwl_text = "\n".join(f"{i+1}. **{name}**" for i, (_, name) in enumerate(caster_wl))

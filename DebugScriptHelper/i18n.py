@@ -646,6 +646,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "⏳ Warteliste ({count})",
         "en": "⏳ Waitlist ({count})",
     },
+    "embed.type_waitlist_label": {
+        "de": "⏳ {type}-Warteliste ({count})",
+        "en": "⏳ {type} Waitlist ({count})",
+    },
     "embed.caster_waitlist_label": {
         "de": "⏳ Caster-Warteliste ({count})",
         "en": "⏳ Caster waitlist ({count})",
