@@ -1142,7 +1142,7 @@ class SquadRegistrationView(BaseView):
                 discord.SelectOption(label=t("squad.type_heli", lang, size=sizes["heli"]), value="heli"),
             ],
             custom_id="squad_type_select", row=0)
-        self.type_select.callback = self._type_selected
+        self.type_select.callback = lambda i: self._on_select(i, self.type_select, 'selected_type')
         self.add_item(self.type_select)
 
         self.playstyle_select = ui.Select(
@@ -1153,7 +1153,7 @@ class SquadRegistrationView(BaseView):
                 discord.SelectOption(label="Focused", value="Focused"),
             ],
             custom_id="squad_playstyle_select", row=1)
-        self.playstyle_select.callback = self._playstyle_selected
+        self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
         self.add_item(self.playstyle_select)
 
         self.continue_button = ui.Button(label=t("squad.continue", lang), style=discord.ButtonStyle.success, disabled=True, row=2)
@@ -1171,13 +1171,10 @@ class SquadRegistrationView(BaseView):
             lines.append(t("squad.selected_playstyle", lang, label=self.selected_playstyle))
         return "\n".join(lines)
 
-    async def _type_selected(self, interaction):
-        self.selected_type = self.type_select.values[0]
-        self.continue_button.disabled = not (self.selected_type and self.selected_playstyle)
-        await interaction.response.edit_message(content=self._build_status_content(), view=self)
-
-    async def _playstyle_selected(self, interaction):
-        self.selected_playstyle = self.playstyle_select.values[0]
+    async def _on_select(self, interaction, select, attr):
+        setattr(self, attr, select.values[0])
+        for opt in select.options:
+            opt.default = opt.value == select.values[0]
         self.continue_button.disabled = not (self.selected_type and self.selected_playstyle)
         await interaction.response.edit_message(content=self._build_status_content(), view=self)
 
@@ -1453,7 +1450,7 @@ class _AdminSquadRegView(BaseView):
                 discord.SelectOption(label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"),
                 discord.SelectOption(label=t("squad.type_heli", lang, size=sizes["heli"]), value="heli"),
             ], row=0)
-        self.type_select.callback = self._type_selected
+        self.type_select.callback = lambda i: self._on_select(i, self.type_select, 'selected_type')
         self.add_item(self.type_select)
 
         self.playstyle_select = ui.Select(
@@ -1463,7 +1460,7 @@ class _AdminSquadRegView(BaseView):
                 discord.SelectOption(label="Normal", value="Normal"),
                 discord.SelectOption(label="Focused", value="Focused"),
             ], row=1)
-        self.playstyle_select.callback = self._playstyle_selected
+        self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
         self.add_item(self.playstyle_select)
 
         self.user_select = ui.UserSelect(
@@ -1492,13 +1489,10 @@ class _AdminSquadRegView(BaseView):
     def _all_selected(self):
         return self.selected_type and self.selected_playstyle and self.selected_user
 
-    async def _type_selected(self, interaction):
-        self.selected_type = self.type_select.values[0]
-        self.continue_button.disabled = not self._all_selected()
-        await interaction.response.edit_message(content=self._build_status(), view=self)
-
-    async def _playstyle_selected(self, interaction):
-        self.selected_playstyle = self.playstyle_select.values[0]
+    async def _on_select(self, interaction, select, attr):
+        setattr(self, attr, select.values[0])
+        for opt in select.options:
+            opt.default = opt.value == select.values[0]
         self.continue_button.disabled = not self._all_selected()
         await interaction.response.edit_message(content=self._build_status(), view=self)
 
@@ -3415,7 +3409,7 @@ async def settings_command(interaction: discord.Interaction):
 # SLASH COMMANDS — EVENTS       #
 # ############################# #
 
-@bot.tree.command(name="event", description="Create a new event in this channel (organizer only)")
+@bot.tree.command(name="create_event", description="Create a new event in this channel (organizer only)")
 async def event_command(interaction: discord.Interaction):
     if not await check_organizer(interaction):
         return

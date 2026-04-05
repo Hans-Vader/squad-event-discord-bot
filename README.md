@@ -11,7 +11,7 @@ A Discord bot for managing squad-based events with interactive registration, wai
 - **Guided squad registration** — Step-by-step flow with dropdowns for squad type (Infantry/Vehicle/Heli) and playstyle (Casual/Normal/Focused)
 - **Three squad types** — Infantry, Vehicle, and Heli squads with independent size and count limits
 - **Server slot calculation** — Automatic distribution of server capacity across all squad types and casters
-- **Multi-squad support** — Configurable number of squads per player (1–10)
+- **Multi-squad support** — Configurable number of squads per player (1–20)
 - **Caster + squad simultaneously** — Players can register as caster AND with squads
 - **Role-based access control** — Squad-Rep, Community-Rep, and Caster roles/users restrict who can register (multi-select with roles and individual users)
 - **Early access** — Community-Rep and Caster early-access roles/users can register before the event opens
@@ -62,7 +62,7 @@ The admin panel opens via the **Admin** button and provides 6 actions in 3 rows:
 
 | Command | Description |
 |---|---|
-| `/event` | Create a new event (guided wizard) |
+| `/create_event` | Create a new event (guided wizard) |
 | `/delete_event` | Delete the event in this channel |
 | `/open` | Open registration immediately |
 | `/close` | Close registration |
@@ -114,7 +114,7 @@ Event creation uses a multi-step wizard:
 - Registration countdown (0–28800 seconds before registration opens)
 
 **Step 6 — Squad Limit:**
-- Max squads per user (1–10)
+- Max squads per user (1–20)
 
 **Step 7 — Confirmation:**
 - Summary embed with all settings including unused slots — confirm or cancel
@@ -259,7 +259,9 @@ Each edit shows old → new value with a confirmation step. The event display up
         "Panzer1": {"type": "vehicle", "playstyle": "Normal", "size": 2, "id": "def456", "rep_name": "PlayerName"}
     },
     "casters": {"123456": {"name": "CasterName", "id": "123456"}},
-    "waitlist": [("Bravo", "infantry", "Casual", 6, "jkl012", "PlayerName")],
+    "infantry_waitlist": [("Bravo", "infantry", "Casual", 6, "jkl012", "PlayerName")],
+    "vehicle_waitlist": [],
+    "heli_waitlist": [],
     "caster_waitlist": [("789012", "CasterName2")]
 }
 ```

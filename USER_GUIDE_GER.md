@@ -70,7 +70,7 @@ Mit `/settings` wird die aktuelle Serverkonfiguration angezeigt.
 
 ### Event erstellen
 
-Verwende `/event`, um ein Event zu erstellen. Ein mehrstufiger Wizard führt dich durch:
+Verwende `/create_event`, um ein Event zu erstellen. Ein mehrstufiger Wizard führt dich durch:
 
 **Schritt 1 — Basis-Informationen (Modal):**
 - Event-Name, Datum, Uhrzeit, Beschreibung
@@ -95,7 +95,7 @@ Verwende `/event`, um ein Event zu erstellen. Ein mehrstufiger Wizard führt dic
 - Countdown — Nachricht X Sekunden vor Anmeldungsstart (wird bei Öffnung automatisch gelöscht)
 
 **Schritt 6 — Squad-Limit:**
-- Max. Squads pro Spieler (1–10)
+- Max. Squads pro Spieler (1–20)
 
 **Schritt 7 — Bestätigung:**
 - Zusammenfassungs-Embed mit allen Einstellungen inkl. ungenutzter Slots — Bestätigen oder Abbrechen
@@ -165,7 +165,7 @@ Beim Hinzufügen eines Squads als Admin wird der ausgewählte Vertreter für das
 
 | Befehl | Beschreibung |
 |---|---|
-| `/event` | Neues Event erstellen (geführter Wizard) |
+| `/create_event` | Neues Event erstellen (geführter Wizard) |
 | `/open` | Anmeldung sofort öffnen |
 | `/close` | Anmeldung schließen |
 | `/delete_event` | Event löschen |
@@ -231,7 +231,7 @@ A: Ja. Du kannst dich als Caster anmelden und parallel Squads registrieren.
 A: Dein Squad wird automatisch auf die Warteliste gesetzt. Du rückst nach, sobald ein Platz frei wird, und wirst per DM benachrichtigt.
 
 **F: Wie viele Squads kann ich anmelden?**
-A: Das hängt von der Event-Konfiguration ab. Der Organisator legt die maximale Anzahl Squads pro Spieler fest (Standard: 1, Maximum: 10).
+A: Das hängt von der Event-Konfiguration ab. Der Organisator legt die maximale Anzahl Squads pro Spieler fest (Standard: 1, Maximum: 20).
 
 **F: Was ist der Unterschied zwischen Infanterie, Fahrzeug und Heli?**
 A: Die drei Squad-Typen haben unterschiedliche Größen und separate Slot-Kontingente. Infanterie-Squads sind typischerweise am größten (z.B. 6 Spieler), Fahrzeug-Squads kleiner (z.B. 2) und Heli-Squads am kleinsten (z.B. 1).
@@ -246,7 +246,7 @@ A: Prüfe, ob du die nötige Rolle hast (z.B. Squad-Rep für Squad-Anmeldung) un
 A: Klicke auf **Admin** → **Event bearbeiten**. Der Bot sendet dir eine DM mit einer nummerierten Liste aller Eigenschaften. Antworte mit der Nummer der Eigenschaft, die du ändern möchtest.
 
 **F: Wie richte ich den Bot erstmalig ein?**
-A: Ein Admin führt `/setup` aus, um Organisator-Rolle, Log-Kanal und Sprache zu konfigurieren. Dann `/set_defaults` für Serverkapazität und Squad-Größen. Danach können Organisatoren Events mit `/event` erstellen.
+A: Ein Admin führt `/setup` aus, um Organisator-Rolle, Log-Kanal und Sprache zu konfigurieren. Dann `/set_defaults` für Serverkapazität und Squad-Größen. Danach können Organisatoren Events mit `/create_event` erstellen.
 
 **F: Warum werden meine Slash-Befehle nicht angezeigt?**
 A: Ein Administrator muss `/sync` ausführen, um die Befehle mit Discord zu synchronisieren.

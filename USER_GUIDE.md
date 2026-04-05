@@ -70,7 +70,7 @@ Use `/settings` to view the current server configuration.
 
 ### Creating an Event
 
-Use `/event` to start event creation. A multi-step wizard guides you through:
+Use `/create_event` to start event creation. A multi-step wizard guides you through:
 
 **Step 1 — Basic Info (Modal):**
 - Event name, date, time, description
@@ -95,7 +95,7 @@ Use `/event` to start event creation. A multi-step wizard guides you through:
 - Registration countdown — Message sent X seconds before registration opens (auto-deleted when registration starts)
 
 **Step 6 — Squad Limit:**
-- Max squads per user (1–10)
+- Max squads per user (1–20)
 
 **Step 7 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel
@@ -165,7 +165,7 @@ When adding a squad as admin, the selected representative user counts toward the
 
 | Command | Description |
 |---|---|
-| `/event` | Create a new event (guided wizard) |
+| `/create_event` | Create a new event (guided wizard) |
 | `/open` | Open registration immediately |
 | `/close` | Close registration |
 | `/delete_event` | Delete the event |
@@ -231,7 +231,7 @@ A: Yes. You can register as a caster and register squads in parallel.
 A: Your squad is automatically placed on the waitlist. You'll be promoted when a slot opens up and notified via DM.
 
 **Q: How many squads can I register?**
-A: This depends on the event configuration. The organizer sets the maximum number of squads per player (default: 1, max: 10).
+A: This depends on the event configuration. The organizer sets the maximum number of squads per player (default: 1, max: 20).
 
 **Q: What is the difference between Infantry, Vehicle, and Heli?**
 A: The three squad types have different sizes and separate slot pools. Infantry squads are typically the largest (e.g. 6 players), vehicle squads smaller (e.g. 2), and heli squads the smallest (e.g. 1).
@@ -246,7 +246,7 @@ A: Check whether you have the required role (e.g. Squad-Rep for squad registrati
 A: Click **Admin** → **Edit Event**. The bot sends you a DM with a numbered list of all properties. Reply with the number of the property you want to change.
 
 **Q: How do I set up the bot for the first time?**
-A: An admin runs `/setup` to configure the organizer role, log channel, and language. Then use `/set_defaults` to set server capacity and squad sizes. After that, organizers can create events with `/event`.
+A: An admin runs `/setup` to configure the organizer role, log channel, and language. Then use `/set_defaults` to set server capacity and squad sizes. After that, organizers can create events with `/create_event`.
 
 **Q: Why aren't my slash commands showing up?**
 A: An administrator needs to run `/sync` to synchronize the commands with Discord.
