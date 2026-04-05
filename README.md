@@ -265,7 +265,3 @@ Each edit shows old → new value with a confirmation step. The event display up
     "caster_waitlist": [("789012", "CasterName2")]
 }
 ```
-
-## License
-
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
