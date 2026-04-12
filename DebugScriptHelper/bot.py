@@ -573,16 +573,6 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
                 await send_feedback(interaction, t("squad.max_reached", lang, current=len(current_squads), max=max_squads), ephemeral=True)
             return False
 
-        # Duplicate check
-        for existing in event["squads"]:
-            if existing.lower() == squad_name.lower():
-                await send_feedback(interaction, t("squad.duplicate_name", lang, name=existing), ephemeral=True)
-                return False
-        for entry in _all_squad_waitlist_entries(event):
-            if entry[0].lower() == squad_name.lower():
-                await send_feedback(interaction, t("squad.duplicate_name", lang, name=squad_name), ephemeral=True)
-                return False
-
         sizes = _get_squad_sizes(event)
         size = sizes.get(squad_type, sizes["infantry"])
         squad_id = generate_squad_id(squad_name)
