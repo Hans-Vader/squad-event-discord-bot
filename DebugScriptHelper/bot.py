@@ -575,7 +575,8 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
 
         sizes = _get_squad_sizes(event)
         size = sizes.get(squad_type, sizes["infantry"])
-        squad_id = generate_squad_id(squad_name)
+        rep_name = self.rep_user.display_name
+        squad_id = generate_squad_id(squad_name, rep_name, current_squads)
         available = event["max_player_slots"] - event["player_slots_used"]
         rep_name = interaction.user.display_name
 
