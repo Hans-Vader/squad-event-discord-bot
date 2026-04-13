@@ -296,12 +296,12 @@ def build_event_summary_embed(event: dict, lang: str = "de") -> Embed:
     # List squads
     if squads:
         lines = []
-        for name, data in squads.items():
+        for squad_id, data in squads.items():
             type_map = {"infantry": "Inf.", "vehicle": "Veh.", "heli": "Heli"}
             tl = type_map.get(data.get("type", ""), "?")
             rep = data.get("rep_name", "")
             rep_suffix = f" — {rep}" if rep else ""
-            lines.append(f"[{data.get('playstyle', 'Normal')}] **{name}** ({tl}, {data.get('size', 0)}){rep_suffix}")
+            lines.append(f"[{data.get('playstyle', 'Normal')}] **{data.get('name', squad_id)}** ({tl}, {data.get('size', 0)}){rep_suffix}")
         embed.add_field(
             name=f"{t('embed.squads_label', lang)} ({len(squads)})",
             value="\n".join(lines[:25]) or "—",
@@ -423,12 +423,12 @@ def format_event_details(event: dict, lang: str = "de",
         name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count}) [{size_label}: {size}]"
         if squad_group:
             text = ""
-            for squad_name, data in squad_group.items():
+            for squad_id, data in squad_group.items():
                 playstyle = data.get("playstyle", "Normal")
                 size = data.get("size", 0)
                 rep = data.get("rep_name")
                 rep_suffix = f" — {rep}" if rep else ""
-                text += f"[{playstyle}] **{squad_name}** ({size}){rep_suffix}\n"
+                text += f"[{playstyle}] **{data.get('name', squad_id)}** ({size}){rep_suffix}\n"
             embed.add_field(name=name, value=text, inline=False)
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)

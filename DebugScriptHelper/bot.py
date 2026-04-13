@@ -213,8 +213,20 @@ def user_has_caster(user_assignments: dict, user_id: str) -> bool:
     return "__caster__" in get_user_assignments(user_assignments, str(user_id))
 
 
-def get_user_squad_names(user_assignments: dict, user_id: str) -> list:
+def get_user_squad_ids(user_assignments: dict, user_id: str) -> list:
     return [a for a in get_user_assignments(user_assignments, str(user_id)) if a != "__caster__"]
+
+
+def _resolve_squad_name(event, squad_id):
+    """Resolve a squad_id to its display name."""
+    data = event.get("squads", {}).get(squad_id)
+    if data:
+        return data.get("name", squad_id)
+    for st in ("infantry", "vehicle", "heli"):
+        for entry in event.get(f"{st}_waitlist", []):
+            if len(entry) > 4 and entry[4] == squad_id:
+                return entry[0]
+    return squad_id
 
 
 # ---------------------------------------------------------------------------
@@ -565,40 +577,40 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
 
         user_id = str(interaction.user.id)
         max_squads = event.get("max_squads_per_user", 1)
-        current_squads = get_user_squad_names(user_assignments, user_id)
+        current_squads = get_user_squad_ids(user_assignments, user_id)
         if len(current_squads) >= max_squads:
             if max_squads == 1 and current_squads:
-                await send_feedback(interaction, t("squad.already_assigned", lang, name=current_squads[0]), ephemeral=True)
+                await send_feedback(interaction, t("squad.already_assigned", lang, name=_resolve_squad_name(event, current_squads[0])), ephemeral=True)
             else:
                 await send_feedback(interaction, t("squad.max_reached", lang, current=len(current_squads), max=max_squads), ephemeral=True)
             return False
 
         sizes = _get_squad_sizes(event)
         size = sizes.get(squad_type, sizes["infantry"])
-        squad_id = generate_squad_id(squad_name, current_squads)
+        squad_id = generate_squad_id(squad_name, len(event.get("squads", {})))
         available = event["max_player_slots"] - event["player_slots_used"]
         rep_name = interaction.user.display_name
 
         wl_key = _waitlist_key(squad_type)
         if _is_squad_type_full(event, squad_type):
             event[wl_key].append((squad_name, squad_type, playstyle, size, squad_id, rep_name))
-            add_user_assignment(user_assignments, user_id, squad_name)
+            add_user_assignment(user_assignments, user_id, squad_id)
             save_event(db_id, event, user_assignments)
             result = "type_full_waitlisted"
             wl_pos = len(event[wl_key])
         elif size <= available:
-            event["squads"][squad_name] = {
-                "type": squad_type, "playstyle": playstyle,
-                "size": size, "id": squad_id, "rep_name": rep_name,
+            event["squads"][squad_id] = {
+                "name": squad_name, "type": squad_type, "playstyle": playstyle,
+                "size": size, "rep_name": rep_name,
             }
             event["player_slots_used"] += size
-            add_user_assignment(user_assignments, user_id, squad_name)
+            add_user_assignment(user_assignments, user_id, squad_id)
             save_event(db_id, event, user_assignments)
             result = "registered"
             wl_pos = None
         else:
             event[wl_key].append((squad_name, squad_type, playstyle, size, squad_id, rep_name))
-            add_user_assignment(user_assignments, user_id, squad_name)
+            add_user_assignment(user_assignments, user_id, squad_id)
             save_event(db_id, event, user_assignments)
             result = "waitlisted"
             wl_pos = len(event[wl_key])
@@ -607,7 +619,7 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
                    "vehicle": "Fahrzeug" if lang == "de" else "Vehicle",
                    "heli": "Heli"}
     type_label = type_labels.get(squad_type, squad_type)
-    user_squads_now = len(get_user_squad_names(user_assignments, user_id))
+    user_squads_now = len(get_user_squad_ids(user_assignments, user_id))
     squad_info = t("squad.your_squads_info", lang, current=user_squads_now, max=max_squads)
 
     if result == "registered":
@@ -639,7 +651,7 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
 # ---------------------------------------------------------------------------
 # Core: squad unregistration
 # ---------------------------------------------------------------------------
-async def unregister_squad(interaction, guild_id, channel_id, squad_name, is_admin=False):
+async def unregister_squad(interaction, guild_id, channel_id, squad_id, is_admin=False):
     lock = _get_guild_lock(guild_id)
     lang = get_guild_language(guild_id)
 
@@ -649,32 +661,29 @@ async def unregister_squad(interaction, guild_id, channel_id, squad_name, is_adm
             await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
             return None
 
-        squad_name_lower = squad_name.strip().lower()
         freed_slots = 0
+        display_name = _resolve_squad_name(event, squad_id)
 
-        found_in_event = None
-        for name in list(event["squads"].keys()):
-            if name.lower() == squad_name_lower:
-                found_in_event = name
-                break
+        found_in_event = squad_id in event.get("squads", {})
 
         found_in_waitlist = None  # (wl_key, index) or None
-        for st in SQUAD_TYPES:
-            wl_key = _waitlist_key(st)
-            for i, entry in enumerate(event.get(wl_key, [])):
-                if entry[0].lower() == squad_name_lower:
-                    found_in_waitlist = (wl_key, i)
+        if not found_in_event:
+            for st in SQUAD_TYPES:
+                wl_key = _waitlist_key(st)
+                for i, entry in enumerate(event.get(wl_key, [])):
+                    if len(entry) > 4 and entry[4] == squad_id:
+                        found_in_waitlist = (wl_key, i)
+                        break
+                if found_in_waitlist:
                     break
-            if found_in_waitlist:
-                break
 
-        if found_in_event is None and found_in_waitlist is None:
-            await send_feedback(interaction, t("squad.not_found", lang, name=squad_name), ephemeral=True)
+        if not found_in_event and found_in_waitlist is None:
+            await send_feedback(interaction, t("squad.not_found", lang, name=display_name), ephemeral=True)
             return None
 
         freed_type = None
-        if found_in_event is not None:
-            squad_data = event["squads"].pop(found_in_event)
+        if found_in_event:
+            squad_data = event["squads"].pop(squad_id)
             freed_slots = squad_data.get("size", 0)
             freed_type = squad_data.get("type")
             event["player_slots_used"] = max(0, event["player_slots_used"] - freed_slots)
@@ -685,17 +694,17 @@ async def unregister_squad(interaction, guild_id, channel_id, squad_name, is_adm
 
         for uid in list(user_assignments.keys()):
             assignments = get_user_assignments(user_assignments, uid)
-            if any(a.lower() == squad_name_lower for a in assignments):
-                remove_user_assignment(user_assignments, uid, squad_name)
+            if squad_id in assignments:
+                remove_user_assignment(user_assignments, uid, squad_id)
 
         save_event(db_id, event, user_assignments)
 
         if freed_slots > 0:
             await _process_squad_waitlist(event, user_assignments, db_id, guild_id, channel_id, freed_slots, freed_type=freed_type)
 
-    await send_feedback(interaction, t("squad.unregistered", lang, name=squad_name), ephemeral=True)
+    await send_feedback(interaction, t("squad.unregistered", lang, name=display_name), ephemeral=True)
     await send_to_log_channel(
-        t("log.squad_unregistered", lang, user=interaction.user.name, squad=squad_name, freed=freed_slots),
+        t("log.squad_unregistered", lang, user=interaction.user.name, squad=display_name, freed=freed_slots),
         guild=interaction.guild)
     await update_event_displays(guild_id, channel_id)
     return freed_slots
@@ -725,36 +734,35 @@ async def _process_squad_waitlist(event, user_assignments, db_id, guild_id, chan
             squad_name, squad_type, playstyle, size, squad_id, *_rest = entry
             rep_name = _rest[0] if _rest else None
             if size <= remaining and not _is_squad_type_full(event, squad_type):
-                squad_data = {"type": squad_type, "playstyle": playstyle, "size": size, "id": squad_id}
+                squad_data = {"name": squad_name, "type": squad_type, "playstyle": playstyle, "size": size}
                 if rep_name:
                     squad_data["rep_name"] = rep_name
-                event["squads"][squad_name] = squad_data
+                event["squads"][squad_id] = squad_data
                 event["player_slots_used"] += size
                 remaining -= size
                 to_remove.append(i)
-                moved.append((squad_name, size))
+                moved.append((squad_name, squad_id, size))
         for i in sorted(to_remove, reverse=True):
             event[wl_key].pop(i)
 
     if moved:
         save_event(db_id, event, user_assignments)
         lang = get_guild_language(guild_id)
-        for squad_name, size in moved:
+        for squad_name, squad_id, size in moved:
             link = _build_event_message_link(event, channel_id, guild_id)
             dm_msg = t("squad.moved_from_waitlist", lang, name=squad_name)
             if link:
                 dm_msg += f"\n[→ Event]({link})"
-            await _send_squad_dm(user_assignments, squad_name, dm_msg)
+            await _send_squad_dm(user_assignments, squad_id, dm_msg)
             await send_to_log_channel(
                 t("log.squad_moved", lang, squad=squad_name, size=size),
                 guild_id=guild_id)
 
 
-async def _send_squad_dm(user_assignments, squad_name, message):
-    squad_lower = squad_name.lower()
+async def _send_squad_dm(user_assignments, squad_id, message):
     leader_id = None
     for uid in user_assignments:
-        if squad_lower in [a.lower() for a in get_user_assignments(user_assignments, uid) if a != "__caster__"]:
+        if squad_id in get_user_assignments(user_assignments, uid):
             leader_id = uid
             break
     if leader_id:
@@ -973,10 +981,10 @@ class EventActionView(ui.View):
 
         user_id = str(interaction.user.id)
         max_squads = event.get("max_squads_per_user", 1)
-        current = get_user_squad_names(user_assignments, user_id)
+        current = get_user_squad_ids(user_assignments, user_id)
         if len(current) >= max_squads:
             if max_squads == 1 and current:
-                await interaction.response.send_message(t("squad.already_assigned", lang, name=current[0]), ephemeral=True)
+                await interaction.response.send_message(t("squad.already_assigned", lang, name=_resolve_squad_name(event, current[0])), ephemeral=True)
             else:
                 await interaction.response.send_message(t("squad.max_reached", lang, current=len(current), max=max_squads), ephemeral=True)
             return
@@ -1040,14 +1048,15 @@ class EventActionView(ui.View):
             else:
                 embed = discord.Embed(title="Caster", description=t("info.caster_waitlisted", lang), color=discord.Color.orange())
         else:
-            squad_names = [a for a in assignments if a != "__caster__"]
+            squad_ids = [a for a in assignments if a != "__caster__"]
             desc_parts = []
-            for sn in squad_names:
-                if event and sn in event.get("squads", {}):
-                    d = event["squads"][sn]
-                    desc_parts.append(f"**{sn}** ({d.get('type', '?')}, {d.get('size', 0)}, {d.get('playstyle', 'Normal')})")
+            for sid in squad_ids:
+                if event and sid in event.get("squads", {}):
+                    d = event["squads"][sid]
+                    desc_parts.append(f"**{d.get('name', sid)}** ({d.get('type', '?')}, {d.get('size', 0)}, {d.get('playstyle', 'Normal')})")
                 else:
-                    desc_parts.append(f"**{sn}** (Waitlist)")
+                    display_name = _resolve_squad_name(event, sid) if event else sid
+                    desc_parts.append(f"**{display_name}** (Waitlist)")
             embed = discord.Embed(title="Squads", description="\n".join(desc_parts), color=discord.Color.green())
 
         if event:
@@ -1060,7 +1069,7 @@ class EventActionView(ui.View):
         gid = interaction.guild.id
         cid = interaction.channel_id
         lang = _lang(interaction)
-        _, user_assignments, _ = _get_channel_event(gid, cid)
+        event, user_assignments, _ = _get_channel_event(gid, cid)
         user_id = str(interaction.user.id)
         assignments = get_user_assignments(user_assignments or {}, user_id)
 
@@ -1076,14 +1085,15 @@ class EventActionView(ui.View):
             view = CasterUnregisterConfirmView(gid, cid)
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         elif len(assignments) == 1:
+            display_name = _resolve_squad_name(event, assignments[0]) if event else assignments[0]
             embed = discord.Embed(
                 title=t("squad.unregister_title", lang),
-                description=t("squad.unregister_confirm", lang, name=assignments[0]),
+                description=t("squad.unregister_confirm", lang, name=display_name),
                 color=discord.Color.red())
             view = SquadUnregisterConfirmView(gid, cid, assignments[0])
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         else:
-            options = [discord.SelectOption(label=sn, value=sn) for sn in assignments if sn != "__caster__"]
+            options = [discord.SelectOption(label=_resolve_squad_name(event, sn) if event else sn, value=sn) for sn in assignments if sn != "__caster__"]
             view = UserSquadUnregisterSelector(gid, cid, options)
             await interaction.response.send_message(t("squad.pick_to_unregister", lang), view=view, ephemeral=True)
 
@@ -1365,15 +1375,15 @@ class AdminActionView(BaseView):
         select_groups = []  # [(placeholder, [SelectOption, ...])]
         # Registered squads per type
         for st in SQUAD_TYPES:
-            opts = [discord.SelectOption(label=name, value=name)
-                    for name, data in squads.items() if data.get("type") == st]
+            opts = [discord.SelectOption(label=data.get("name", sq_id), value=sq_id)
+                    for sq_id, data in squads.items() if data.get("type") == st]
             if opts:
                 select_groups.append((type_labels[st], opts[:25]))
         # Combined waitlist across all types
         wl_opts = []
         for entry in _all_squad_waitlist_entries(event):
             abbr = type_abbrev.get(entry[1], "?")
-            wl_opts.append(discord.SelectOption(label=f"[WL-{abbr}] {entry[0]}", value=entry[0]))
+            wl_opts.append(discord.SelectOption(label=f"[WL-{abbr}] {entry[0]}", value=entry[4]))
         if wl_opts:
             wl_label = t("embed.waitlist_label", lang, count=len(wl_opts))
             select_groups.append((wl_label, wl_opts[:25]))
@@ -1528,14 +1538,9 @@ class _AdminSquadNameModal(ui.Modal):
                 await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
                 return
 
-            existing, _ = _find_squad_name(event, squad_name)
-            if existing is not None:
-                await interaction.followup.send(t("admin.duplicate_squad", lang, name=existing), ephemeral=True)
-                return
-
             sizes = _get_squad_sizes(event)
             size = sizes.get(self.squad_type, sizes["infantry"])
-            squad_id = generate_squad_id(squad_name)
+            squad_id = generate_squad_id(squad_name, len(event.get("squads", {})))
             available = event["max_player_slots"] - event["player_slots_used"]
 
             rep_name = self.rep_user.display_name
@@ -1547,9 +1552,9 @@ class _AdminSquadNameModal(ui.Modal):
                 wl_pos = len(event[wl_key])
                 status = t("admin.squad_type_full_waitlist", lang, type=self.squad_type)
             elif size <= available:
-                event["squads"][squad_name] = {
-                    "type": self.squad_type, "playstyle": self.playstyle,
-                    "size": size, "id": squad_id, "rep_name": rep_name,
+                event["squads"][squad_id] = {
+                    "name": squad_name, "type": self.squad_type, "playstyle": self.playstyle,
+                    "size": size, "rep_name": rep_name,
                 }
                 event["player_slots_used"] += size
                 status = t("admin.squad_added_registered", lang)
@@ -1558,7 +1563,7 @@ class _AdminSquadNameModal(ui.Modal):
                 wl_pos = len(event[wl_key])
                 status = t("admin.squad_added_waitlist", lang, pos=wl_pos)
 
-            add_user_assignment(user_assignments, rep_uid, squad_name)
+            add_user_assignment(user_assignments, rep_uid, squad_id)
             save_event(db_id, event, user_assignments)
 
         type_labels = {"infantry": "Infanterie" if lang == "de" else "Infantry",
@@ -1587,9 +1592,11 @@ class _AdminRemoveSquadView(BaseView):
     async def _selected(self, interaction):
         selected = interaction.data["values"][0]
         lang = get_guild_language(self.guild_id)
-        view = _ConfirmRemoveView(self.guild_id, self.channel_id, selected, "squad", lang)
+        event, _, _ = _get_channel_event(self.guild_id, self.channel_id)
+        display_name = _resolve_squad_name(event, selected) if event else selected
+        view = _ConfirmRemoveView(self.guild_id, self.channel_id, selected, "squad", lang, display_name=display_name)
         await interaction.response.send_message(
-            t("admin.confirm_remove_squad", lang, name=selected),
+            t("admin.confirm_remove_squad", lang, name=display_name),
             view=view, ephemeral=True)
 
 
@@ -1699,7 +1706,7 @@ class _ConfirmRemoveView(BaseView):
         if self.remove_type == "squad":
             result = await unregister_squad(interaction, self.guild_id, self.channel_id, self.target, is_admin=True)
             if result is not None:
-                await send_feedback(interaction, t("admin.squad_removed", lang, name=self.target, freed=result), ephemeral=True)
+                await send_feedback(interaction, t("admin.squad_removed", lang, name=self.display_name, freed=result), ephemeral=True)
         else:
             # Caster removal
             gid, cid = self.guild_id, self.channel_id
@@ -3526,7 +3533,7 @@ async def register_command(interaction: discord.Interaction):
 
     user_id = str(interaction.user.id)
     max_squads = event.get("max_squads_per_user", 1)
-    current = get_user_squad_names(user_assignments, user_id)
+    current = get_user_squad_ids(user_assignments, user_id)
     if len(current) >= max_squads:
         await interaction.response.send_message(t("squad.max_reached", lang, current=len(current), max=max_squads), ephemeral=True)
         return
@@ -3545,7 +3552,7 @@ async def unregister_command(interaction: discord.Interaction):
     cid = interaction.channel_id
     lang = _lang(interaction)
 
-    _, user_assignments, _ = _get_channel_event(gid, cid)
+    event, user_assignments, _ = _get_channel_event(gid, cid)
     if not user_assignments:
         await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
         return
@@ -3562,12 +3569,13 @@ async def unregister_command(interaction: discord.Interaction):
         view = CasterUnregisterConfirmView(gid, cid)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     elif len(assignments) == 1:
+        display_name = _resolve_squad_name(event, assignments[0]) if event else assignments[0]
         embed = discord.Embed(title=t("squad.unregister_title", lang),
-                              description=t("squad.unregister_confirm", lang, name=assignments[0]), color=discord.Color.red())
+                              description=t("squad.unregister_confirm", lang, name=display_name), color=discord.Color.red())
         view = SquadUnregisterConfirmView(gid, cid, assignments[0])
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     else:
-        options = [discord.SelectOption(label=sn, value=sn) for sn in assignments if sn != "__caster__"]
+        options = [discord.SelectOption(label=_resolve_squad_name(event, sn) if event else sn, value=sn) for sn in assignments if sn != "__caster__"]
         view = UserSquadUnregisterSelector(gid, cid, options)
         await interaction.response.send_message(t("squad.pick_to_unregister", lang), view=view, ephemeral=True)
 
@@ -3707,17 +3715,18 @@ async def clear_event_roles_cmd(interaction: discord.Interaction, role_type: str
 # ADMIN SQUAD MANAGEMENT        #
 # ############################# #
 
-def _find_squad_name(event, squad_name):
-    """Find the exact-cased squad name in squads or waitlist (case-insensitive). Returns (exact_name, location)."""
+def _find_squad_by_name(event, squad_name):
+    """Find squad by name (case-insensitive). Returns (squad_id, location) or (None, None).
+    With duplicate names, returns the first match."""
     lower = squad_name.strip().lower()
-    for name in event.get("squads", {}):
-        if name.lower() == lower:
-            return name, "squads"
+    for sid, data in event.get("squads", {}).items():
+        if data.get("name", "").lower() == lower:
+            return sid, "squads"
     for st in SQUAD_TYPES:
         wl_key = _waitlist_key(st)
         for entry in event.get(wl_key, []):
             if entry[0].lower() == lower:
-                return entry[0], wl_key
+                return entry[4], wl_key
     return None, None
 
 
@@ -3728,10 +3737,14 @@ async def _squad_name_autocomplete(interaction: discord.Interaction, current: st
     event, _, _ = _get_channel_event(gid, cid)
     if not event:
         return []
-    names = list(event.get("squads", {}).keys())
-    names += [entry[0] for entry in _all_squad_waitlist_entries(event)]
+    choices = []
+    for sid, data in event.get("squads", {}).items():
+        name = data.get("name", sid)
+        choices.append(app_commands.Choice(name=name, value=sid))
+    for entry in _all_squad_waitlist_entries(event):
+        choices.append(app_commands.Choice(name=entry[0], value=entry[4]))
     current_lower = current.lower()
-    return [app_commands.Choice(name=n, value=n) for n in names if current_lower in n.lower()][:25]
+    return [c for c in choices if current_lower in c.name.lower()][:25]
 
 
 @bot.tree.command(name="admin_edit_squad", description="Edit a squad's size (organizer only)")
@@ -3754,24 +3767,30 @@ async def admin_edit_squad_cmd(interaction: discord.Interaction, squad_name: str
             await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
             return
 
-        exact_name, location = _find_squad_name(event, squad_name)
-        if exact_name is None:
+        # Try direct ID lookup first (from autocomplete), then fall back to name search
+        if squad_name in event.get("squads", {}):
+            found_id, location = squad_name, "squads"
+        else:
+            found_id, location = _find_squad_by_name(event, squad_name)
+        if found_id is None:
             await send_feedback(interaction, t("admin.squad_not_found", lang, name=squad_name), ephemeral=True)
             return
 
+        display_name = _resolve_squad_name(event, found_id)
+
         if location == "squads":
-            old_size = event["squads"][exact_name]["size"]
+            old_size = event["squads"][found_id]["size"]
             delta = new_size - old_size
-            event["squads"][exact_name]["size"] = new_size
+            event["squads"][found_id]["size"] = new_size
             event["player_slots_used"] = max(0, min(event["player_slots_used"] + delta, event["max_player_slots"]))
             save_event(db_id, event, user_assignments)
             if delta < 0:
-                freed_type = event["squads"][exact_name].get("type")
+                freed_type = event["squads"][found_id].get("type")
                 await _process_squad_waitlist(event, user_assignments, db_id, gid, cid, abs(delta), freed_type=freed_type)
         else:
             # In per-type waitlist — update the tuple entry
             for i, entry in enumerate(event[location]):
-                if entry[0].lower() == exact_name.lower():
+                if len(entry) > 4 and entry[4] == found_id:
                     old_size = entry[3]
                     lst = list(entry)
                     lst[3] = new_size
@@ -3780,10 +3799,10 @@ async def admin_edit_squad_cmd(interaction: discord.Interaction, squad_name: str
             save_event(db_id, event, user_assignments)
 
     await send_feedback(interaction,
-        t("admin.squad_edited", lang, name=exact_name, old=old_size, new=new_size),
+        t("admin.squad_edited", lang, name=display_name, old=old_size, new=new_size),
         ephemeral=True)
     await send_to_log_channel(
-        t("log.admin_squad_edited", lang, user=interaction.user.name, squad=exact_name, old=old_size, new=new_size),
+        t("log.admin_squad_edited", lang, user=interaction.user.name, squad=display_name, old=old_size, new=new_size),
         guild=interaction.guild)
     await update_event_displays(gid, cid)
 
@@ -3856,7 +3875,7 @@ async def admin_user_assignments_cmd(interaction: discord.Interaction):
         await send_feedback(interaction, t("admin.assignments_empty", lang), ephemeral=True)
         return
 
-    # Group by squad name
+    # Group by squad id
     squads_to_users = {}
     for uid, assignments in user_assignments.items():
         if isinstance(assignments, str):
@@ -3869,9 +3888,12 @@ async def admin_user_assignments_cmd(interaction: discord.Interaction):
         color=discord.Color.blue())
 
     lines = []
-    for squad_name in sorted(squads_to_users.keys()):
-        uids = squads_to_users[squad_name]
-        display_name = squad_name if squad_name != "__caster__" else "Caster"
+    for assignment_key in sorted(squads_to_users.keys()):
+        uids = squads_to_users[assignment_key]
+        if assignment_key == "__caster__":
+            display_name = "Caster"
+        else:
+            display_name = _resolve_squad_name(event, assignment_key)
         member_mentions = []
         for uid in uids:
             member = interaction.guild.get_member(int(uid))
@@ -3949,11 +3971,11 @@ async def export_csv_cmd(interaction: discord.Interaction):
     status_registered = "Angemeldet" if lang == "de" else "Registered"
     status_waitlist = "Warteliste" if lang == "de" else "Waitlist"
 
-    for name, data in event.get("squads", {}).items():
+    for sid, data in event.get("squads", {}).items():
         writer.writerow([
-            name, data.get("type", ""), data.get("size", 0),
+            data.get("name", ""), data.get("type", ""), data.get("size", 0),
             data.get("playstyle", ""), data.get("rep_name", ""),
-            data.get("id", ""), status_registered,
+            sid, status_registered,
         ])
 
     for entry in _all_squad_waitlist_entries(event):
