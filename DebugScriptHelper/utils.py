@@ -249,8 +249,8 @@ def resolve_event_defaults():
 # Squad ID generation
 # ---------------------------------------------------------------------------
 
-def generate_squad_id(squad_name: str) -> str:
-    unique_base = f"{squad_name}_{int(time.time())}"
+def generate_squad_id(squad_name: str, rep_name: str, current_squads: int) -> str:
+    unique_base = f"{squad_name}_{rep_name}_{current_squads}_{int(time.time())}"
     return hashlib.md5(unique_base.encode("utf-8")).hexdigest()[:10]
 
 
