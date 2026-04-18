@@ -345,7 +345,7 @@ def format_event_details(event: dict, lang: str = "de",
     try:
         event_dt = datetime.strptime(f"{event_date_str} {event_time_str}", "%d.%m.%Y %H:%M")
         event_ts = int(event_dt.timestamp())
-        embed.add_field(name=t("embed.event_start", lang), value=f"<t:{event_ts}:f>", inline=True)
+        embed.add_field(name=t("embed.event_start", lang), value=f"<t:{event_ts}:f>\n<t:{event_ts}:R>", inline=True)
     except ValueError:
         embed.add_field(name=t("embed.event_start", lang), value=f"{event_date_str} {event_time_str}", inline=True)
 
