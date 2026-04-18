@@ -380,6 +380,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "**Die Registrierung für {name} ist jetzt geöffnet!**\nMeldet eure Squads an!",
         "en": "**Registration for {name} is now open!**\nRegister your squads!",
     },
+    "reg.early_access_announcement": {
+        "de": "**Ihr habt Early Access zur Anmeldung für {name}!**\nIhr könnt eure Squads bereits jetzt anmelden.",
+        "en": "**You have early access to register for {name}!**\nYou can register your squads now.",
+    },
     "reg.opens_soon": {
         "de": "**Die Anmeldung für {name} öffnet um <t:{ts}:f> in {remaining}!**\n\n**Es wird eine Nachricht gesendet, sobald die Anmeldung geöffnet ist!**\n_Die Eröffnung kann sich aufgrund von Netzwerkverzögerung um einige Sekunden verzögern._",
         "en": "**Registration for {name} opens at <t:{ts}:f> in {remaining}!**\n\n**A message will be sent when registration opens!**\n_The opening may be delayed by a few seconds due to network latency._",

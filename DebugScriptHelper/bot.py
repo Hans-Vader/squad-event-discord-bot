@@ -458,7 +458,7 @@ def _any_squad_waitlist(event: dict) -> bool:
     return any(event.get(_waitlist_key(st)) for st in SQUAD_TYPES)
 
 
-def _build_ping_text(event, include_community_rep=False):
+def _build_ping_text(event):
     role_ids = set()
     user_ids = set()
     for rid in event.get("ping_role_ids", []):
@@ -471,11 +471,6 @@ def _build_ping_text(event, include_community_rep=False):
         role_ids.add(rid)
     for uid in event.get("caster_user_ids", []):
         user_ids.add(uid)
-    if include_community_rep:
-        for rid in event.get("community_rep_role_ids", []):
-            role_ids.add(rid)
-        for uid in event.get("community_rep_user_ids", []):
-            user_ids.add(uid)
     mentions = [f"<@&{rid}>" for rid in role_ids] + [f"<@{uid}>" for uid in user_ids]
     return (" ".join(mentions) + " ") if mentions else ""
 
@@ -2686,7 +2681,7 @@ class WizardConfirmationView(BaseView):
 
         # Send ping message if enabled and registration opens immediately
         if self.event.get("ping_on_open", False) and self.event.get("registration_open", False):
-            ping_text = _build_ping_text(self.event, include_community_rep=True)
+            ping_text = _build_ping_text(self.event)
             if ping_text:
                 try:
                     ping_msg = await channel.send(
@@ -2695,6 +2690,21 @@ class WizardConfirmationView(BaseView):
                     self.event.setdefault("ping_message_ids", []).append(ping_msg.id)
                 except discord.Forbidden:
                     pass
+
+        # Ping community reps about early access (only if regular registration isn't already open)
+        if (self.event.get("ping_on_open", False)
+                and not self.event.get("registration_open", False)
+                and (self.event.get("community_rep_role_ids") or self.event.get("community_rep_user_ids"))):
+            mentions = [f"<@&{rid}>" for rid in self.event.get("community_rep_role_ids", [])]
+            mentions += [f"<@{uid}>" for uid in self.event.get("community_rep_user_ids", [])]
+            early_ping_text = " ".join(mentions) + " "
+            try:
+                ping_msg = await channel.send(
+                    content=f"{early_ping_text}" + t("reg.early_access_announcement", lang, name=self.event["name"]),
+                    allowed_mentions=discord.AllowedMentions(roles=True, users=True))
+                self.event.setdefault("ping_message_ids", []).append(ping_msg.id)
+            except discord.Forbidden:
+                pass
 
         # Persist to DB only after successful channel send
         db_id = create_event(self.guild_id, self.channel_id, self.event)
@@ -3084,7 +3094,7 @@ async def check_events_loop():
                         if ch:
                             # PRIORITY 1: Send ping immediately
                             if event.get("ping_on_open", False):
-                                ping_text = _build_ping_text(event, include_community_rep=True)
+                                ping_text = _build_ping_text(event)
                                 if ping_text:
                                     content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
                                     ping_msg = None
@@ -3462,7 +3472,7 @@ async def open_command(interaction: discord.Interaction):
     settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
     ch = bot.get_channel(cid)
     if ch and event.get("ping_on_open", False):
-        ping_text = _build_ping_text(event, include_community_rep=True)
+        ping_text = _build_ping_text(event)
         if ping_text:
             content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
             ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
