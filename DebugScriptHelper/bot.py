@@ -359,12 +359,12 @@ def check_registration_open(event, user=None, registration_type=None):
 def check_role_gate(event, user, registration_type):
     """Check if user is allowed by role/user gate. Returns (allowed, message_key)."""
     if registration_type == "squad":
-        role_ids = event.get("squad_rep_role_ids", [])
-        user_ids = event.get("squad_rep_user_ids", [])
+        role_ids = list(event.get("squad_rep_role_ids", [])) + list(event.get("community_rep_role_ids", []))
+        user_ids = list(event.get("squad_rep_user_ids", [])) + list(event.get("community_rep_user_ids", []))
         deny_key = "gate.squad_denied"
     elif registration_type == "caster":
-        role_ids = event.get("caster_role_ids", [])
-        user_ids = event.get("caster_user_ids", [])
+        role_ids = list(event.get("caster_role_ids", [])) + list(event.get("caster_community_role_ids", []))
+        user_ids = list(event.get("caster_user_ids", [])) + list(event.get("caster_community_user_ids", []))
         deny_key = "gate.caster_denied"
     else:
         return True, None
