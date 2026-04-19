@@ -739,7 +739,7 @@ async def player_unregister(interaction, guild_id, channel_id, target_user=None)
             await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
             return False
 
-        ok, squad_name = _player_unregister(event, user_assignments, user_id)
+        ok, squad_name, promoted = _player_unregister(event, user_assignments, user_id)
         save_event(db_id, event, user_assignments)
 
     if not ok:
@@ -750,8 +750,32 @@ async def player_unregister(interaction, guild_id, channel_id, target_user=None)
     await send_to_log_channel(
         t("log.player_unregistered", lang, user=user.name, squad=squad_name or "?"),
         guild=interaction.guild)
+    await _notify_promoted_players(interaction.guild, guild_id, channel_id, lang, promoted, event)
     await update_event_displays(guild_id, channel_id)
     return True
+
+
+async def _notify_promoted_players(guild, guild_id, channel_id, lang, promoted, event):
+    """DM each promoted player and write a log-channel line per promotion.
+
+    Mirrors rep-mode waitlist-promotion notifications.
+    """
+    if not promoted:
+        return
+    link = _build_event_message_link(event, channel_id, guild_id)
+    for uid, name, squad_name in promoted:
+        dm_msg = t("player.moved_from_waitlist", lang, squad=squad_name)
+        if link:
+            dm_msg += f"\n[→ Event]({link})"
+        try:
+            target = await bot.fetch_user(int(uid))
+            if target is not None:
+                await target.send(dm_msg)
+        except Exception as e:
+            logger.warning(f"Could not DM promoted player {uid}: {e}")
+        await send_to_log_channel(
+            t("log.player_moved", lang, name=name, squad=squad_name),
+            guild=guild)
 
 
 # ---------------------------------------------------------------------------
@@ -1753,6 +1777,7 @@ class _AdminPlayerRemoveView(BaseView):
 
         removed: list = []
         missing: list = []
+        all_promoted: list = []
         lock = _get_guild_lock(self.guild_id)
         async with lock:
             event, user_assignments, db_id = _get_channel_event(self.guild_id, self.channel_id)
@@ -1761,9 +1786,10 @@ class _AdminPlayerRemoveView(BaseView):
                 self.stop()
                 return
             for user_id in self.select.values:
-                ok, squad_name = _player_unregister(event, user_assignments, user_id)
+                ok, squad_name, promoted = _player_unregister(event, user_assignments, user_id)
                 if ok:
                     removed.append((user_id, squad_name))
+                    all_promoted.extend(promoted)
                 else:
                     missing.append(user_id)
             save_event(db_id, event, user_assignments)
@@ -1781,6 +1807,8 @@ class _AdminPlayerRemoveView(BaseView):
                 t("log.player_unregistered", lang, user=user_id, squad=squad_name or "?"),
                 guild=interaction.guild)
 
+        await _notify_promoted_players(
+            interaction.guild, self.guild_id, self.channel_id, lang, all_promoted, event)
         await update_event_displays(self.guild_id, self.channel_id)
         self.stop()
 

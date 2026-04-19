@@ -170,6 +170,42 @@ def _next_auto_squad_name(event: dict, squad_type: str) -> str:
     return f"{label} {i}"
 
 
+def _try_place_player(event: dict, user_assignments: dict, uid: str,
+                      display_name: str, squad_type: str) -> Optional[str]:
+    """Place the player into the first non-full squad of the given type, or
+    create a new squad if under the cap. Returns the squad name on success,
+    or None if there's no capacity (caller decides whether to waitlist).
+
+    No waitlist side effects — safe to call from the waitlist promoter.
+    """
+    squads = event.setdefault("squads", {})
+
+    for name, squad in squads.items():
+        if squad.get("type") != squad_type:
+            continue
+        members = squad.setdefault("members", [])
+        if len(members) < squad.get("size", 0):
+            members.append({"user_id": uid, "name": display_name})
+            user_assignments[uid] = [name]
+            event["player_slots_used"] = event.get("player_slots_used", 0) + 1
+            return name
+
+    existing_count = sum(1 for s in squads.values() if s.get("type") == squad_type)
+    if existing_count < _max_squads_for_type(event, squad_type):
+        new_name = _next_auto_squad_name(event, squad_type)
+        squads[new_name] = {
+            "type": squad_type,
+            "size": _squad_size_for_type(event, squad_type),
+            "id": generate_squad_id(new_name, squad_type),
+            "members": [{"user_id": uid, "name": display_name}],
+        }
+        user_assignments[uid] = [new_name]
+        event["player_slots_used"] = event.get("player_slots_used", 0) + 1
+        return new_name
+
+    return None
+
+
 def _player_register(event: dict, user_assignments: dict, user_id, display_name: str,
                      squad_type: str) -> tuple:
     """Register a player into the first non-full squad of the type, creating a
@@ -185,30 +221,9 @@ def _player_register(event: dict, user_assignments: dict, user_id, display_name:
     if uid in user_assignments:
         return None, "already_registered"
 
-    squads = event.setdefault("squads", {})
-
-    for name, squad in squads.items():
-        if squad.get("type") != squad_type:
-            continue
-        members = squad.setdefault("members", [])
-        if len(members) < squad.get("size", 0):
-            members.append({"user_id": uid, "name": display_name})
-            user_assignments[uid] = [name]
-            event["player_slots_used"] = event.get("player_slots_used", 0) + 1
-            return name, "registered"
-
-    existing_count = sum(1 for s in squads.values() if s.get("type") == squad_type)
-    if existing_count < _max_squads_for_type(event, squad_type):
-        new_name = _next_auto_squad_name(event, squad_type)
-        squads[new_name] = {
-            "type": squad_type,
-            "size": _squad_size_for_type(event, squad_type),
-            "id": generate_squad_id(new_name, squad_type),
-            "members": [{"user_id": uid, "name": display_name}],
-        }
-        user_assignments[uid] = [new_name]
-        event["player_slots_used"] = event.get("player_slots_used", 0) + 1
-        return new_name, "registered"
+    placed = _try_place_player(event, user_assignments, uid, display_name, squad_type)
+    if placed is not None:
+        return placed, "registered"
 
     event.setdefault(_waitlist_key(squad_type), []).append(
         (display_name, squad_type, None, 1, uid, display_name))
@@ -250,41 +265,56 @@ def _compact_player_squads(event: dict, user_assignments: dict, squad_type: str)
             break
 
 
-def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: str):
-    """Pull entries off the waitlist and register them while capacity allows."""
+def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: str) -> list:
+    """Pull entries off the waitlist and place them into squads while capacity
+    allows. Uses the side-effect-free placement helper so failed placements
+    don't re-queue the entry (which would duplicate it).
+
+    Returns a list of (uid, display_name, squad_name) for every player that
+    was promoted, so the async caller can DM them and log to the log channel.
+    """
+    promoted: list = []
     waitlist = event.get(_waitlist_key(squad_type), [])
     while waitlist:
         entry = waitlist[0]
         if not isinstance(entry, (tuple, list)) or len(entry) < 6:
             waitlist.pop(0)
             continue
-        uid = entry[4]
+        uid = str(entry[4])
         name = entry[5]
-        _, status = _player_register(event, user_assignments, uid, name, squad_type)
-        if status == "registered":
+        if uid in user_assignments:
+            # Stale waitlist entry for someone already placed — drop and keep going.
             waitlist.pop(0)
             continue
-        break
+        placed = _try_place_player(event, user_assignments, uid, name, squad_type)
+        if placed is None:
+            break
+        waitlist.pop(0)
+        promoted.append((uid, name, placed))
+    return promoted
 
 
 def _player_unregister(event: dict, user_assignments: dict, user_id) -> tuple:
     """Remove a player, compact their squad-type, and promote from waitlist.
 
-    Returns (success, squad_name_or_None).
+    Returns (success, squad_name_or_None, promoted_list) where promoted_list is
+    [(uid, display_name, squad_name), ...] for any players that moved off the
+    waitlist into a squad as a result of this unregister. Callers use the list
+    to DM those users and log their promotion.
     """
     uid = str(user_id)
     if uid not in user_assignments:
-        return False, None
+        return False, None, []
 
     squad_names = list(user_assignments.get(uid, []))
     user_assignments.pop(uid, None)
     if not squad_names:
-        return False, None
+        return False, None, []
 
     squad_name = squad_names[0]
     squad = event.get("squads", {}).get(squad_name)
     if not squad:
-        return False, None
+        return False, None, []
 
     squad_type = squad.get("type")
     before = len(squad.get("members", []))
@@ -292,11 +322,12 @@ def _player_unregister(event: dict, user_assignments: dict, user_id) -> tuple:
     after = len(squad["members"])
     event["player_slots_used"] = max(0, event.get("player_slots_used", 0) - (before - after))
 
+    promoted: list = []
     if squad_type:
         _compact_player_squads(event, user_assignments, squad_type)
-        _promote_player_waitlist(event, user_assignments, squad_type)
+        promoted = _promote_player_waitlist(event, user_assignments, squad_type)
 
-    return True, squad_name
+    return True, squad_name, promoted
 
 
 def compute_event_start(event: dict) -> Optional[datetime]:

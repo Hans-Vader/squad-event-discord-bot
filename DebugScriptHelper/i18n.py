@@ -720,6 +720,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "✅ Du wurdest aus **{squad}** abgemeldet.",
         "en": "✅ You have been unregistered from **{squad}**.",
     },
+    "player.moved_from_waitlist": {
+        "de": "🎉 Du bist von der Warteliste in **{squad}** nachgerückt!",
+        "en": "🎉 You have been moved from the waitlist into **{squad}**!",
+    },
     "player.not_player_mode": {
         "de": "Dieses Event ist nicht im Player-Modus.",
         "en": "This event is not in player mode.",
@@ -735,6 +739,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "log.player_unregistered": {
         "de": "Spieler abgemeldet: {user} ← {squad}",
         "en": "Player unregistered: {user} ← {squad}",
+    },
+    "log.player_moved": {
+        "de": "Spieler nachgerückt: {name} → {squad}",
+        "en": "Player promoted from waitlist: {name} → {squad}",
     },
     "button.my_info": {
         "de": "Info",
