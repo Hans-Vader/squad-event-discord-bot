@@ -1626,16 +1626,18 @@ class AdminActionView(BaseView):
 # ---------------------------------------------------------------------------
 
 class _AdminPlayerAddView(BaseView):
-    """Admin: pick a user + type to add them to a player-mode event."""
+    """Admin: pick one or more users + a squad type; adds them in one submit."""
     def __init__(self, guild_id, channel_id):
         super().__init__(timeout=300, title="Admin Add Player")
         self.guild_id = guild_id
         self.channel_id = channel_id
-        self.selected_user = None
+        self.selected_users: list = []
         self.selected_type = None
         lang = get_guild_language(guild_id)
 
-        self.user_select = ui.UserSelect(placeholder=t("admin.pick_user", lang), row=0)
+        self.user_select = ui.UserSelect(
+            placeholder=t("admin.pick_user", lang),
+            min_values=1, max_values=25, row=0)
         self.user_select.callback = self._on_user
         self.add_item(self.user_select)
 
@@ -1651,53 +1653,136 @@ class _AdminPlayerAddView(BaseView):
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
 
-        self.confirm_btn = ui.Button(label=t("general.confirm", lang), style=discord.ButtonStyle.success, disabled=True, row=2)
+        self.confirm_btn = ui.Button(
+            label=t("general.confirm", lang), style=discord.ButtonStyle.success,
+            disabled=True, row=2)
         self.confirm_btn.callback = self._confirm
         self.add_item(self.confirm_btn)
 
+    def _update_confirm_state(self):
+        self.confirm_btn.disabled = not (self.selected_users and self.selected_type)
+
     async def _on_user(self, interaction):
-        self.selected_user = self.user_select.values[0]
-        self.confirm_btn.disabled = not (self.selected_user and self.selected_type)
+        self.selected_users = list(self.user_select.values)
+        self._update_confirm_state()
         await interaction.response.edit_message(view=self)
 
     async def _on_type(self, interaction):
         self.selected_type = self.type_select.values[0]
-        # Persist the picked value so it stays visible after re-render.
         for opt in self.type_select.options:
             opt.default = (opt.value == self.selected_type)
-        self.confirm_btn.disabled = not (self.selected_user and self.selected_type)
+        self._update_confirm_state()
         await interaction.response.edit_message(view=self)
 
     async def _confirm(self, interaction):
         if self.check_response(interaction):
             return
-        await player_register(interaction, self.guild_id, self.channel_id,
-                              self.selected_type, target_user=self.selected_user)
+        lang = get_guild_language(self.guild_id)
+        # Disable the whole view so a second click can't re-fire a stale handler.
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+
+        registered: list = []
+        waitlisted: list = []
+        already: list = []
+        lock = _get_guild_lock(self.guild_id)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(self.guild_id, self.channel_id)
+            if not event or not is_player_mode(event):
+                await interaction.followup.send(t("player.not_player_mode", lang), ephemeral=True)
+                self.stop()
+                return
+            for user in self.selected_users:
+                squad_name, status = _player_register(
+                    event, user_assignments, user.id, user.display_name, self.selected_type)
+                if status == "registered":
+                    registered.append((user, squad_name))
+                elif status == "waitlisted":
+                    waitlisted.append(user)
+                elif status == "already_registered":
+                    already.append(user)
+            save_event(db_id, event, user_assignments)
+
+        type_label = t(f"embed.type_{self.selected_type}", lang) if self.selected_type in SQUAD_TYPES else self.selected_type
+        parts = []
+        if registered:
+            parts.append(t("admin.player_add_registered_count", lang, n=len(registered), type=type_label))
+        if waitlisted:
+            parts.append(t("admin.player_add_waitlisted_count", lang, n=len(waitlisted)))
+        if already:
+            parts.append(t("admin.player_add_already_count", lang, n=len(already)))
+        summary = "\n".join(parts) or t("embed.no_entries", lang)
+        await interaction.followup.send(summary, ephemeral=True)
+
+        for user, squad_name in registered:
+            await send_to_log_channel(
+                t("log.player_registered", lang, user=user.name, type=type_label, squad=squad_name),
+                guild=interaction.guild)
+        for user in waitlisted:
+            await send_to_log_channel(
+                t("log.player_waitlisted", lang, user=user.name, type=type_label),
+                guild=interaction.guild)
+
+        await update_event_displays(self.guild_id, self.channel_id)
+        self.stop()
 
 
 class _AdminPlayerRemoveView(BaseView):
+    """Admin: remove one or more players in a single submit."""
     def __init__(self, guild_id, channel_id, options):
         super().__init__(timeout=300, title="Admin Remove Player")
         self.guild_id = guild_id
         self.channel_id = channel_id
         lang = get_guild_language(guild_id)
-        self.select = ui.Select(placeholder=t("admin.pick_player_to_remove", lang), options=options)
+        self.select = ui.Select(
+            placeholder=t("admin.pick_player_to_remove", lang),
+            options=options,
+            min_values=1, max_values=min(25, len(options)) if options else 1)
         self.select.callback = self._on_pick
         self.add_item(self.select)
 
     async def _on_pick(self, interaction):
         if self.check_response(interaction):
             return
-        user_id = self.select.values[0]
-        # Build a synthetic user object adapter
-        guild = interaction.guild
-        member = guild.get_member(int(user_id)) if guild else None
-        if member is None:
-            try:
-                member = await interaction.client.fetch_user(int(user_id))
-            except Exception:
-                member = None
-        await player_unregister(interaction, self.guild_id, self.channel_id, target_user=member)
+        lang = get_guild_language(self.guild_id)
+        # Disable the view so a second click can't re-fire a stale handler.
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+
+        removed: list = []
+        missing: list = []
+        lock = _get_guild_lock(self.guild_id)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(self.guild_id, self.channel_id)
+            if not event or not is_player_mode(event):
+                await interaction.followup.send(t("player.not_player_mode", lang), ephemeral=True)
+                self.stop()
+                return
+            for user_id in self.select.values:
+                ok, squad_name = _player_unregister(event, user_assignments, user_id)
+                if ok:
+                    removed.append((user_id, squad_name))
+                else:
+                    missing.append(user_id)
+            save_event(db_id, event, user_assignments)
+
+        parts = []
+        if removed:
+            parts.append(t("admin.player_remove_count", lang, n=len(removed)))
+        if missing:
+            parts.append(t("admin.player_remove_missing_count", lang, n=len(missing)))
+        summary = "\n".join(parts) or t("embed.no_entries", lang)
+        await interaction.followup.send(summary, ephemeral=True)
+
+        for user_id, squad_name in removed:
+            await send_to_log_channel(
+                t("log.player_unregistered", lang, user=user_id, squad=squad_name or "?"),
+                guild=interaction.guild)
+
+        await update_event_displays(self.guild_id, self.channel_id)
+        self.stop()
 
 
 class _AdminSquadRegView(BaseView):

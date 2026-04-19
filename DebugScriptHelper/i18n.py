@@ -790,11 +790,31 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     "admin.pick_player_and_type": {
         "de": "Wähle Spieler und Squad-Typ zum Hinzufügen.",
-        "en": "Pick a user and squad type to add.",
+        "en": "Pick users and a squad type to add.",
     },
     "admin.pick_player_to_remove": {
-        "de": "Wähle einen Spieler zum Entfernen.",
-        "en": "Pick a player to remove.",
+        "de": "Wähle Spieler zum Entfernen.",
+        "en": "Pick players to remove.",
+    },
+    "admin.player_add_registered_count": {
+        "de": "✅ {n} Spieler als {type} registriert.",
+        "en": "✅ Registered {n} players as {type}.",
+    },
+    "admin.player_add_waitlisted_count": {
+        "de": "⏳ {n} Spieler auf die Warteliste gesetzt.",
+        "en": "⏳ Added {n} players to the waitlist.",
+    },
+    "admin.player_add_already_count": {
+        "de": "⚠️ {n} Spieler waren bereits registriert und wurden übersprungen.",
+        "en": "⚠️ {n} players were already registered and were skipped.",
+    },
+    "admin.player_remove_count": {
+        "de": "✅ {n} Spieler entfernt.",
+        "en": "✅ Removed {n} players.",
+    },
+    "admin.player_remove_missing_count": {
+        "de": "⚠️ {n} Spieler waren nicht registriert und wurden übersprungen.",
+        "en": "⚠️ {n} players were not registered and were skipped.",
     },
     "admin.add_caster": {
         "de": "Caster hinzufügen",
