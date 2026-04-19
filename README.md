@@ -8,7 +8,8 @@ A Discord bot for managing squad-based events with interactive registration, wai
 
 ## Features
 
-- **Guided squad registration** — Step-by-step flow with dropdowns for squad type (Infantry/Vehicle/Heli) and playstyle (Casual/Normal/Focused)
+- **Two event modes** — **Representative mode** (register a squad with a name, playstyle, and lead) or **Player mode** (register yourself individually; the bot auto-forms squads from arrival order, no casters, one-user-one-registration). Picked at creation via `/create_event mode:…`.
+- **Guided squad registration** — Step-by-step flow with dropdowns for squad type (Infantry/Vehicle/Heli) and playstyle (Casual/Normal/Focused) in rep mode; single-step type-only flow ("Join") in player mode
 - **Three squad types** — Infantry, Vehicle, and Heli squads with independent size and count limits
 - **Server slot calculation** — Automatic distribution of server capacity across all squad types and casters
 - **Multi-squad support** — Configurable number of squads per player (1–20)
@@ -24,7 +25,7 @@ A Discord bot for managing squad-based events with interactive registration, wai
 - **Configurable event duration** — Set event length (30min–24h presets). Event is archived at `start + duration`; recurrence anchors on this
 - **Configurable spawn delay** — For recurring events, the delay between the current event's end and the follow-up's creation (1min–1week presets, default 5min). During this window the old embed stays visible as a read-only snapshot
 - **Registration auto-closes at event start** — New signups, unregistrations, and squad swaps are rejected once the event begins
-- **Admin panel** — Buttons to add/remove squads and casters, edit and delete events — with representative user selection for admin-added squads
+- **Admin panel** — Buttons to add/remove squads and casters (rep mode) or multi-select add/remove players including waitlisted entries (player mode), edit and delete events
 - **Interactive UI** — Buttons, dropdowns, modals, and user selectors directly in Discord
 - **Per-guild configuration** — All settings stored per server in SQLite, managed via slash commands
 - **Multi-language** — German and English, configurable per server

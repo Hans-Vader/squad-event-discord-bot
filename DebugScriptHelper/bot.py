@@ -134,14 +134,20 @@ async def _dispatch_player_register(interaction, guild_id: int, channel_id: int,
 
 async def _dispatch_player_unregister(interaction, guild_id: int, channel_id: int,
                                       lang: str, user_assignments: dict):
-    """Run the direct player-mode unregister (no confirmation). Entry point
+    """Show a confirmation dialog for player-mode self-unregister. Entry point
     shared by the Unregister button and the /unregister slash command."""
     user_id = str(interaction.user.id)
     if user_id not in (user_assignments or {}):
         await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
         return
-    await interaction.response.defer(ephemeral=True)
-    await player_unregister(interaction, guild_id, channel_id)
+    squad_names = user_assignments.get(user_id, [])
+    squad_name = squad_names[0] if squad_names else "?"
+    embed = discord.Embed(
+        title=t("player.unregister_confirm_title", lang),
+        description=t("player.unregister_confirm", lang, squad=squad_name),
+        color=discord.Color.red())
+    view = PlayerUnregisterConfirmView(guild_id, channel_id, squad_name)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1416,6 +1422,35 @@ class SquadUnregisterConfirmView(BaseConfirmationView):
         await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
 
 
+class PlayerUnregisterConfirmView(BaseConfirmationView):
+    """Confirmation dialog for a user unregistering themselves in player mode."""
+    def __init__(self, guild_id, channel_id, squad_name):
+        super().__init__(title="Unregister Player")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.squad_name = squad_name
+        lang = get_guild_language(guild_id)
+
+        confirm_btn = ui.Button(label=t("squad.unregister_button", lang), style=discord.ButtonStyle.danger)
+        confirm_btn.callback = self._confirm
+        self.add_item(confirm_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _confirm(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        await player_unregister(interaction, self.guild_id, self.channel_id)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
+
+
 class CasterUnregisterConfirmView(BaseConfirmationView):
     def __init__(self, guild_id, channel_id):
         super().__init__(title="Unregister Caster")
@@ -1766,12 +1801,15 @@ class _AdminPlayerAddView(BaseView):
 
 
 class _AdminPlayerRemoveView(BaseView):
-    """Admin: remove one or more players in a single submit."""
+    """Admin: pick players (squad members or waitlisted), then confirm removal."""
     def __init__(self, guild_id, channel_id, options):
         super().__init__(timeout=300, title="Admin Remove Player")
         self.guild_id = guild_id
         self.channel_id = channel_id
+        self.selected_ids: list = []
+        self._option_labels = {o.value: o.label for o in options}
         lang = get_guild_language(guild_id)
+
         self.select = ui.Select(
             placeholder=t("admin.pick_player_to_remove", lang),
             options=options,
@@ -1779,11 +1817,36 @@ class _AdminPlayerRemoveView(BaseView):
         self.select.callback = self._on_pick
         self.add_item(self.select)
 
+        self.confirm_btn = ui.Button(
+            label=t("squad.unregister_button", lang), style=discord.ButtonStyle.danger,
+            disabled=True, row=1)
+        self.confirm_btn.callback = self._confirm
+        self.add_item(self.confirm_btn)
+
+        self.cancel_btn = ui.Button(
+            label=t("general.cancel", lang), style=discord.ButtonStyle.secondary, row=1)
+        self.cancel_btn.callback = self._cancel
+        self.add_item(self.cancel_btn)
+
     async def _on_pick(self, interaction):
+        self.selected_ids = list(self.select.values)
+        # Persist the picked options across re-renders.
+        for opt in self.select.options:
+            opt.default = opt.value in self.selected_ids
+        self.confirm_btn.disabled = not self.selected_ids
+        await interaction.response.edit_message(view=self)
+
+    async def _cancel(self, interaction):
         if self.check_response(interaction):
             return
         lang = get_guild_language(self.guild_id)
-        # Disable the view so a second click can't re-fire a stale handler.
+        await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
+        self.stop()
+
+    async def _confirm(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
         for child in self.children:
             child.disabled = True
         await interaction.response.edit_message(view=self)
@@ -1799,7 +1862,7 @@ class _AdminPlayerRemoveView(BaseView):
                 await interaction.followup.send(t("player.not_player_mode", lang), ephemeral=True)
                 self.stop()
                 return
-            for user_id in self.select.values:
+            for user_id in self.selected_ids:
                 ok, squad_name, promoted = _player_unregister(event, user_assignments, user_id)
                 if ok:
                     removed.append((user_id, squad_name))

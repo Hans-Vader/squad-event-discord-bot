@@ -724,6 +724,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "🎉 Du bist von der Warteliste in **{squad}** nachgerückt!",
         "en": "🎉 You have been moved from the waitlist into **{squad}**!",
     },
+    "player.unregister_confirm_title": {
+        "de": "Abmeldung bestätigen",
+        "en": "Confirm unregister",
+    },
+    "player.unregister_confirm": {
+        "de": "Möchtest du dich wirklich aus **{squad}** abmelden? Du verlierst deinen Platz.",
+        "en": "Do you really want to unregister from **{squad}**? You will lose your spot.",
+    },
     "player.not_player_mode": {
         "de": "Dieses Event ist nicht im Player-Modus.",
         "en": "This event is not in player mode.",

@@ -1,9 +1,10 @@
 # Squad-Event-Registration Bot — User Guide
 
-The Squad-Event-Registration Bot organizes squad-based events on Discord. Players register their squads via buttons or slash commands, choose a squad type (Infantry/Vehicle/Heli) and playstyle, and the bot automatically distributes server slots. Organizers create events through a wizard, edit settings via DM, and manage the waitlist, roles, and reminders — all directly in Discord.
+The Squad-Event-Registration Bot organizes squad-based events on Discord. Players register via buttons or slash commands, and the bot automatically distributes server slots, manages the waitlist, handles recurrence, and keeps everything in sync. Organizers create events through a wizard, edit settings via DM, and manage roles and reminders — all directly in Discord.
 
 ## Table of Contents
 
+- [Event Modes](#event-modes)
 - [For Players](#for-players)
 - [For Organizers](#for-organizers)
 - [Interactive Buttons](#interactive-buttons)
@@ -12,9 +13,41 @@ The Squad-Event-Registration Bot organizes squad-based events on Discord. Player
 
 ---
 
+## Event Modes
+
+Events are created in one of two modes, picked at creation time. The mode is locked once the event exists; it can't be switched on a running event.
+
+### Representative Mode (default)
+
+The classic behavior. Each registration is a **squad** with a name, type, playstyle, and a Discord user acting as its representative. One registration occupies `squad_size` seats (e.g. 6 for Infantry, 2 for Vehicle, 1 for Heli). A user can register **multiple squads** (up to the configured per-user limit). Casters register separately.
+
+Use this mode when squad leads coordinate their own teams and the organizer needs per-squad metadata (playstyle, rep name).
+
+### Player Mode
+
+Each registration is a **single player** — just the user themselves. The bot auto-assigns individuals to squads in arrival order: the first 6 Infantry sign-ups form "Infantry 1", the next 6 form "Infantry 2", and so on. No playstyle, no squad name, no caster role. **One user = one registration.**
+
+Use this mode for pick-up matches or community seat-filling events where individuals sign up and organizers don't care about squad composition.
+
+### Quick comparison
+
+| Aspect | Representative mode | Player mode |
+|---|---|---|
+| What's registered | A squad (name + type + playstyle) | A single player |
+| Who registers | A squad rep on behalf of their squad | Each player for themselves |
+| Slots per registration | `squad_size` (e.g. 6) | 1 |
+| Multiple registrations per user | Up to configured limit | Always 1 |
+| Playstyle selection | Yes | No |
+| Casters | Configurable | Disabled |
+| Registration UI | Squad name modal + playstyle picker | Single type pick, uses Discord display name |
+| Slot overview label | "🖥️ Server — 100 slots" | "📋 Seats — 17 slots" |
+| Admin-add | Add Squad (name + rep + playstyle) | Add Player (multi-select users + type) |
+
+---
+
 ## For Players
 
-### Registering a Squad
+### Registering — Representative Mode
 
 There are two ways to register a squad:
 
@@ -28,7 +61,21 @@ There are two ways to register a squad:
 **Via slash command:**
 - `/register` — Starts the same guided flow (type → playstyle → name)
 
+### Registering — Player Mode
+
+The button is labeled **Join** (🪖) instead of **Squad**. The flow is shorter:
+
+1. Click **Join** (🪖) in the event display
+2. Select your squad type from the dropdown: Infantry, Vehicle, or Heli
+3. Done — the bot auto-assigns you to the first non-full squad of that type (creating a new squad automatically if none is started yet), or places you on the waitlist if all slots are full. Your Discord display name is used; there's no name modal to fill in.
+
+Slash command: `/register` — the same flow, adapted to player mode.
+
+**One user, one registration.** If you try to register again while already registered, the bot reports that you're already signed up.
+
 ### Registering as Caster
+
+Only available in **representative mode** (caster is disabled in player mode).
 
 - Click **Caster** (🎙️) in the event display
 
@@ -43,7 +90,7 @@ Players can be registered as a caster **and** with squads at the same time.
 - Click **Abmelden** (❌) in the event display, or
 - Use `/unregister`
 
-A confirmation dialog is shown before the unregistration is processed. You receive a confirmation message once complete.
+A confirmation dialog is shown before the unregistration is processed in **both modes** — you'll see "Do you really want to unregister? You will lose your spot." and must click Unregister to confirm. You receive a confirmation message once complete.
 
 ### All Player Commands
 
@@ -70,22 +117,27 @@ Use `/settings` to view the current server configuration.
 
 ### Creating an Event
 
-Use `/create_event` to start event creation. A multi-step wizard guides you through:
+Use `/create_event` to start event creation. The command takes one **optional choice** parameter:
+
+- `mode: Register as representative (squad rep)` — the default; runs the full wizard below.
+- `mode: Register as player (individual)` — skips the caster-roles step and the max-squads-per-user step, forces `max_caster_slots = 0`, and relabels "Server max players" to "Total seats".
+
+After the command, a multi-step wizard guides you through:
 
 **Step 1 — Basic Info (Modal):**
 - Event name, date, time, description
 - Registration start time (date/time or "now"/"sofort" for immediately)
 
 **Step 2 — Server Configuration (Modal):**
-- Server max players, max caster slots (0 = casters disabled), squad sizes (Infantry / Vehicle / Heli), max vehicle squads, max heli squads
+- Server max players (rep mode) or Total seats (player mode), max caster slots (0 = casters disabled, and forced to 0 in player mode — the field is hidden), squad sizes (Infantry / Vehicle / Heli), max vehicle squads, max heli squads
 - All pre-filled from server defaults (`/set_defaults`)
 
 **Step 3 — Squad Roles:**
-- Squad-Rep roles/users — Who can register squads (role gate, enforced during registration)
-- Community-Rep roles/users — Who can register squads **before** registration opens (early access)
+- Squad-Rep roles/users — Who can register squads / join (role gate, enforced during registration)
+- Community-Rep roles/users — Who can register **before** registration opens (early access)
 - Ping on open — Whether to ping these roles when registration opens
 
-**Step 4 — Caster Roles:**
+**Step 4 — Caster Roles (rep mode only — skipped in player mode):**
 - Caster roles/users — Who can register as caster (role gate)
 - Caster early-access roles/users — Who can register as caster **before** registration opens
 - Ping on open toggle
@@ -94,7 +146,7 @@ Use `/create_event` to start event creation. A multi-step wizard guides you thro
 - Event reminder — Notification X minutes before event start (0 = disabled)
 - Registration countdown — Message sent X seconds before registration opens (auto-deleted when registration starts)
 
-**Step 6 — Squad Limit:**
+**Step 6 — Squad Limit (rep mode only — skipped in player mode, always 1):**
 - Max squads per user (1–20)
 
 **Step 7 — Confirmation:**
@@ -174,9 +226,9 @@ You can configure an event to automatically spawn a follow-up. Set this up via D
 - At `start + duration` — for **recurring** events, nothing visible happens yet. The embed stays in the channel as a read-only snapshot of the final state.
 - At `start + duration + spawn delay` — for **recurring** events, the old summary is logged, the embed is deleted, and a fresh event is created and posted automatically. The new event inherits all configuration (name, slot sizes, role pings, recurrence, duration, spawn delay) and resets runtime state.
 
-### Admin Panel
+### Admin Panel — Representative Mode
 
-Click the **Admin** (⚙️) button on the event embed to open the admin panel. It contains 6 buttons in 3 rows:
+Click the **Admin** (⚙️) button on the event embed to open the admin panel. In rep mode it contains 6 buttons in 3 rows:
 
 | Row | Button | Description |
 |---|---|---|
@@ -188,6 +240,19 @@ Click the **Admin** (⚙️) button on the event embed to open the admin panel. 
 | Event | **Delete Event** | Delete the event with confirmation |
 
 When adding a squad as admin, the selected representative user counts toward their max squads limit, but the limit is not enforced — admins can always add regardless.
+
+### Admin Panel — Player Mode
+
+In player mode the admin panel has 4 buttons — the Squad and Caster rows are replaced with a single Player row:
+
+| Row | Button | Description |
+|---|---|---|
+| Player | **Add Player** | Pick one or more Discord users (multi-select) + a squad type, then confirm. All picked users are registered in a single submit. If capacity is hit mid-batch, remaining users go to the waitlist. |
+| Player | **Remove Player** | Pick one or more players (multi-select) — from current squad members **and** from any waitlist (waitlist entries are prefixed `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`). The action is gated behind a red "Unregister" confirm button. |
+| Event | **Edit Event** | Opens DM-based editing session |
+| Event | **Delete Event** | Delete the event with confirmation |
+
+Players removed from a squad trigger the waitlist promotion (DM + log channel notification for anyone moved up). Players removed from the waitlist just disappear from the queue.
 
 ### Role Configuration
 
@@ -246,18 +311,28 @@ The event display contains the following buttons. All buttons are visible to eve
 
 ## Waitlist System
 
-- **Automatic placement** — When all slots for a squad type are taken, the squad is automatically placed on the waitlist. The same applies to casters.
-- **Automatic promotion** — When a slot opens up (e.g. through unregistration), the next squad on the waitlist is automatically promoted.
-- **Order** — Squads on the waitlist are sorted by registration time (first come, first served).
-- **DM notification** — When a squad is promoted from the waitlist into the event, the player receives an automatic DM notification.
+Waitlist semantics are the same in both modes — only the unit differs (a full squad in rep mode, a single player in player mode).
+
+- **Automatic placement** — When all slots for a type are taken, the new sign-up goes on the waitlist. In rep mode this is a whole squad; in player mode this is one player. Casters have their own waitlist in rep mode (not applicable in player mode).
+- **Automatic promotion** — When a slot opens up (someone unregisters), the next entry on the waitlist is automatically moved into the event. In rep mode this moves a whole squad if it fits; in player mode this moves one player into the first squad with capacity (creating a new squad if needed).
+- **Order** — First come, first served. The waitlist is processed strictly front-to-back.
+- **DM notification** — When you're promoted from the waitlist into the event, you receive an automatic DM. Rep mode DMs the squad rep; player mode DMs the individual player.
+- **Log channel line** — The bot writes a line to the guild log channel per promotion so organizers have an audit trail.
 - **Viewing the waitlist** — Players can see their position via the **Info** button. Organizers can see the full waitlist with `/admin_waitlist`.
+- **Removing from the waitlist** — A waitlisted user can unregister themselves (confirmation dialog). Organizers can remove waitlist entries via **Admin → Remove Squad** (rep) or **Admin → Remove Player** (player) — the picker lists both registered and waitlisted entries.
 
 ---
 
 ## FAQ
 
+**Q: What's the difference between representative mode and player mode?**
+A: Rep mode has you register a whole squad (with a name, playstyle, and a user as its lead). Player mode has you register as a single individual, and the bot groups individuals into squads automatically (first 6 Infantry sign-ups form "Infantry 1", next 6 form "Infantry 2", etc.). Casters are disabled in player mode. Organizers pick the mode at event creation; it can't be changed later.
+
+**Q: Why does my event have a "Join" button instead of a "Squad" button?**
+A: The event was created in player mode. You register yourself individually — the bot handles squad assignment. Your Discord display name is used automatically.
+
 **Q: How do I register my squad?**
-A: Click **Squad** (🪖) in the event display or use `/register`. You'll be guided through type, playstyle, and name selection.
+A: Click **Squad** (🪖) in the event display or use `/register`. You'll be guided through type, playstyle, and name selection. (This is rep mode — player mode uses a single-step Join flow.)
 
 **Q: Can I be a caster and a squad member at the same time?**
 A: Yes. You can register as a caster and register squads in parallel.
@@ -266,7 +341,10 @@ A: Yes. You can register as a caster and register squads in parallel.
 A: Your squad is automatically placed on the waitlist. You'll be promoted when a slot opens up and notified via DM.
 
 **Q: How many squads can I register?**
-A: This depends on the event configuration. The organizer sets the maximum number of squads per player (default: 1, max: 20).
+A: In rep mode, it depends on the event's max-squads-per-user setting (default: 1, max: 20). In player mode it's always **exactly 1** — one user, one registration.
+
+**Q: How do admins register a group of players in player mode?**
+A: Admin → Add Player. The picker lets you select multiple Discord users at once along with a single squad type. All selected users are registered in one confirm click. If capacity runs out mid-batch, the rest go to the waitlist automatically.
 
 **Q: What is the difference between Infantry, Vehicle, and Heli?**
 A: The three squad types have different sizes and separate slot pools. Infantry squads are typically the largest (e.g. 6 players), vehicle squads smaller (e.g. 2), and heli squads the smallest (e.g. 1).
