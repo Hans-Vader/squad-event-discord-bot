@@ -255,7 +255,7 @@ def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: st
     waitlist = event.get(_waitlist_key(squad_type), [])
     while waitlist:
         entry = waitlist[0]
-        if not isinstance(entry, tuple) or len(entry) < 6:
+        if not isinstance(entry, (tuple, list)) or len(entry) < 6:
             waitlist.pop(0)
             continue
         uid = entry[4]
