@@ -527,8 +527,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Really unregister squad?",
     },
     "squad.unregister_button": {
-        "de": "Ja, Squad abmelden",
-        "en": "Yes, unregister squad",
+        "de": "Ja, abmelden",
+        "en": "Yes, unregister",
     },
     "squad.pick_to_unregister": {
         "de": "Wähle das Squad, das du abmelden möchtest:",
