@@ -336,7 +336,6 @@ def build_default_event(settings: dict, name: str, date: str, time_str: str,
         "streamer_role_ids": [],
         "streamer_user_ids": [],
         "embed_image_url": overrides.get("embed_image_url", None),
-        "expiry_date": overrides.get("expiry_date", None),
         "event_reminder_minutes": overrides.get("event_reminder_minutes", None),
         "event_reminder_sent": False,
         "countdown_seconds": overrides.get("countdown_seconds", None),
@@ -344,4 +343,101 @@ def build_default_event(settings: dict, name: str, date: str, time_str: str,
         "announcement_sent": False,
         "ping_on_open": overrides.get("ping_on_open", False),
         "ping_message_ids": [],
+        "recurrence": overrides.get("recurrence", {"type": "never"}),
+        "duration_minutes": overrides.get("duration_minutes", 120),
+        "spawn_offset_minutes": overrides.get("spawn_offset_minutes", 5),
     }
+
+
+# ---------------------------------------------------------------------------
+# Convenience: clone an event dict for a recurrence follow-up
+# ---------------------------------------------------------------------------
+
+_CARRY_OVER_KEYS = (
+    "name", "description",
+    "server_max_players", "max_caster_slots",
+    "max_vehicle_squads", "max_heli_squads",
+    "infantry_squad_size", "vehicle_squad_size", "heli_squad_size",
+    "max_squads_per_user",
+    "event_reminder_minutes", "embed_image_url",
+    "countdown_seconds", "ping_on_open",
+    "ping_role_ids",
+    "squad_rep_role_ids", "squad_rep_user_ids",
+    "community_rep_role_ids", "community_rep_user_ids",
+    "caster_role_ids", "caster_user_ids",
+    "caster_community_role_ids", "caster_community_user_ids",
+    "streamer_role_ids", "streamer_user_ids",
+    "recurrence",
+    "duration_minutes", "spawn_offset_minutes",
+)
+
+
+def clone_event_for_recurrence(old_event: dict, new_start: datetime) -> dict:
+    """Build a fresh event dict for a recurrence follow-up.
+
+    Carries config (name, slot sizes, role pings, recurrence rule, duration,
+    spawn offset) from `old_event`, resets runtime state (squads, waitlists,
+    slot counters, message ids, archival/spawn flags), and re-anchors date/time
+    to `new_start`.
+    """
+    new_date = new_start.strftime("%d.%m.%Y")
+    new_time = new_start.strftime("%H:%M")
+
+    cloned = {key: old_event.get(key) for key in _CARRY_OVER_KEYS}
+
+    # Lists need defensive copies so mutations on the new event don't leak back.
+    for key, value in cloned.items():
+        if isinstance(value, list):
+            cloned[key] = list(value)
+        elif isinstance(value, dict):
+            cloned[key] = dict(value)
+
+    max_player_slots = (cloned.get("server_max_players") or 0) - (cloned.get("max_caster_slots") or 0)
+
+    cloned.update({
+        "date": new_date,
+        "time": new_time,
+        "max_player_slots": max_player_slots,
+        "player_slots_used": 0,
+        "caster_slots_used": 0,
+        "squads": {},
+        "casters": {},
+        "infantry_waitlist": [],
+        "vehicle_waitlist": [],
+        "heli_waitlist": [],
+        "caster_waitlist": [],
+        "is_closed": False,
+        "event_message_id": None,
+        "event_reminder_sent": False,
+        "countdown_sent": False,
+        "announcement_sent": False,
+        "ping_message_ids": [],
+    })
+
+    # Registration start: preserve the delta from the original event start.
+    orig_open = bool(old_event.get("registration_open"))
+    orig_reg_start = old_event.get("registration_start_time")
+    old_start_str = f"{old_event.get('date', '')} {old_event.get('time', '')}".strip()
+    orig_event_dt = None
+    try:
+        orig_event_dt = datetime.strptime(old_start_str, "%d.%m.%Y %H:%M")
+    except (ValueError, AttributeError):
+        pass
+
+    if orig_open and orig_reg_start is None:
+        cloned["registration_open"] = True
+        cloned["registration_start_time"] = None
+    elif isinstance(orig_reg_start, datetime) and orig_event_dt:
+        delta = orig_event_dt - orig_reg_start
+        new_reg = new_start - delta
+        if new_reg <= datetime.now():
+            cloned["registration_open"] = True
+            cloned["registration_start_time"] = None
+        else:
+            cloned["registration_open"] = False
+            cloned["registration_start_time"] = new_reg
+    else:
+        cloned["registration_open"] = False
+        cloned["registration_start_time"] = None
+
+    return cloned

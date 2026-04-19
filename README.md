@@ -19,7 +19,11 @@ A Discord bot for managing squad-based events with interactive registration, wai
 - **Registration countdown** — Configurable countdown message before registration opens (auto-deleted when registration starts)
 - **Event reminders** — Configurable reminder notification X minutes before event start
 - **Event image** — Optional embed image configurable via DM (upload or URL)
-- **DM-based event editing** — Organizers edit event properties in a guided DM conversation (15 editable properties)
+- **DM-based event editing** — Organizers edit event properties in a guided DM conversation (18 editable properties)
+- **Recurring events** — 12 recurrence types (intervals, weekday-of-month, specific date, specific weekdays/month-days). When the cycle fires, the old event is archived (summary logged + embed deleted) and a fresh event is posted automatically with the same config
+- **Configurable event duration** — Set event length (30min–24h presets). Event is archived at `start + duration`; recurrence anchors on this
+- **Configurable spawn delay** — For recurring events, the delay between the current event's end and the follow-up's creation (1min–1week presets, default 5min). During this window the old embed stays visible as a read-only snapshot
+- **Registration auto-closes at event start** — New signups, unregistrations, and squad swaps are rejected once the event begins
 - **Admin panel** — Buttons to add/remove squads and casters, edit and delete events — with representative user selection for admin-added squads
 - **Interactive UI** — Buttons, dropdowns, modals, and user selectors directly in Discord
 - **Per-guild configuration** — All settings stored per server in SQLite, managed via slash commands
@@ -137,9 +141,18 @@ Organizers can edit a running event via DM by clicking **Edit Event** in the adm
 
 **General:** Name, Date, Time, Description
 **Squad Config:** Server max players, Max caster slots, Max vehicle/heli squads, Infantry/vehicle/heli squad size, Max squads per user
-**Extras:** Event reminder, Registration start time, Event image
+**Extras:** Event reminder, Registration start time, Event image, Recurrence, Duration, Spawn delay
 
-Each edit shows old → new value with a confirmation step. The event display updates automatically after each change.
+Each edit shows old → new value with a confirmation step. The event display updates automatically after each change. Edits to date/time, recurrence, duration, or spawn delay are validated — if the next recurrence would fire during the current event (start → end + spawn delay), the edit is rejected with a specific reason.
+
+## Recurring Events
+
+Events can auto-spawn a follow-up when they end. Configured via DM edit properties **Recurrence** (#16), **Duration** (#17), and **Spawn delay** (#18).
+
+- **Non-recurring**: event is archived at `start + duration` (summary logged, embed deleted).
+- **Recurring**: embed stays visible as a read-only snapshot until `start + duration + spawn_delay`, then old is archived and new event is posted atomically. Config (name, slot sizes, roles, recurrence, duration, spawn delay) is inherited; runtime state is reset.
+
+See [USER_GUIDE.md](USER_GUIDE.md#recurring-events) for the 12 recurrence types, preset lists, and validation rules.
 
 ## Installation
 
@@ -238,6 +251,9 @@ Each edit shows old → new value with a confirmation step. The event display up
     "registration_open": True,
     "is_closed": False,
     "registration_start_time": "2026-04-15T19:00:00",
+    "duration_minutes": 120,
+    "spawn_offset_minutes": 5,
+    "recurrence": {"type": "every_weeks", "interval": 1},
     "countdown_seconds": 60,
     "countdown_sent": False,
     "countdown_message_id": None,

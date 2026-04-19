@@ -126,6 +126,53 @@ def compute_expiry_date(date_str: str, time_str: str = None) -> Optional[datetim
     return event_dt + timedelta(days=1)
 
 
+def compute_event_start(event: dict) -> Optional[datetime]:
+    """Parse an event dict's date + time into a naive datetime, or None."""
+    date_str = event.get("date")
+    time_str = event.get("time")
+    if not date_str:
+        return None
+    try:
+        if time_str:
+            return datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
+        return datetime.strptime(date_str, "%d.%m.%Y")
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def compute_event_end(event: dict, start: Optional[datetime] = None) -> Optional[datetime]:
+    """Event end time: start + duration_minutes (default 120).
+
+    Pass `start` if already computed to avoid a second strptime call.
+    """
+    if start is None:
+        start = compute_event_start(event)
+    if start is None:
+        return None
+    duration = event.get("duration_minutes", 120)
+    if not isinstance(duration, int) or duration < 1:
+        duration = 120
+    return start + timedelta(minutes=duration)
+
+
+def validate_recurrence_fits(start: datetime, end: datetime, recurrence: Optional[dict],
+                             spawn_offset_minutes: int) -> tuple[bool, Optional[str]]:
+    """Check whether a recurrence rule fits given the event's end + spawn offset.
+
+    Returns (ok, reason_key). ok=True for non-recurring events. For recurring
+    events, ok=True iff the next occurrence is strictly after end+spawn_offset.
+    """
+    if not recurrence or not isinstance(recurrence, dict) or recurrence.get("type") == "never":
+        return True, None
+    next_start = compute_next_occurrence(start, recurrence, now=start)
+    if next_start is None:
+        return False, "recurrence.error.no_next"
+    spawn_at = end + timedelta(minutes=max(0, spawn_offset_minutes or 0))
+    if next_start <= spawn_at:
+        return False, "recurrence.error.next_before_spawn"
+    return True, None
+
+
 def parse_registration_start(value: str) -> Optional[datetime]:
     """Parse registration start time flexibly.
 
@@ -194,6 +241,147 @@ def compute_last_sunday(reference_date=None):
     days_since_sunday = (dt.weekday() + 1) % 7
     return dt - timedelta(days=days_since_sunday)
 
+
+
+def _add_months(dt: datetime, n: int) -> datetime:
+    """Return dt shifted by n months, capping day to the target month's length."""
+    month_index = dt.month - 1 + n
+    year = dt.year + month_index // 12
+    month = month_index % 12 + 1
+    last_day = calendar.monthrange(year, month)[1]
+    return dt.replace(year=year, month=month, day=min(dt.day, last_day))
+
+
+def _nth_weekday_of_month(year: int, month: int, weekday: int, n: int) -> Optional[datetime]:
+    """Return the nth occurrence (1-based) of `weekday` (0=Mon..6=Sun) in year/month, or None."""
+    first = datetime(year, month, 1)
+    offset = (weekday - first.weekday()) % 7
+    day = 1 + offset + (n - 1) * 7
+    last_day = calendar.monthrange(year, month)[1]
+    if day > last_day:
+        return None
+    return first.replace(day=day)
+
+
+def _last_weekday_of_month(year: int, month: int, weekday: int) -> datetime:
+    """Return the last occurrence of `weekday` in year/month."""
+    last_day = calendar.monthrange(year, month)[1]
+    last = datetime(year, month, last_day)
+    offset = (last.weekday() - weekday) % 7
+    return last - timedelta(days=offset)
+
+
+_MAX_CATCHUP_ITERATIONS = 10_000
+
+
+def _advance_once(current: datetime, rec: dict) -> Optional[datetime]:
+    """Advance `current` by one step according to `rec`. Returns None if rule won't fire."""
+    if not rec or not isinstance(rec, dict):
+        return None
+    rtype = rec.get("type", "never")
+
+    if rtype == "never":
+        return None
+
+    if rtype in ("every_minutes", "every_hours", "every_days", "every_weeks"):
+        n = rec.get("interval")
+        if not isinstance(n, int) or n < 1:
+            return None
+        unit = rtype.removeprefix("every_")
+        return current + timedelta(**{unit: n})
+
+    if rtype == "every_month":
+        return _add_months(current, 1)
+
+    if rtype in ("first_weekday", "fourth_weekday", "last_weekday"):
+        weekday = current.weekday()
+        nxt = _add_months(current.replace(day=1), 1)
+        if rtype == "first_weekday":
+            target = _nth_weekday_of_month(nxt.year, nxt.month, weekday, 1)
+        elif rtype == "fourth_weekday":
+            target = _nth_weekday_of_month(nxt.year, nxt.month, weekday, 4)
+        else:
+            target = _last_weekday_of_month(nxt.year, nxt.month, weekday)
+        if target is None:
+            return None
+        return target.replace(hour=current.hour, minute=current.minute)
+
+    if rtype == "specific_date":
+        date_str = rec.get("date")
+        time_str = rec.get("time") or current.strftime("%H:%M")
+        if not date_str:
+            return None
+        try:
+            target = datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
+        except (ValueError, AttributeError, TypeError):
+            return None
+        return target if target > current else None
+
+    if rtype == "specific_weekdays":
+        wanted = sorted(set(rec.get("weekdays", [])))
+        if not wanted:
+            return None
+        for offset in range(1, 8):
+            candidate = current + timedelta(days=offset)
+            if candidate.weekday() in wanted:
+                return candidate
+        return None
+
+    if rtype == "specific_month_days":
+        wanted = sorted(set(rec.get("month_days", [])))
+        if not wanted:
+            return None
+        candidate = current
+        for _ in range(62):
+            candidate = candidate + timedelta(days=1)
+            if candidate.day in wanted:
+                return candidate
+        return None
+
+    return None
+
+
+_INTERVAL_UNIT_SECONDS = {
+    "every_minutes": 60,
+    "every_hours": 3600,
+    "every_days": 86400,
+    "every_weeks": 604800,
+}
+
+
+def compute_next_occurrence(current: datetime, rec: dict, now: Optional[datetime] = None) -> Optional[datetime]:
+    """Compute the next event start after `current` per the recurrence rule.
+
+    Anchors on `current` (not `now`) to avoid drift. For fixed-interval types
+    (every_minutes/hours/days/weeks) we jump directly via math. For irregular
+    types we advance in the rule's stride until the result is strictly after
+    `now`. Returns None if the rule is 'never' or the data is malformed.
+    """
+    if not rec or not isinstance(rec, dict) or rec.get("type") == "never":
+        return None
+    now = now or datetime.now()
+    rtype = rec.get("type")
+
+    if rtype in _INTERVAL_UNIT_SECONDS:
+        n = rec.get("interval")
+        if not isinstance(n, int) or n < 1:
+            return None
+        stride = n * _INTERVAL_UNIT_SECONDS[rtype]
+        delta_sec = (now - current).total_seconds()
+        steps = int(delta_sec // stride) + 1 if delta_sec >= 0 else 1
+        unit = rtype.removeprefix("every_")
+        return current + timedelta(**{unit: n * steps})
+
+    candidate = current
+    for _ in range(_MAX_CATCHUP_ITERATIONS):
+        nxt = _advance_once(candidate, rec)
+        if nxt is None:
+            return None
+        if nxt > now:
+            return nxt
+        candidate = nxt
+    logger.warning(f"compute_next_occurrence: catch-up loop cap hit for rec={rec}")
+    return None
 
 
 def compute_reg_start_15th(hour=15, minute=55, reference_date=None):

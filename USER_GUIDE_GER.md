@@ -136,8 +136,43 @@ Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Pan
 13. Event-Erinnerung (Minuten, 0 = deaktivieren)
 14. Anmeldezeitpunkt
 15. Event-Bild (Bild hochladen oder HTTPS-URL einfügen)
+16. Wiederholung (wie das Event zyklisch wiederkehrt — siehe unten)
+17. Dauer (Länge des Events; Standard 2 Std.)
+18. Folgeevent-Verzögerung (bei Wiederholung: Zeit nach dem Ende, bis das nächste Event erstellt wird)
 
 Jede Änderung zeigt den alten → neuen Wert mit einem Bestätigungsschritt. Die Event-Anzeige im Kanal wird nach jeder Änderung automatisch aktualisiert.
+
+Änderungen an Datum/Uhrzeit, Wiederholung, Dauer oder Folgeevent-Verzögerung werden validiert — falls die nächste Wiederholung noch während des aktuellen Events (bis `Start + Dauer + Verzögerung`) fallen würde, wird die Änderung mit einer Erklärung abgelehnt. Verkürze das Event, reduziere die Verzögerung oder wähle einen längeren Wiederholungsrhythmus.
+
+### Wiederkehrende Events
+
+Du kannst festlegen, dass ein Event automatisch ein Folgeevent erstellt. Konfiguriert wird das per DM-Bearbeitung über die Eigenschaften 16 (Wiederholung), 17 (Dauer) und 18 (Folgeevent-Verzögerung).
+
+**Wiederholungs-Optionen (12):**
+
+1. Nie — Standard; das Event wird am Ende archiviert und nichts Neues erstellt
+2. Alle X Minuten
+3. Alle X Stunden
+4. Alle X Tage
+5. Alle X Wochen (1 = wöchentlich, 2 = zweiwöchentlich, …)
+6. Jeden Monat
+7. Am 1. `{Wochentag}` des nächsten Monats — Wochentag wird vom Start-Datum deines Events übernommen
+8. Am 4. `{Wochentag}` des nächsten Monats
+9. Am letzten `{Wochentag}` des nächsten Monats
+10. Bestimmtes Datum (+ optionale Uhrzeit) — einmalig
+11. Bestimmte Wochentage (z.B. Mo, Mi, Fr)
+12. Bestimmte Tage im Monat (z.B. 1. und 15.)
+
+**Dauer-Presets:** 30 Min, 1 Std, 2 Std (Standard), 4 Std, 6 Std, 8 Std, 12 Std, 24 Std.
+
+**Verzögerungs-Presets:** 1 Min, 5 Min (Standard), 10 Min, 30 Min, 1 Std, 6 Std, 1 Tag, 1 Woche.
+
+**Ablauf:**
+
+- Bei `Start` — die Anmeldung wird automatisch geschlossen. Neue Anmeldungen, Abmeldungen und Squad-Wechsel werden abgelehnt.
+- Bei `Start + Dauer` — für **nicht wiederkehrende** Events: Zusammenfassung wird in den Log-Kanal geschrieben, das Embed wird gelöscht. Fertig.
+- Bei `Start + Dauer` — für **wiederkehrende** Events: nichts Sichtbares passiert. Das Embed bleibt als schreibgeschützter Snapshot des Endstands im Kanal sichtbar.
+- Bei `Start + Dauer + Verzögerung` — für **wiederkehrende** Events: die Zusammenfassung wird geloggt, das alte Embed wird gelöscht, ein frisches Event wird erstellt und gepostet. Das neue Event übernimmt die komplette Konfiguration (Name, Slot-Größen, Rollen-Pings, Wiederholung, Dauer, Verzögerung) und setzt den Laufzeit-Zustand zurück.
 
 ### Admin-Panel
 
@@ -243,7 +278,16 @@ A: Spieler mit Community-Rep- oder Caster-Early-Access-Rolle können sich bereit
 A: Prüfe, ob du die nötige Rolle hast (z.B. Squad-Rep für Squad-Anmeldung) und ob die Anmeldung bereits geöffnet ist. Ohne konfigurierte Rollen kann sich jeder anmelden.
 
 **F: Wie bearbeite ich ein laufendes Event?**
-A: Klicke auf **Admin** → **Event bearbeiten**. Der Bot sendet dir eine DM mit einer nummerierten Liste aller Eigenschaften. Antworte mit der Nummer der Eigenschaft, die du ändern möchtest.
+A: Klicke auf **Admin** → **Event bearbeiten**. Der Bot sendet dir eine DM mit einer nummerierten Liste aller 18 Eigenschaften. Antworte mit der Nummer der Eigenschaft, die du ändern möchtest.
+
+**F: Wie lasse ich ein Event automatisch wiederkehren?**
+A: Bearbeite das Event per DM und öffne Eigenschaft 16 (Wiederholung). Wähle einen der 12 Typen — z.B. „Alle X Wochen" für einen wöchentlichen Zyklus oder „Am letzten Sonntag des nächsten Monats" für ein monatliches Muster, das dem Wochentag deines Events folgt. Das Folgeevent wird automatisch erstellt, sobald das aktuelle endet.
+
+**F: Wie lange bleibt das alte Event sichtbar, nachdem es zu Ende ist?**
+A: Bei nicht wiederkehrenden Events wird es direkt bei `Ende` archiviert. Bei wiederkehrenden Events bleibt es bis zum Erstellen des Folgeevents sichtbar (gesteuert über Eigenschaft 18, Folgeevent-Verzögerung — Standard 5 Minuten).
+
+**F: Warum wurde meine Wiederholungs-Änderung abgelehnt?**
+A: Die nächste Wiederholung würde noch während des aktuellen Events (oder während der Verzögerungs-Phase) anstehen. Verkürze das Event, reduziere die Verzögerung oder wähle einen längeren Wiederholungsrhythmus.
 
 **F: Wie richte ich den Bot erstmalig ein?**
 A: Ein Admin führt `/setup` aus, um Organisator-Rolle, Log-Kanal und Sprache zu konfigurieren. Dann `/set_defaults` für Serverkapazität und Squad-Größen. Danach können Organisatoren Events mit `/create_event` erstellen.

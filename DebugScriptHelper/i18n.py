@@ -1028,9 +1028,237 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Registrierung & Extras",
         "en": "Registration & extras",
     },
+    "edit.property.recurrence": {
+        "de": "16. Wiederholung",
+        "en": "16. Recurrence",
+    },
+    "edit.recurrence.prompt": {
+        "de": (
+            "Wie oft soll das Event wiederholt werden?\n"
+            "`1` Nie\n"
+            "`2` Alle X Minuten\n"
+            "`3` Alle X Stunden\n"
+            "`4` Alle X Tage\n"
+            "`5` Alle X Wochen (1 = wöchentlich, 2 = zweiwöchentlich)\n"
+            "`6` Jeden Monat\n"
+            "`7` Am ersten {day} des nächsten Monats\n"
+            "`8` Am vierten {day} des nächsten Monats\n"
+            "`9` Am letzten {day} des nächsten Monats\n"
+            "`10` Bestimmtes Datum (einmalig)\n"
+            "`11` Bestimmte Wochentage (z.B. Mo, Mi, Fr)\n"
+            "`12` Bestimmte Tage im Monat (z.B. 1, 15)"
+        ),
+        "en": (
+            "How often should the event be repeated?\n"
+            "`1` Never\n"
+            "`2` Every X minutes\n"
+            "`3` Every X hours\n"
+            "`4` Every X days\n"
+            "`5` Every X weeks (1 = weekly, 2 = biweekly)\n"
+            "`6` Every month\n"
+            "`7` First {day} of next month\n"
+            "`8` Fourth {day} of next month\n"
+            "`9` Last {day} of next month\n"
+            "`10` Specific date (one-shot)\n"
+            "`11` Specific weekdays (e.g. Mon, Wed, Fri)\n"
+            "`12` Specific days of month (e.g. 1, 15)"
+        ),
+    },
+    "edit.recurrence.minutes.prompt": {
+        "de": "Alle wie viele Minuten soll das Event wiederholt werden? (ganze Zahl ≥ 1)",
+        "en": "Every how many minutes should the event repeat? (integer ≥ 1)",
+    },
+    "edit.recurrence.hours.prompt": {
+        "de": "Alle wie viele Stunden soll das Event wiederholt werden? (ganze Zahl ≥ 1)",
+        "en": "Every how many hours should the event repeat? (integer ≥ 1)",
+    },
+    "edit.recurrence.days.prompt": {
+        "de": "Alle wie viele Tage soll das Event wiederholt werden? (ganze Zahl ≥ 1)",
+        "en": "Every how many days should the event repeat? (integer ≥ 1)",
+    },
+    "edit.recurrence.weeks.prompt": {
+        "de": "Alle wie viele Wochen soll das Event wiederholt werden? (ganze Zahl ≥ 1)",
+        "en": "Every how many weeks should the event repeat? (integer ≥ 1)",
+    },
+    "edit.recurrence.specific_date.prompt": {
+        "de": "Gib das Datum ein im Format `TT.MM.JJJJ HH:MM` (Uhrzeit optional, Standard = Startzeit des aktuellen Events).",
+        "en": "Enter the date as `DD.MM.YYYY HH:MM` (time optional, defaults to the current event's start time).",
+    },
+    "edit.recurrence.weekdays.prompt": {
+        "de": "Gib die Wochentage als Zahlen ein (1=Mo, 2=Di, 3=Mi, 4=Do, 5=Fr, 6=Sa, 7=So), getrennt durch Komma. Beispiel: `1,3,5`",
+        "en": "Enter weekdays as numbers (1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun), separated by commas. Example: `1,3,5`",
+    },
+    "edit.recurrence.month_days.prompt": {
+        "de": "Gib die Tage des Monats (1–31) ein, getrennt durch Komma. Beispiel: `1,15`",
+        "en": "Enter days of the month (1–31), separated by commas. Example: `1,15`",
+    },
+    "edit.recurrence.invalid": {
+        "de": "Ungültige Auswahl. Bitte wähle eine der angezeigten Optionen.",
+        "en": "Invalid selection. Please pick one of the listed options.",
+    },
+    "edit.recurrence.invalid_weekdays": {
+        "de": "Ungültige Eingabe. Bitte gib Zahlen zwischen 1 und 7 ein, getrennt durch Komma.",
+        "en": "Invalid input. Please enter numbers between 1 and 7 separated by commas.",
+    },
+    "edit.recurrence.invalid_month_days": {
+        "de": "Ungültige Eingabe. Bitte gib Zahlen zwischen 1 und 31 ein, getrennt durch Komma.",
+        "en": "Invalid input. Please enter numbers between 1 and 31 separated by commas.",
+    },
+    "edit.recurrence.invalid_specific_date": {
+        "de": "Ungültiges Datum. Format: `TT.MM.JJJJ` oder `TT.MM.JJJJ HH:MM`.",
+        "en": "Invalid date. Format: `DD.MM.YYYY` or `DD.MM.YYYY HH:MM`.",
+    },
+    "edit.recurrence.error.no_next": {
+        "de": "Die Regel ergibt keine weitere Wiederholung. Bitte passe sie an.",
+        "en": "The rule produces no further occurrence. Please adjust it.",
+    },
+    "edit.recurrence.error.next_before_spawn": {
+        "de": "Die nächste Wiederholung würde vor dem Ende des aktuellen Events (inkl. Verzögerung) stattfinden. Wähle ein längeres Intervall, verkürze die Verzögerung oder das Event.",
+        "en": "The next occurrence would be scheduled before the current event ends (plus spawn delay). Choose a longer interval, shorten the delay, or shorten the event.",
+    },
+    "edit.recurrence.display.never": {
+        "de": "Nie",
+        "en": "Never",
+    },
+    "edit.recurrence.display.every_minutes": {
+        "de": "Alle {n} Minuten",
+        "en": "Every {n} minutes",
+    },
+    "edit.recurrence.display.every_hours": {
+        "de": "Alle {n} Stunden",
+        "en": "Every {n} hours",
+    },
+    "edit.recurrence.display.every_days": {
+        "de": "Alle {n} Tage",
+        "en": "Every {n} days",
+    },
+    "edit.recurrence.display.every_weeks": {
+        "de": "Alle {n} Wochen",
+        "en": "Every {n} weeks",
+    },
+    "edit.recurrence.display.every_month": {
+        "de": "Jeden Monat",
+        "en": "Every month",
+    },
+    "edit.recurrence.display.first_weekday": {
+        "de": "Am 1. {day} des nächsten Monats",
+        "en": "On the 1st {day} of next month",
+    },
+    "edit.recurrence.display.fourth_weekday": {
+        "de": "Am 4. {day} des nächsten Monats",
+        "en": "On the 4th {day} of next month",
+    },
+    "edit.recurrence.display.last_weekday": {
+        "de": "Am letzten {day} des nächsten Monats",
+        "en": "On the last {day} of next month",
+    },
+    "edit.recurrence.display.specific_date": {
+        "de": "Einmalig am {date}",
+        "en": "One-shot on {date}",
+    },
+    "edit.recurrence.display.specific_weekdays": {
+        "de": "Wochentags: {days}",
+        "en": "Weekdays: {days}",
+    },
+    "edit.recurrence.display.specific_month_days": {
+        "de": "Tage im Monat: {days}",
+        "en": "Days of month: {days}",
+    },
+    "edit.property.duration": {
+        "de": "17. Dauer",
+        "en": "17. Duration",
+    },
+    "edit.property.spawn_offset": {
+        "de": "18. Folgeevent-Verzögerung",
+        "en": "18. Spawn delay",
+    },
+    "edit.duration.prompt": {
+        "de": (
+            "Wie lange dauert das Event?\n"
+            "`1` 30 Minuten\n"
+            "`2` 1 Stunde\n"
+            "`3` 2 Stunden\n"
+            "`4` 4 Stunden\n"
+            "`5` 6 Stunden\n"
+            "`6` 8 Stunden\n"
+            "`7` 12 Stunden\n"
+            "`8` 24 Stunden"
+        ),
+        "en": (
+            "How long does the event last?\n"
+            "`1` 30 minutes\n"
+            "`2` 1 hour\n"
+            "`3` 2 hours\n"
+            "`4` 4 hours\n"
+            "`5` 6 hours\n"
+            "`6` 8 hours\n"
+            "`7` 12 hours\n"
+            "`8` 24 hours"
+        ),
+    },
+    "edit.spawn_offset.prompt": {
+        "de": (
+            "Wie lange nach dem Event-Ende soll das nächste Event erstellt werden?\n"
+            "`1` 1 Minute\n"
+            "`2` 5 Minuten\n"
+            "`3` 10 Minuten\n"
+            "`4` 30 Minuten\n"
+            "`5` 1 Stunde\n"
+            "`6` 6 Stunden\n"
+            "`7` 1 Tag\n"
+            "`8` 1 Woche"
+        ),
+        "en": (
+            "How long after the event ends should the next event be created?\n"
+            "`1` 1 minute\n"
+            "`2` 5 minutes\n"
+            "`3` 10 minutes\n"
+            "`4` 30 minutes\n"
+            "`5` 1 hour\n"
+            "`6` 6 hours\n"
+            "`7` 1 day\n"
+            "`8` 1 week"
+        ),
+    },
+    "edit.duration.display.30m": {"de": "30 Min", "en": "30 min"},
+    "edit.duration.display.1h": {"de": "1 Std", "en": "1 h"},
+    "edit.duration.display.2h": {"de": "2 Std", "en": "2 h"},
+    "edit.duration.display.4h": {"de": "4 Std", "en": "4 h"},
+    "edit.duration.display.6h": {"de": "6 Std", "en": "6 h"},
+    "edit.duration.display.8h": {"de": "8 Std", "en": "8 h"},
+    "edit.duration.display.12h": {"de": "12 Std", "en": "12 h"},
+    "edit.duration.display.24h": {"de": "24 Std", "en": "24 h"},
+    "edit.spawn_offset.display.1m": {"de": "1 Min", "en": "1 min"},
+    "edit.spawn_offset.display.5m": {"de": "5 Min", "en": "5 min"},
+    "edit.spawn_offset.display.10m": {"de": "10 Min", "en": "10 min"},
+    "edit.spawn_offset.display.30m": {"de": "30 Min", "en": "30 min"},
+    "edit.spawn_offset.display.1h": {"de": "1 Std", "en": "1 h"},
+    "edit.spawn_offset.display.6h": {"de": "6 Std", "en": "6 h"},
+    "edit.spawn_offset.display.1d": {"de": "1 Tag", "en": "1 day"},
+    "edit.spawn_offset.display.1w": {"de": "1 Woche", "en": "1 week"},
+    "edit.duration.display.custom": {"de": "{n} Min", "en": "{n} min"},
+    "edit.spawn_offset.display.custom": {"de": "{n} Min", "en": "{n} min"},
+    "edit.recurrence.weekday.0": {"de": "Mo", "en": "Mon"},
+    "edit.recurrence.weekday.1": {"de": "Di", "en": "Tue"},
+    "edit.recurrence.weekday.2": {"de": "Mi", "en": "Wed"},
+    "edit.recurrence.weekday.3": {"de": "Do", "en": "Thu"},
+    "edit.recurrence.weekday.4": {"de": "Fr", "en": "Fri"},
+    "edit.recurrence.weekday.5": {"de": "Sa", "en": "Sat"},
+    "edit.recurrence.weekday.6": {"de": "So", "en": "Sun"},
+    "edit.recurrence.weekday_full.0": {"de": "Montag", "en": "Monday"},
+    "edit.recurrence.weekday_full.1": {"de": "Dienstag", "en": "Tuesday"},
+    "edit.recurrence.weekday_full.2": {"de": "Mittwoch", "en": "Wednesday"},
+    "edit.recurrence.weekday_full.3": {"de": "Donnerstag", "en": "Thursday"},
+    "edit.recurrence.weekday_full.4": {"de": "Freitag", "en": "Friday"},
+    "edit.recurrence.weekday_full.5": {"de": "Samstag", "en": "Saturday"},
+    "edit.recurrence.weekday_full.6": {"de": "Sonntag", "en": "Sunday"},
     "log.event_edited": {
         "de": "Event bearbeitet: {user} hat '{property}' geändert (Event: {name})",
         "en": "Event edited: {user} changed '{property}' (Event: {name})",
+    },
+    "log.recurrence_spawned": {
+        "de": "Wiederholung: '{name}' wurde automatisch für {date} {time} angelegt.",
+        "en": "Recurrence: '{name}' was auto-scheduled for {date} {time}.",
     },
 
     # ── Wizard / creation flow ────────────────────────────────────────────

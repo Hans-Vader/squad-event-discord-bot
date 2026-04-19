@@ -27,11 +27,14 @@ from database import (
     get_guild_language, get_event_by_channel, get_all_active_events,
     get_all_active_events_global, save_event, create_event, delete_event,
     expire_event, channel_has_active_event, build_default_event,
+    clone_event_for_recurrence,
     DEFAULT_GUILD_SETTINGS,
 )
 from utils import (
     has_organizer_role, is_guild_admin, has_role, parse_date,
-    compute_expiry_date, parse_registration_start, compute_reg_start_15th, generate_squad_id,
+    parse_registration_start, compute_reg_start_15th, generate_squad_id,
+    compute_next_occurrence, compute_event_start, compute_event_end,
+    validate_recurrence_fits,
     format_event_details, build_event_summary_embed,
     send_to_log_channel, set_log_channel, get_log_channel,
     export_log_file, clear_log_file, logger,
@@ -102,6 +105,9 @@ _EDIT_PROPERTIES = [
     (13, "event_reminder_minutes", "edit.property.reminder",        "int_nullable",    None),
     (14, "registration_start_time","edit.property.reg_start",       "reg_start",       None),
     (15, "embed_image_url",        "edit.property.image",           "image",           None),
+    (16, "recurrence",             "edit.property.recurrence",      "recurrence",      None),
+    (17, "duration_minutes",       "edit.property.duration",        "duration",        None),
+    (18, "spawn_offset_minutes",   "edit.property.spawn_offset",    "spawn_offset",    None),
 ]
 
 
@@ -162,6 +168,8 @@ def _ensure_event_keys(event: dict):
         "event_reminder_sent": False,
         "ping_on_open": False, "ping_message_ids": [],
         "embed_image_url": None, "event_reminder_minutes": None,
+        "recurrence": {"type": "never"},
+        "duration_minutes": 120, "spawn_offset_minutes": 5,
     }
     for key, default in defaults.items():
         if key not in event:
@@ -173,13 +181,6 @@ def _ensure_event_keys(event: dict):
             key = _waitlist_key(entry[1])
             event[key].append(entry)
         event["waitlist"] = []
-
-    # Recover missing expiry_date
-    if "expiry_date" not in event and event.get("date"):
-        recovered = compute_expiry_date(event["date"], event.get("time"))
-        if recovered:
-            event["expiry_date"] = recovered
-
 
 # ---------------------------------------------------------------------------
 # Helper: user assignments
@@ -1748,6 +1749,86 @@ class _ConfirmRemoveView(BaseView):
 # DM edit session: helpers, views, main loop
 # ---------------------------------------------------------------------------
 
+def _event_weekday_index(event):
+    """Return 0-6 (Mon..Sun) for the event's date, or None."""
+    dt = parse_date(event.get("date", "") or "")
+    return dt.weekday() if dt else None
+
+
+def _event_weekday_name(event, lang):
+    """Full localized weekday name for the event's date, falling back to Sunday."""
+    idx = _event_weekday_index(event)
+    if idx is None:
+        idx = 6
+    return t(f"edit.recurrence.weekday_full.{idx}", lang)
+
+
+def _format_recurrence(rec, lang, event=None):
+    """Render a recurrence dict as a human-readable one-line string."""
+    if not rec or not isinstance(rec, dict):
+        return t("edit.recurrence.display.never", lang)
+    rtype = rec.get("type", "never")
+
+    if rtype == "never":
+        return t("edit.recurrence.display.never", lang)
+
+    if rtype in ("every_minutes", "every_hours", "every_days", "every_weeks"):
+        return t(f"edit.recurrence.display.{rtype}", lang, n=rec.get("interval", 1))
+
+    if rtype == "every_month":
+        return t("edit.recurrence.display.every_month", lang)
+
+    if rtype in ("first_weekday", "fourth_weekday", "last_weekday"):
+        day = _event_weekday_name(event, lang) if event else ""
+        return t(f"edit.recurrence.display.{rtype}", lang, day=day)
+
+    if rtype == "specific_date":
+        d = rec.get("date", "")
+        tstr = rec.get("time")
+        display = f"{d} {tstr}" if tstr else d
+        return t("edit.recurrence.display.specific_date", lang, date=display)
+
+    if rtype == "specific_weekdays":
+        names = [t(f"edit.recurrence.weekday.{i}", lang) for i in rec.get("weekdays", [])]
+        return t("edit.recurrence.display.specific_weekdays", lang, days=", ".join(names))
+
+    if rtype == "specific_month_days":
+        days = ", ".join(str(d) for d in rec.get("month_days", []))
+        return t("edit.recurrence.display.specific_month_days", lang, days=days)
+
+    return t("edit.recurrence.display.never", lang)
+
+
+_DURATION_PRESETS = [30, 60, 120, 240, 360, 480, 720, 1440]
+_DURATION_KEYS = ["30m", "1h", "2h", "4h", "6h", "8h", "12h", "24h"]
+_SPAWN_PRESETS = [1, 5, 10, 30, 60, 360, 1440, 10080]
+_SPAWN_KEYS = ["1m", "5m", "10m", "30m", "1h", "6h", "1d", "1w"]
+
+
+def _format_duration_value(minutes, lang):
+    """Render duration_minutes as a short label; falls back to '{n} min' for non-preset values."""
+    try:
+        n = int(minutes)
+    except (TypeError, ValueError):
+        n = 120
+    if n in _DURATION_PRESETS:
+        key = _DURATION_KEYS[_DURATION_PRESETS.index(n)]
+        return t(f"edit.duration.display.{key}", lang)
+    return t("edit.duration.display.custom", lang, n=n)
+
+
+def _format_spawn_offset_value(minutes, lang):
+    """Render spawn_offset_minutes as a short label; falls back to '{n} min' for non-preset values."""
+    try:
+        n = int(minutes)
+    except (TypeError, ValueError):
+        n = 5
+    if n in _SPAWN_PRESETS:
+        key = _SPAWN_KEYS[_SPAWN_PRESETS.index(n)]
+        return t(f"edit.spawn_offset.display.{key}", lang)
+    return t("edit.spawn_offset.display.custom", lang, n=n)
+
+
 def _format_property_value(event, key, vtype, lang):
     """Format a property value for display in the edit list."""
     not_set = t("edit.not_set", lang)
@@ -1772,6 +1853,12 @@ def _format_property_value(event, key, vtype, lang):
         return not_set
     if vtype == "image":
         return val if val else not_set
+    if vtype == "recurrence":
+        return _format_recurrence(val, lang, event=event)
+    if vtype == "duration":
+        return _format_duration_value(val, lang)
+    if vtype == "spawn_offset":
+        return _format_spawn_offset_value(val, lang)
     return str(val) if val is not None else not_set
 
 
@@ -1853,8 +1940,14 @@ def _validate_edit_value(message, key, vtype, lang):
     return text, None
 
 
-def _format_display_value(value, vtype, lang):
+def _format_display_value(value, vtype, lang, event=None):
     """Format a parsed value for the confirmation embed."""
+    if vtype == "recurrence":
+        return _format_recurrence(value, lang, event=event)
+    if vtype == "duration":
+        return _format_duration_value(value, lang)
+    if vtype == "spawn_offset":
+        return _format_spawn_offset_value(value, lang)
     if value is None:
         return t("edit.not_set", lang)
     if value == "__immediate__":
@@ -1862,6 +1955,160 @@ def _format_display_value(value, vtype, lang):
     if isinstance(value, datetime):
         return value.strftime("%d.%m.%Y %H:%M")
     return str(value)
+
+
+def _parse_int_list(text):
+    """Parse comma/whitespace-separated integers. Returns None on any parse error."""
+    try:
+        return [int(p) for p in re.split(r"[,\s]+", text.strip()) if p]
+    except ValueError:
+        return None
+
+
+async def _prompt_int_min_one(user, dm_check, lang, is_cancel, prompt_key):
+    """Small helper: prompt for a positive integer. Returns (val, cancelled, timed_out)."""
+    await user.send(t(prompt_key, lang) + "\n" + t("edit.cancel_hint", lang))
+    while True:
+        try:
+            reply = await bot.wait_for("message", check=dm_check, timeout=300)
+        except asyncio.TimeoutError:
+            return None, False, True
+        if is_cancel(reply):
+            return None, True, False
+        try:
+            val = int(reply.content.strip())
+        except ValueError:
+            await user.send(t("edit.invalid_integer", lang))
+            continue
+        if val < 1:
+            await user.send(t("edit.invalid_integer", lang))
+            continue
+        return val, False, False
+
+
+async def _prompt_preset(user, dm_check, lang, is_cancel, prompt_key, values):
+    """Prompt with a preset list; returns (selected_value, cancelled, timed_out)."""
+    await user.send(t(prompt_key, lang) + "\n" + t("edit.cancel_hint", lang))
+    while True:
+        try:
+            reply = await bot.wait_for("message", check=dm_check, timeout=300)
+        except asyncio.TimeoutError:
+            return None, False, True
+        if is_cancel(reply):
+            return None, True, False
+        try:
+            choice = int(reply.content.strip())
+        except ValueError:
+            await user.send(t("edit.recurrence.invalid", lang))
+            continue
+        if 1 <= choice <= len(values):
+            return values[choice - 1], False, False
+        await user.send(t("edit.recurrence.invalid", lang))
+
+
+async def _prompt_recurrence(user, dm_check, lang, is_cancel, event):
+    """Multi-step DM flow to build a recurrence dict (flat 12-option menu).
+
+    Returns (value, cancelled, timed_out). If cancelled, value is None and the
+    caller should return to the overview. If timed_out, caller should break.
+    """
+    day_name = _event_weekday_name(event, lang)
+    event_time = event.get("time")
+    await user.send(
+        t("edit.recurrence.prompt", lang, day=day_name) + "\n" + t("edit.cancel_hint", lang))
+
+    simple = {
+        1: {"type": "never"},
+        6: {"type": "every_month"},
+        7: {"type": "first_weekday"},
+        8: {"type": "fourth_weekday"},
+        9: {"type": "last_weekday"},
+    }
+
+    while True:
+        try:
+            reply = await bot.wait_for("message", check=dm_check, timeout=300)
+        except asyncio.TimeoutError:
+            return None, False, True
+        if is_cancel(reply):
+            return None, True, False
+        try:
+            choice = int(reply.content.strip())
+        except ValueError:
+            await user.send(t("edit.recurrence.invalid", lang))
+            continue
+
+        if choice in simple:
+            return simple[choice], False, False
+
+        interval_map = {
+            2: ("every_minutes", "edit.recurrence.minutes.prompt"),
+            3: ("every_hours",   "edit.recurrence.hours.prompt"),
+            4: ("every_days",    "edit.recurrence.days.prompt"),
+            5: ("every_weeks",   "edit.recurrence.weeks.prompt"),
+        }
+        if choice in interval_map:
+            rtype, pkey = interval_map[choice]
+            n, cancelled, timed_out = await _prompt_int_min_one(user, dm_check, lang, is_cancel, pkey)
+            if timed_out:
+                return None, False, True
+            if cancelled:
+                return None, True, False
+            return {"type": rtype, "interval": n}, False, False
+
+        if choice == 10:  # specific_date
+            await user.send(t("edit.recurrence.specific_date.prompt", lang) + "\n" + t("edit.cancel_hint", lang))
+            while True:
+                try:
+                    reply = await bot.wait_for("message", check=dm_check, timeout=300)
+                except asyncio.TimeoutError:
+                    return None, False, True
+                if is_cancel(reply):
+                    return None, True, False
+                text = reply.content.strip()
+                parts = text.split(maxsplit=1)
+                date_str = parts[0]
+                time_str = parts[1] if len(parts) > 1 else (event_time or "20:00")
+                # Validate
+                try:
+                    datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
+                except ValueError:
+                    await user.send(t("edit.recurrence.invalid_specific_date", lang))
+                    continue
+                return {"type": "specific_date", "date": date_str, "time": time_str}, False, False
+
+        if choice == 11:  # specific_weekdays
+            await user.send(t("edit.recurrence.weekdays.prompt", lang) + "\n" + t("edit.cancel_hint", lang))
+            while True:
+                try:
+                    reply = await bot.wait_for("message", check=dm_check, timeout=300)
+                except asyncio.TimeoutError:
+                    return None, False, True
+                if is_cancel(reply):
+                    return None, True, False
+                nums = _parse_int_list(reply.content.strip())
+                if not nums or not all(1 <= n <= 7 for n in nums):
+                    await user.send(t("edit.recurrence.invalid_weekdays", lang))
+                    continue
+                weekdays = sorted({n - 1 for n in nums})
+                return {"type": "specific_weekdays", "weekdays": weekdays}, False, False
+
+        if choice == 12:  # specific_month_days
+            await user.send(t("edit.recurrence.month_days.prompt", lang) + "\n" + t("edit.cancel_hint", lang))
+            while True:
+                try:
+                    reply = await bot.wait_for("message", check=dm_check, timeout=300)
+                except asyncio.TimeoutError:
+                    return None, False, True
+                if is_cancel(reply):
+                    return None, True, False
+                nums = _parse_int_list(reply.content.strip())
+                if not nums or not all(1 <= n <= 31 for n in nums):
+                    await user.send(t("edit.recurrence.invalid_month_days", lang))
+                    continue
+                return {"type": "specific_month_days", "month_days": sorted(set(nums))}, False, False
+
+        await user.send(t("edit.recurrence.invalid", lang))
 
 
 class _EditConfirmView(ui.View):
@@ -1931,7 +2178,7 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
             groups = [
                 ("edit.group.general", _EDIT_PROPERTIES[0:4]),
                 ("edit.group.squad_config", _EDIT_PROPERTIES[4:12]),
-                ("edit.group.extras", _EDIT_PROPERTIES[12:15]),
+                ("edit.group.extras", _EDIT_PROPERTIES[12:]),
             ]
             edit_embed = discord.Embed(
                 title=t("edit.title", lang),
@@ -1976,38 +2223,69 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
 
             # Show current value and prompt for new one
             current_display = _format_property_value(event, key, vtype, lang)
-            prompt = t("edit.current_value", lang, value=current_display) + "\n"
 
-            if vtype == "image":
-                prompt += t("edit.image_hint", lang)
-            elif vtype == "reg_start":
-                prompt += t("edit.reg_start_hint", lang)
-            elif vtype == "string_nullable":
-                prompt += t("edit.description_hint", lang)
+            if vtype == "recurrence":
+                await user.send(t("edit.current_value", lang, value=current_display))
+                new_value, cancelled, timed_out = await _prompt_recurrence(
+                    user, dm_check, lang, _is_cancel, event)
+                if timed_out:
+                    await user.send(t("edit.timeout", lang))
+                    break
+                if cancelled:
+                    continue
+            elif vtype == "duration":
+                await user.send(t("edit.current_value", lang, value=current_display))
+                new_value, cancelled, timed_out = await _prompt_preset(
+                    user, dm_check, lang, _is_cancel,
+                    "edit.duration.prompt", _DURATION_PRESETS)
+                if timed_out:
+                    await user.send(t("edit.timeout", lang))
+                    break
+                if cancelled:
+                    continue
+            elif vtype == "spawn_offset":
+                await user.send(t("edit.current_value", lang, value=current_display))
+                new_value, cancelled, timed_out = await _prompt_preset(
+                    user, dm_check, lang, _is_cancel,
+                    "edit.spawn_offset.prompt", _SPAWN_PRESETS)
+                if timed_out:
+                    await user.send(t("edit.timeout", lang))
+                    break
+                if cancelled:
+                    continue
             else:
-                prompt += t("edit.enter_new_value", lang)
+                prompt = t("edit.current_value", lang, value=current_display) + "\n"
 
-            prompt += "\n" + t("edit.cancel_hint", lang)
-            await user.send(prompt)
+                if vtype == "image":
+                    prompt += t("edit.image_hint", lang)
+                elif vtype == "reg_start":
+                    prompt += t("edit.reg_start_hint", lang)
+                elif vtype == "string_nullable":
+                    prompt += t("edit.description_hint", lang)
+                else:
+                    prompt += t("edit.enter_new_value", lang)
 
-            # Wait for new value
-            try:
-                value_msg = await bot.wait_for("message", check=dm_check, timeout=300)
-            except asyncio.TimeoutError:
-                await user.send(t("edit.timeout", lang))
-                break
+                prompt += "\n" + t("edit.cancel_hint", lang)
+                await user.send(prompt)
 
-            if _is_cancel(value_msg):
-                continue  # back to overview
+                # Wait for new value
+                try:
+                    value_msg = await bot.wait_for("message", check=dm_check, timeout=300)
+                except asyncio.TimeoutError:
+                    await user.send(t("edit.timeout", lang))
+                    break
 
-            # Validate
-            new_value, error_key = _validate_edit_value(value_msg, key, vtype, lang)
-            if error_key:
-                await user.send(t(error_key, lang))
-                continue
+                if _is_cancel(value_msg):
+                    continue  # back to overview
+
+                # Validate
+                new_value, error_key = _validate_edit_value(value_msg, key, vtype, lang)
+                if error_key:
+                    await user.send(t(error_key, lang))
+                    continue
 
             # Confirmation embed with buttons
-            new_display = _format_display_value(new_value, vtype, lang)
+            new_display = _format_display_value(new_value, vtype, lang, event=event)
             confirm_embed = discord.Embed(
                 title=t("edit.confirm_change", lang),
                 color=discord.Color.orange(),
@@ -2029,6 +2307,7 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
 
             # Apply change under guild lock
             lock = _get_guild_lock(guild_id)
+            invalid_reason = None
             async with lock:
                 event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
                 if not event:
@@ -2065,12 +2344,25 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                 if special == "recalc_slots":
                     event["max_player_slots"] = event["server_max_players"] - event["max_caster_slots"]
 
-                if key in ("date", "time"):
-                    new_expiry = compute_expiry_date(event["date"], event.get("time"))
-                    if new_expiry:
-                        event["expiry_date"] = new_expiry
+                # Invariant: the next occurrence must still fire after end + spawn_offset
+                if key in ("date", "time", "recurrence", "duration_minutes", "spawn_offset_minutes"):
+                    start_dt = compute_event_start(event)
+                    end_dt = compute_event_end(event)
+                    if start_dt and end_dt:
+                        ok, reason_key = validate_recurrence_fits(
+                            start_dt, end_dt,
+                            event.get("recurrence"),
+                            event.get("spawn_offset_minutes", 5),
+                        )
+                        if not ok:
+                            invalid_reason = reason_key
 
-                save_event(db_id, event, user_assignments)
+                if invalid_reason is None:
+                    save_event(db_id, event, user_assignments)
+
+            if invalid_reason:
+                await user.send(t(invalid_reason, lang))
+                continue
 
             # Update channel display
             await update_event_displays(guild_id, channel_id)
@@ -2844,7 +3136,6 @@ class EventServerConfigModal(ui.Modal):
             description=self.parsed["description"],
             registration_open=self.parsed["reg_open"],
             registration_start_time=self.parsed["reg_start_time"],
-            expiry_date=self.parsed["expiry_date"],
             server_max_players=server_max,
             max_caster_slots=max_casters,
             infantry_squad_size=inf_size,
@@ -2952,7 +3243,6 @@ class EventCreationModal(ui.Modal):
             "description": self.event_desc.value.strip() if self.event_desc.value else None,
             "reg_open": reg_open,
             "reg_start_time": reg_start_time,
-            "expiry_date": compute_expiry_date(date_str, time_str),
         }
         bridge = _EventConfigBridgeView(self.guild_id, self.channel_id, settings, parsed, interaction.user)
         await interaction.response.send_message(
@@ -2962,6 +3252,109 @@ class EventCreationModal(ui.Modal):
 # ############################# #
 # BACKGROUND TASKS              #
 # ############################# #
+
+async def _get_or_fetch_channel(channel_id: int):
+    """Return the channel by id, falling back to an API fetch, or None on failure."""
+    ch = bot.get_channel(channel_id)
+    if ch is None:
+        try:
+            ch = await bot.fetch_channel(channel_id)
+        except Exception:
+            ch = None
+    return ch
+
+
+async def _archive_event(event: dict, guild_id: int, channel_id: int, lang: str):
+    """Log the event summary to the guild log channel and delete the embed + related messages."""
+    event_name = event.get("name", "?")
+    summary_embed = build_event_summary_embed(event, lang)
+    log_ch = get_log_channel(guild_id)
+    if log_ch:
+        try:
+            await log_ch.send(embed=summary_embed)
+        except Exception:
+            pass
+    await send_to_log_channel(
+        t("log.event_expired", lang, name=event_name),
+        guild_id=guild_id)
+
+    ch = await _get_or_fetch_channel(channel_id)
+    if ch is None:
+        return
+
+    msg_id = event.get("event_message_id")
+    if msg_id:
+        try:
+            msg = await ch.fetch_message(msg_id)
+            await msg.delete()
+        except Exception as e:
+            logger.warning(f"Could not delete expired event embed: {e}")
+    for ping_msg_id in event.get("ping_message_ids", []):
+        try:
+            ping_msg = await ch.fetch_message(ping_msg_id)
+            await ping_msg.delete()
+        except Exception:
+            pass
+    countdown_msg_id = event.get("countdown_message_id")
+    if countdown_msg_id:
+        try:
+            cd_msg = await ch.fetch_message(countdown_msg_id)
+            await cd_msg.delete()
+        except Exception:
+            pass
+
+
+async def _maybe_spawn_recurrence(old_event: dict, guild_id: int, channel_id: int, lang: str):
+    """If `old_event.recurrence` is not 'never', create a follow-up event.
+
+    Failures are logged and swallowed — the expiry flow has already completed.
+    """
+    rec = old_event.get("recurrence") or {}
+    if not isinstance(rec, dict) or rec.get("type", "never") == "never":
+        return
+
+    event_dt = compute_event_start(old_event)
+    if event_dt is None:
+        logger.warning(f"Recurrence skipped for event in channel {channel_id}: bad date/time")
+        return
+
+    try:
+        next_start = compute_next_occurrence(event_dt, rec)
+    except Exception as e:
+        logger.error(f"Recurrence: compute_next_occurrence failed for channel {channel_id}: {e}", exc_info=True)
+        return
+
+    if next_start is None:
+        return
+
+    if channel_has_active_event(guild_id, channel_id):
+        logger.warning(f"Recurrence: channel {channel_id} still has an active event after expiry; skipping spawn")
+        return
+
+    try:
+        new_event = clone_event_for_recurrence(old_event, next_start)
+        new_db_id = create_event(guild_id, channel_id, new_event)
+    except Exception as e:
+        logger.error(f"Recurrence: failed to create follow-up for channel {channel_id}: {e}", exc_info=True)
+        return
+
+    ch = await _get_or_fetch_channel(channel_id)
+    if ch is not None:
+        settings = get_guild_settings(guild_id) or DEFAULT_GUILD_SETTINGS
+        caster_enabled = settings.get("caster_registration_enabled", True) and new_event.get("max_caster_slots", 0) > 0
+        try:
+            await send_event_details(ch, new_event, new_db_id, lang, caster_enabled)
+        except Exception as e:
+            logger.error(f"Recurrence: failed to post embed for channel {channel_id}: {e}", exc_info=True)
+
+    await send_to_log_channel(
+        t("log.recurrence_spawned", lang,
+          name=new_event.get("name", "?"),
+          date=new_event["date"],
+          time=new_event["time"]),
+        guild_id=guild_id,
+    )
+
 
 async def check_events_loop():
     """Background task: check registration start, reminders, expiry for all events."""
@@ -2990,54 +3383,31 @@ async def check_events_loop():
                 is_closed = event.get("is_closed", False)
                 is_open = event.get("registration_open", False)
 
-                # ── Skip all registration messages if event is expired or closed ──
-                expiry = event.get("expiry_date")
-                is_expired = expiry and datetime.now() > expiry
+                now = datetime.now()
+                start_dt = compute_event_start(event)
+                end_dt = compute_event_end(event, start=start_dt)
 
-                if is_expired:
-                    # Write summary to log, then delete embed, then expire in DB
-                    event_name = event.get("name", "?")
-                    summary_embed = build_event_summary_embed(event, lang)
-                    log_ch = get_log_channel(guild_id)
-                    if log_ch:
-                        try:
-                            await log_ch.send(embed=summary_embed)
-                        except Exception:
-                            pass
-                    await send_to_log_channel(
-                        t("log.event_expired", lang, name=event_name),
-                        guild_id=guild_id)
+                # ── Close registration automatically when the event starts ──
+                if start_dt and now >= start_dt and not is_closed:
+                    event["is_closed"] = True
+                    is_closed = True
+                    save_event(db_id, event, user_assignments)
 
-                    # Delete the embed message and ping messages
-                    ch = bot.get_channel(channel_id)
-                    if not ch:
-                        try:
-                            ch = await bot.fetch_channel(channel_id)
-                        except Exception:
-                            ch = None
-                    if ch:
-                        msg_id = event.get("event_message_id")
-                        if msg_id:
-                            try:
-                                msg = await ch.fetch_message(msg_id)
-                                await msg.delete()
-                            except Exception as e:
-                                logger.warning(f"Could not delete expired event embed: {e}")
-                        for ping_msg_id in event.get("ping_message_ids", []):
-                            try:
-                                ping_msg = await ch.fetch_message(ping_msg_id)
-                                await ping_msg.delete()
-                            except Exception:
-                                pass
-                        countdown_msg_id = event.get("countdown_message_id")
-                        if countdown_msg_id:
-                            try:
-                                cd_msg = await ch.fetch_message(countdown_msg_id)
-                                await cd_msg.delete()
-                            except Exception:
-                                pass
+                # ── End-of-event handling ──
+                if end_dt and now > end_dt:
+                    rtype = (event.get("recurrence") or {}).get("type", "never")
+                    if rtype == "never":
+                        await _archive_event(event, guild_id, channel_id, lang)
+                        expire_event(db_id)
+                        continue
 
-                    expire_event(db_id)
+                    spawn_offset = max(0, event.get("spawn_offset_minutes", 5) or 0)
+                    spawn_at = end_dt + timedelta(minutes=spawn_offset)
+                    if now >= spawn_at:
+                        await _archive_event(event, guild_id, channel_id, lang)
+                        expire_event(db_id)
+                        await _maybe_spawn_recurrence(event, guild_id, channel_id, lang)
+                    # During the gap [end → spawn_at]: embed stays, do nothing.
                     continue
 
                 # ── Countdown message (only if NOT closed and NOT expired) ──

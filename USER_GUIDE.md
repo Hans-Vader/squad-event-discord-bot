@@ -136,8 +136,43 @@ Organizers can edit a running event via DM: Click **Edit Event** in the admin pa
 13. Event reminder (minutes, 0 = disable)
 14. Registration start time
 15. Event image (upload an image or paste an HTTPS URL)
+16. Recurrence (how the event repeats — see below)
+17. Duration (event length; defaults to 2h)
+18. Spawn delay (for recurring events: time after the current event ends before the follow-up is created)
 
 Each edit shows the old → new value with a confirmation step. The event display in the channel updates automatically after each change.
+
+If your change would cause the next recurrence to fire during the current event (before `start + duration + spawn delay`), the edit is rejected with an explanation — shorten the event, increase the spawn delay, or pick a longer recurrence interval.
+
+### Recurring Events
+
+You can configure an event to automatically spawn a follow-up. Set this up via DM edit properties 16 (Recurrence), 17 (Duration), and 18 (Spawn delay).
+
+**Recurrence options (12):**
+
+1. Never — default; the event is archived at end and nothing is created afterwards
+2. Every X minutes
+3. Every X hours
+4. Every X days
+5. Every X weeks (1 = weekly, 2 = biweekly, …)
+6. Every month
+7. First `{weekday}` of next month — weekday is derived from your event's start date
+8. Fourth `{weekday}` of next month
+9. Last `{weekday}` of next month
+10. Specific date (+ optional time) — one-shot
+11. Specific weekdays (e.g. Mon, Wed, Fri)
+12. Specific days of month (e.g. 1st and 15th)
+
+**Duration presets:** 30min, 1h, 2h (default), 4h, 6h, 8h, 12h, 24h.
+
+**Spawn delay presets:** 1min, 5min (default), 10min, 30min, 1h, 6h, 1d, 1w.
+
+**How the lifecycle works:**
+
+- At `start` — registration automatically closes. New signups / unregistrations / squad swaps are rejected.
+- At `start + duration` — for **non-recurring** events, the summary is logged to the log channel and the embed is deleted. Done.
+- At `start + duration` — for **recurring** events, nothing visible happens yet. The embed stays in the channel as a read-only snapshot of the final state.
+- At `start + duration + spawn delay` — for **recurring** events, the old summary is logged, the embed is deleted, and a fresh event is created and posted automatically. The new event inherits all configuration (name, slot sizes, role pings, recurrence, duration, spawn delay) and resets runtime state.
 
 ### Admin Panel
 
@@ -243,7 +278,16 @@ A: Players with a Community-Rep or Caster early-access role can register **befor
 A: Check whether you have the required role (e.g. Squad-Rep for squad registration) and whether registration is already open. If no roles are configured, anyone can register.
 
 **Q: How do I edit a running event?**
-A: Click **Admin** → **Edit Event**. The bot sends you a DM with a numbered list of all properties. Reply with the number of the property you want to change.
+A: Click **Admin** → **Edit Event**. The bot sends you a DM with a numbered list of all 18 properties. Reply with the number of the property you want to change.
+
+**Q: How do I make an event repeat?**
+A: Edit the event via DM and open property 16 (Recurrence). Pick one of 12 types — for example "Every X weeks" for a weekly cycle, or "Last Sunday of next month" for a monthly pattern that follows your event's weekday. The follow-up event is created automatically when the current one ends.
+
+**Q: How long does the old event stay visible after it ends?**
+A: For non-recurring events, it's archived immediately at `end`. For recurring events, it stays until the follow-up is due (controlled by property 18, Spawn delay — default 5 minutes).
+
+**Q: Why was my recurrence edit rejected?**
+A: The next occurrence would fire during the current event (or during the spawn delay window). Shorten the event duration, shorten the spawn delay, or pick a longer recurrence interval.
 
 **Q: How do I set up the bot for the first time?**
 A: An admin runs `/setup` to configure the organizer role, log channel, and language. Then use `/set_defaults` to set server capacity and squad sizes. After that, organizers can create events with `/create_event`.
