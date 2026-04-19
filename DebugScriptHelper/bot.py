@@ -1662,6 +1662,9 @@ class _AdminPlayerAddView(BaseView):
 
     async def _on_type(self, interaction):
         self.selected_type = self.type_select.values[0]
+        # Persist the picked value so it stays visible after re-render.
+        for opt in self.type_select.options:
+            opt.default = (opt.value == self.selected_type)
         self.confirm_btn.disabled = not (self.selected_user and self.selected_type)
         await interaction.response.edit_message(view=self)
 
