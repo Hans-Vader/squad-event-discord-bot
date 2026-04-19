@@ -39,7 +39,7 @@ from utils import (
     send_to_log_channel, set_log_channel, get_log_channel,
     export_log_file, clear_log_file, logger,
     resolve_event_defaults,
-    _player_register, _player_unregister,
+    _player_register, _player_unregister, _player_remove_from_waitlist,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
 
@@ -1564,13 +1564,26 @@ class AdminActionView(BaseView):
         if not event:
             await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
             return
-        # Build options from registered player members across all squads.
+        type_abbrev = {"infantry": "Inf", "vehicle": "Veh", "heli": "Heli"}
         opts = []
+        # Registered player members across all squads.
         for squad_name, squad in event.get("squads", {}).items():
             for m in squad.get("members", []):
                 opts.append(discord.SelectOption(
                     label=f"{m.get('name', '?')} — {squad_name}",
                     value=m.get("user_id", ""),
+                ))
+        # Waitlist entries per type — prefixed [WL-Inf]/[WL-Veh]/[WL-Heli] like rep mode.
+        for st in SQUAD_TYPES:
+            abbr = type_abbrev.get(st, "?")
+            for entry in event.get(_waitlist_key(st), []):
+                if not isinstance(entry, (tuple, list)) or len(entry) < 6:
+                    continue
+                player_name = entry[5]
+                uid = str(entry[4])
+                opts.append(discord.SelectOption(
+                    label=f"[WL-{abbr}] {player_name}",
+                    value=uid,
                 ))
         if not opts:
             await interaction.response.send_message(t("embed.no_entries", lang), ephemeral=True)
@@ -1775,7 +1788,8 @@ class _AdminPlayerRemoveView(BaseView):
             child.disabled = True
         await interaction.response.edit_message(view=self)
 
-        removed: list = []
+        removed: list = []          # [(user_id, squad_name)]
+        waitlist_removed: list = []  # [(user_id, squad_type)]
         missing: list = []
         all_promoted: list = []
         lock = _get_guild_lock(self.guild_id)
@@ -1790,6 +1804,11 @@ class _AdminPlayerRemoveView(BaseView):
                 if ok:
                     removed.append((user_id, squad_name))
                     all_promoted.extend(promoted)
+                    continue
+                # Not in a squad — try the waitlist.
+                wl_type = _player_remove_from_waitlist(event, user_id)
+                if wl_type is not None:
+                    waitlist_removed.append((user_id, wl_type))
                 else:
                     missing.append(user_id)
             save_event(db_id, event, user_assignments)
@@ -1797,6 +1816,8 @@ class _AdminPlayerRemoveView(BaseView):
         parts = []
         if removed:
             parts.append(t("admin.player_remove_count", lang, n=len(removed)))
+        if waitlist_removed:
+            parts.append(t("admin.player_remove_waitlist_count", lang, n=len(waitlist_removed)))
         if missing:
             parts.append(t("admin.player_remove_missing_count", lang, n=len(missing)))
         summary = "\n".join(parts) or t("embed.no_entries", lang)
@@ -1805,6 +1826,11 @@ class _AdminPlayerRemoveView(BaseView):
         for user_id, squad_name in removed:
             await send_to_log_channel(
                 t("log.player_unregistered", lang, user=user_id, squad=squad_name or "?"),
+                guild=interaction.guild)
+        for user_id, squad_type in waitlist_removed:
+            type_label = t(f"embed.type_{squad_type}", lang) if squad_type in SQUAD_TYPES else squad_type
+            await send_to_log_channel(
+                t("log.player_waitlist_removed", lang, user=user_id, type=type_label),
                 guild=interaction.guild)
 
         await _notify_promoted_players(

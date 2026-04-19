@@ -294,6 +294,24 @@ def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: st
     return promoted
 
 
+def _player_remove_from_waitlist(event: dict, user_id) -> Optional[str]:
+    """Remove a user's waitlist entry across all per-type waitlists.
+    Returns the squad_type that held them, or None if no entry found.
+
+    Useful for admin-removing a waitlisted player (who isn't in user_assignments).
+    """
+    uid = str(user_id)
+    for st in _SQUAD_TYPES:
+        wl = event.get(_waitlist_key(st), [])
+        for i, entry in enumerate(wl):
+            if not isinstance(entry, (tuple, list)) or len(entry) <= 4:
+                continue
+            if str(entry[4]) == uid:
+                wl.pop(i)
+                return st
+    return None
+
+
 def _player_unregister(event: dict, user_assignments: dict, user_id) -> tuple:
     """Remove a player, compact their squad-type, and promote from waitlist.
 

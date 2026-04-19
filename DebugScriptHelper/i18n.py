@@ -744,6 +744,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Spieler nachgerückt: {name} → {squad}",
         "en": "Player promoted from waitlist: {name} → {squad}",
     },
+    "log.player_waitlist_removed": {
+        "de": "Spieler von der {type}-Warteliste entfernt: {user}",
+        "en": "Player removed from the {type} waitlist: {user}",
+    },
     "button.my_info": {
         "de": "Info",
         "en": "Info",
@@ -819,6 +823,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "admin.player_remove_count": {
         "de": "✅ {n} Spieler entfernt.",
         "en": "✅ Removed {n} players.",
+    },
+    "admin.player_remove_waitlist_count": {
+        "de": "✅ {n} Spieler von der Warteliste entfernt.",
+        "en": "✅ Removed {n} players from the waitlist.",
     },
     "admin.player_remove_missing_count": {
         "de": "⚠️ {n} Spieler waren nicht registriert und wurden übersprungen.",
