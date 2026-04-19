@@ -346,6 +346,7 @@ def build_default_event(settings: dict, name: str, date: str, time_str: str,
         "recurrence": overrides.get("recurrence", {"type": "never"}),
         "duration_minutes": overrides.get("duration_minutes", 120),
         "spawn_offset_minutes": overrides.get("spawn_offset_minutes", 5),
+        "mode": overrides.get("mode", "rep"),
     }
 
 
@@ -369,6 +370,7 @@ _CARRY_OVER_KEYS = (
     "streamer_role_ids", "streamer_user_ids",
     "recurrence",
     "duration_minutes", "spawn_offset_minutes",
+    "mode",
 )
 
 

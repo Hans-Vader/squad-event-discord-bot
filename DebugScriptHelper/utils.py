@@ -126,6 +126,179 @@ def compute_expiry_date(date_str: str, time_str: str = None) -> Optional[datetim
     return event_dt + timedelta(days=1)
 
 
+# ---------------------------------------------------------------------------
+# Player-mode registration helpers
+# ---------------------------------------------------------------------------
+_SQUAD_TYPES = ("infantry", "vehicle", "heli")
+_SQUAD_TYPE_LABEL = {"infantry": "Infantry", "vehicle": "Vehicle", "heli": "Heli"}
+
+
+def _waitlist_key(squad_type: str) -> str:
+    return f"{squad_type}_waitlist"
+
+
+def _squad_size_for_type(event: dict, squad_type: str) -> int:
+    return {
+        "infantry": event.get("infantry_squad_size", 6),
+        "vehicle": event.get("vehicle_squad_size", 2),
+        "heli":     event.get("heli_squad_size", 1),
+    }.get(squad_type, 1)
+
+
+def _max_squads_for_type(event: dict, squad_type: str) -> int:
+    """Cap on how many squads of a given type can exist.
+
+    Vehicle and heli are stored directly. Infantry is derived from the seat
+    budget after vehicle/heli allocations.
+    """
+    if squad_type == "vehicle":
+        return event.get("max_vehicle_squads", 0)
+    if squad_type == "heli":
+        return event.get("max_heli_squads", 0)
+    seats = event.get("max_player_slots", 0)
+    veh_slots = event.get("max_vehicle_squads", 0) * event.get("vehicle_squad_size", 0)
+    heli_slots = event.get("max_heli_squads", 0) * event.get("heli_squad_size", 0)
+    inf_size = max(1, event.get("infantry_squad_size", 6))
+    return max(0, (seats - veh_slots - heli_slots) // inf_size)
+
+
+def _next_auto_squad_name(event: dict, squad_type: str) -> str:
+    label = _SQUAD_TYPE_LABEL.get(squad_type, squad_type.title())
+    i = 1
+    while f"{label} {i}" in event.get("squads", {}):
+        i += 1
+    return f"{label} {i}"
+
+
+def _player_register(event: dict, user_assignments: dict, user_id, display_name: str,
+                     squad_type: str) -> tuple:
+    """Register a player into the first non-full squad of the type, creating a
+    new squad if allowed, otherwise waitlisting them.
+
+    Returns (squad_name_or_None, status). Status is one of:
+    'registered', 'waitlisted', 'already_registered', 'invalid_type'.
+    """
+    if squad_type not in _SQUAD_TYPES:
+        return None, "invalid_type"
+
+    uid = str(user_id)
+    if uid in user_assignments:
+        return None, "already_registered"
+
+    squads = event.setdefault("squads", {})
+
+    for name, squad in squads.items():
+        if squad.get("type") != squad_type:
+            continue
+        members = squad.setdefault("members", [])
+        if len(members) < squad.get("size", 0):
+            members.append({"user_id": uid, "name": display_name})
+            user_assignments[uid] = [name]
+            event["player_slots_used"] = event.get("player_slots_used", 0) + 1
+            return name, "registered"
+
+    existing_count = sum(1 for s in squads.values() if s.get("type") == squad_type)
+    if existing_count < _max_squads_for_type(event, squad_type):
+        new_name = _next_auto_squad_name(event, squad_type)
+        squads[new_name] = {
+            "type": squad_type,
+            "size": _squad_size_for_type(event, squad_type),
+            "id": generate_squad_id(new_name, squad_type),
+            "members": [{"user_id": uid, "name": display_name}],
+        }
+        user_assignments[uid] = [new_name]
+        event["player_slots_used"] = event.get("player_slots_used", 0) + 1
+        return new_name, "registered"
+
+    event.setdefault(_waitlist_key(squad_type), []).append(
+        (display_name, squad_type, None, 1, uid, display_name))
+    return None, "waitlisted"
+
+
+def _compact_player_squads(event: dict, user_assignments: dict, squad_type: str):
+    """Pull last-registered members from later squads into earlier partial
+    squads of the same type. Drop trailing empty squads.
+    """
+    squads = event.get("squads", {})
+    type_names = [n for n, s in squads.items() if s.get("type") == squad_type]
+
+    for i, name in enumerate(type_names):
+        squad = squads[name]
+        size = squad.get("size", 0)
+        members = squad.setdefault("members", [])
+        while len(members) < size:
+            source_name = None
+            for later in reversed(type_names[i + 1:]):
+                if squads[later].get("members"):
+                    source_name = later
+                    break
+            if source_name is None:
+                break
+            member = squads[source_name]["members"].pop()
+            members.append(member)
+            uid = member.get("user_id")
+            if uid:
+                user_assignments[uid] = [name]
+
+    for name in reversed(type_names):
+        squad = squads.get(name)
+        if squad is None:
+            continue
+        if not squad.get("members"):
+            del squads[name]
+        else:
+            break
+
+
+def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: str):
+    """Pull entries off the waitlist and register them while capacity allows."""
+    waitlist = event.get(_waitlist_key(squad_type), [])
+    while waitlist:
+        entry = waitlist[0]
+        if not isinstance(entry, tuple) or len(entry) < 6:
+            waitlist.pop(0)
+            continue
+        uid = entry[4]
+        name = entry[5]
+        _, status = _player_register(event, user_assignments, uid, name, squad_type)
+        if status == "registered":
+            waitlist.pop(0)
+            continue
+        break
+
+
+def _player_unregister(event: dict, user_assignments: dict, user_id) -> tuple:
+    """Remove a player, compact their squad-type, and promote from waitlist.
+
+    Returns (success, squad_name_or_None).
+    """
+    uid = str(user_id)
+    if uid not in user_assignments:
+        return False, None
+
+    squad_names = list(user_assignments.get(uid, []))
+    user_assignments.pop(uid, None)
+    if not squad_names:
+        return False, None
+
+    squad_name = squad_names[0]
+    squad = event.get("squads", {}).get(squad_name)
+    if not squad:
+        return False, None
+
+    squad_type = squad.get("type")
+    before = len(squad.get("members", []))
+    squad["members"] = [m for m in squad.get("members", []) if m.get("user_id") != uid]
+    after = len(squad["members"])
+    event["player_slots_used"] = max(0, event.get("player_slots_used", 0) - (before - after))
+
+    if squad_type:
+        _compact_player_squads(event, user_assignments, squad_type)
+        _promote_player_waitlist(event, user_assignments, squad_type)
+
+    return True, squad_name
+
+
 def compute_event_start(event: dict) -> Optional[datetime]:
     """Parse an event dict's date + time into a naive datetime, or None."""
     date_str = event.get("date")
@@ -589,12 +762,16 @@ def format_event_details(event: dict, lang: str = "de",
     max_inf_squads = infantry_player_slots // inf_size if inf_size > 0 else 0
     unused = server_cap - max_casters - (max_inf_squads * inf_size) - vehicle_player_slots - heli_player_slots
 
+    is_player_mode = event.get("mode") == "player"
+
     # Slot overview — compact inline grid (row 1: server, caster, max/player)
+    overview_name_key = "embed.seats_overview" if is_player_mode else "embed.server_overview"
     embed.add_field(
-        name=t("embed.server_overview", lang),
+        name=t(overview_name_key, lang),
         value=t("embed.server_overview_value", lang, cap=server_cap, free=available, unused=unused),
         inline=True)
-    embed.add_field(name=t("embed.max_per_user_label", lang, count=max_squads_user), value="\u200b", inline=True)
+    if not is_player_mode:
+        embed.add_field(name=t("embed.max_per_user_label", lang, count=max_squads_user), value="\u200b", inline=True)
 
     # Squad type fields — each type always shown with count/max
     squads = event.get("squads", {})
@@ -612,11 +789,17 @@ def format_event_details(event: dict, lang: str = "de",
         if squad_group:
             text = ""
             for squad_id, data in squad_group.items():
-                playstyle = data.get("playstyle", "Normal")
-                size = data.get("size", 0)
-                rep = data.get("rep_name")
-                rep_suffix = f" — {rep}" if rep else ""
-                text += f"[{playstyle}] **{data.get('name', squad_id)}** ({size}){rep_suffix}\n"
+                if is_player_mode:
+                    members = data.get("members", [])
+                    filled = len(members)
+                    names = ", ".join(m.get("name", "?") for m in members) or "—"
+                    text += f"**{data.get('name', squad_id)}** ({filled}/{data.get('size', 0)}): {names}\n"
+                else:
+                    playstyle = data.get("playstyle", "Normal")
+                    sq_size = data.get("size", 0)
+                    rep = data.get("rep_name")
+                    rep_suffix = f" — {rep}" if rep else ""
+                    text += f"[{playstyle}] **{data.get('name', squad_id)}** ({sq_size}){rep_suffix}\n"
             embed.add_field(name=name, value=text, inline=False)
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
@@ -626,15 +809,22 @@ def format_event_details(event: dict, lang: str = "de",
         if wl:
             wl_text = ""
             for i, entry in enumerate(wl):
-                squad_name, _squad_type, playstyle, size, _squad_id, *_rest = entry
-                rep_name = _rest[0] if _rest else None
-                rep_suffix = f" — {rep_name}" if rep_name else ""
-                wl_text += f"{i+1}. [{playstyle}] **{squad_name}** ({size}){rep_suffix}\n"
+                if is_player_mode:
+                    # (display_name, type, None, 1, user_id, display_name)
+                    player_name = entry[5] if len(entry) > 5 else entry[0]
+                    wl_text += f"{i+1}. **{player_name}**\n"
+                else:
+                    squad_name, _squad_type, playstyle, sq_size, _squad_id, *_rest = entry
+                    rep_name = _rest[0] if _rest else None
+                    rep_suffix = f" — {rep_name}" if rep_name else ""
+                    wl_text += f"{i+1}. [{playstyle}] **{squad_name}** ({sq_size}){rep_suffix}\n"
             embed.add_field(
                 name=t("embed.type_waitlist_label", lang, type=t(f"embed.type_{type_key}", lang), count=len(wl)),
                 value=wl_text, inline=False)
 
-    # Caster field — always shown when enabled
+    # Caster field — always shown when enabled and mode allows casters
+    if is_player_mode:
+        caster_enabled = False
     if caster_enabled:
         casters = event.get("casters", {})
         caster_used = event.get("caster_slots_used", 0)

@@ -222,6 +222,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Server Max Spieler",
         "en": "Server Max Players",
     },
+    "event.seats_label": {
+        "de": "Plätze gesamt",
+        "en": "Total seats",
+    },
     "event.max_casters_label": {
         "de": "Max Caster (0 = deaktiviert)",
         "en": "Max Casters (0 = disabled)",
@@ -618,6 +622,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "🖥️ Server",
         "en": "🖥️ Server",
     },
+    "embed.seats_overview": {
+        "de": "📋 Plätze",
+        "en": "📋 Seats",
+    },
     "embed.server_overview_value": {
         "de": "{cap} Plätze ({free} frei)\nUngenutzt: {unused}",
         "en": "{cap} slots ({free} free)\nUnused: {unused}",
@@ -672,9 +680,61 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Squad anmelden",
         "en": "Register squad",
     },
+    "button.join": {
+        "de": "Beitreten",
+        "en": "Join",
+    },
     "button.register_caster": {
         "de": "Als Caster anmelden",
         "en": "Register as caster",
+    },
+    "player.pick_type_title": {
+        "de": "Wähle deinen Squad-Typ",
+        "en": "Pick your squad type",
+    },
+    "player.pick_type_desc": {
+        "de": "Du wirst automatisch einem passenden Squad zugewiesen.",
+        "en": "You will be auto-assigned to a fitting squad.",
+    },
+    "player.registered": {
+        "de": "✅ Du bist registriert in **{squad}** ({type}).",
+        "en": "✅ You are registered in **{squad}** ({type}).",
+    },
+    "player.waitlisted": {
+        "de": "⏳ Alle {type}-Plätze sind belegt. Du stehst auf der Warteliste.",
+        "en": "⏳ All {type} slots are full. You are on the waitlist.",
+    },
+    "player.already_registered": {
+        "de": "Du bist bereits registriert. Ein Spieler, eine Registrierung.",
+        "en": "You are already registered. One user, one registration.",
+    },
+    "player.invalid_type": {
+        "de": "Ungültiger Squad-Typ.",
+        "en": "Invalid squad type.",
+    },
+    "player.not_registered": {
+        "de": "Du bist nicht registriert.",
+        "en": "You are not registered.",
+    },
+    "player.unregistered": {
+        "de": "✅ Du wurdest aus **{squad}** abgemeldet.",
+        "en": "✅ You have been unregistered from **{squad}**.",
+    },
+    "player.not_player_mode": {
+        "de": "Dieses Event ist nicht im Player-Modus.",
+        "en": "This event is not in player mode.",
+    },
+    "log.player_registered": {
+        "de": "Spieler registriert: {user} → {squad} ({type})",
+        "en": "Player registered: {user} → {squad} ({type})",
+    },
+    "log.player_waitlisted": {
+        "de": "Spieler auf Warteliste: {user} ({type})",
+        "en": "Player waitlisted: {user} ({type})",
+    },
+    "log.player_unregistered": {
+        "de": "Spieler abgemeldet: {user} ← {squad}",
+        "en": "Player unregistered: {user} ← {squad}",
     },
     "button.my_info": {
         "de": "Info",
@@ -715,6 +775,26 @@ _STRINGS: dict[str, dict[str, str]] = {
     "admin.add_squad": {
         "de": "Squad hinzufügen",
         "en": "Add squad",
+    },
+    "admin.add_player": {
+        "de": "Spieler hinzufügen",
+        "en": "Add player",
+    },
+    "admin.remove_player": {
+        "de": "Spieler entfernen",
+        "en": "Remove player",
+    },
+    "admin.pick_user": {
+        "de": "Benutzer auswählen",
+        "en": "Pick user",
+    },
+    "admin.pick_player_and_type": {
+        "de": "Wähle Spieler und Squad-Typ zum Hinzufügen.",
+        "en": "Pick a user and squad type to add.",
+    },
+    "admin.pick_player_to_remove": {
+        "de": "Wähle einen Spieler zum Entfernen.",
+        "en": "Pick a player to remove.",
     },
     "admin.add_caster": {
         "de": "Caster hinzufügen",
