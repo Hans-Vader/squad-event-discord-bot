@@ -1768,6 +1768,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Event-Erinnerung deaktiviert.",
         "en": "Event reminder disabled.",
     },
+    "reminder.event_starting_soon": {
+        "de": "**{name}** startet <t:{ts}:R>!\nEvent-Start: <t:{ts}:f>",
+        "en": "**{name}** starts <t:{ts}:R>!\nEvent start: <t:{ts}:f>",
+    },
+    "reminder.thread_name": {
+        "de": "Erinnerung – {name}",
+        "en": "Reminder – {name}",
+    },
     "log.reminder_set": {
         "de": "Erinnerung gesetzt: {user} hat {minutes} Min. vor Event-Start gesetzt",
         "en": "Reminder set: {user} set {minutes} min before event start",

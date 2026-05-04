@@ -510,6 +510,27 @@ def _build_ping_text(event):
     return (" ".join(mentions) + " ") if mentions else ""
 
 
+def _build_registered_users_ping_text(user_assignments):
+    """Ping prefix mentioning every user currently registered for the event.
+
+    Iterates user_assignments keys — these are the user IDs of squad members
+    (rep-mode reps and player-mode players) and casters (whose assignment
+    list contains the "__caster__" marker). Waitlisted users are not in
+    this dict and therefore not pinged. Returns "" if empty.
+    """
+    if not user_assignments:
+        return ""
+    seen = set()
+    mentions = []
+    for uid in user_assignments.keys():
+        uid_str = str(uid)
+        if uid_str in seen:
+            continue
+        seen.add(uid_str)
+        mentions.append(f"<@{uid_str}>")
+    return (" ".join(mentions) + " ") if mentions else ""
+
+
 def _build_event_message_link(event, channel_id, guild_id):
     msg_id = event.get("event_message_id")
     if not msg_id or not channel_id:
@@ -554,7 +575,11 @@ async def send_event_details(channel, event, db_id, lang="de", caster_enabled=Tr
     """Send or edit event embed in channel."""
     try:
         embed = format_event_details(event, lang, caster_enabled)
-        view = EventActionView(lang, mode=event.get("mode", "rep"))
+        view = EventActionView(
+            lang,
+            mode=event.get("mode", "rep"),
+            is_closed=event.get("is_closed", False),
+        )
 
         if not isinstance(embed, discord.Embed):
             await channel.send(str(embed), view=view)
@@ -1056,22 +1081,25 @@ class BaseConfirmationView(BaseView):
 
 class EventActionView(ui.View):
     """Persistent view with event action buttons."""
-    def __init__(self, lang="de", mode: str = "rep"):
+    def __init__(self, lang="de", mode: str = "rep", is_closed: bool = False):
         super().__init__(timeout=None)
 
         if mode == "player":
             self.add_item(ui.Button(
                 label=t("button.join", lang), style=discord.ButtonStyle.success,
                 custom_id="event_register_squad", emoji="🪖",
+                disabled=is_closed,
             ))
         else:
             self.add_item(ui.Button(
                 label=t("button.register_squad", lang), style=discord.ButtonStyle.success,
                 custom_id="event_register_squad", emoji="🪖",
+                disabled=is_closed,
             ))
             self.add_item(ui.Button(
                 label=t("button.register_caster", lang), style=discord.ButtonStyle.primary,
                 custom_id="event_register_caster", emoji="🎙️",
+                disabled=is_closed,
             ))
         self.add_item(ui.Button(
             label=t("button.my_info", lang), style=discord.ButtonStyle.secondary,
@@ -1080,6 +1108,7 @@ class EventActionView(ui.View):
         self.add_item(ui.Button(
             label=t("button.unregister", lang), style=discord.ButtonStyle.danger,
             custom_id="event_unregister", emoji="❌",
+            disabled=is_closed,
         ))
         self.add_item(ui.Button(
             label=t("button.admin", lang), style=discord.ButtonStyle.secondary,
@@ -3892,6 +3921,16 @@ async def check_events_loop():
                     is_closed = True
                     save_event(db_id, event, user_assignments)
 
+                    ch = bot.get_channel(channel_id)
+                    if not ch:
+                        try:
+                            ch = await bot.fetch_channel(channel_id)
+                        except Exception:
+                            ch = None
+                    if ch:
+                        caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
+                        await send_event_details(ch, event, db_id, lang, caster_enabled)
+
                 # ── End-of-event handling ──
                 if end_dt and now > end_dt:
                     rtype = (event.get("recurrence") or {}).get("type", "never")
@@ -4017,16 +4056,48 @@ async def check_events_loop():
                                     ch = await bot.fetch_channel(channel_id)
                                 except Exception:
                                     ch = None
-                            if ch:
-                                ping_text = _build_ping_text(event)
+
+                            target = None
+                            parent_msg = None
+                            event_message_id = event.get("event_message_id")
+                            if ch and event_message_id:
+                                try:
+                                    parent_msg = await ch.fetch_message(event_message_id)
+                                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                                    parent_msg = None
+
+                            if parent_msg is not None:
+                                target = parent_msg.thread
+                                if target is None:
+                                    try:
+                                        target = await parent_msg.create_thread(
+                                            name=t("reminder.thread_name", lang, name=event["name"])[:100],
+                                            auto_archive_duration=1440,
+                                        )
+                                    except discord.HTTPException as e:
+                                        logger.warning(
+                                            f"Failed to create reminder thread for '{event['name']}': {e}"
+                                        )
+                                        target = None
+
+                            if target is None:
+                                target = ch
+
+                            if target is not None:
+                                ping_text = _build_registered_users_ping_text(user_assignments)
                                 event_ts = int(event_dt.timestamp())
-                                content = (f"{ping_text}**{event['name']}** <t:{event_ts}:R>!\n"
-                                           f"Event-Start: <t:{event_ts}:f>")
-                                caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
-                                embed = format_event_details(event, lang, caster_enabled)
-                                view = EventActionView(lang, mode=event.get("mode", "rep"))
-                                await ch.send(content=content, embed=embed, view=view,
-                                              allowed_mentions=discord.AllowedMentions(roles=True))
+                                content = f"{ping_text}" + t(
+                                    "reminder.event_starting_soon",
+                                    lang,
+                                    name=event["name"],
+                                    ts=event_ts,
+                                )
+                                await target.send(
+                                    content=content,
+                                    allowed_mentions=discord.AllowedMentions(
+                                        roles=False, users=True, everyone=False
+                                    ),
+                                )
                     except ValueError:
                         pass
 
