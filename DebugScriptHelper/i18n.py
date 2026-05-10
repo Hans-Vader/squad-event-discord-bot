@@ -876,6 +876,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Event löschen",
         "en": "Delete event",
     },
+    "admin.open_registration": {
+        "de": "Anmeldung öffnen",
+        "en": "Open registration",
+    },
+    "admin.close_registration": {
+        "de": "Anmeldung schließen",
+        "en": "Close registration",
+    },
     "admin.no_squads": {
         "de": "Keine Squads vorhanden.",
         "en": "No squads available.",

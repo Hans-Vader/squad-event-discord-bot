@@ -1560,6 +1560,8 @@ class AdminActionView(BaseView):
             buttons = [
                 ("admin.add_player", discord.ButtonStyle.success, "_add_player", 0),
                 ("admin.remove_player", discord.ButtonStyle.danger, "_remove_player", 0),
+                ("admin.open_registration", discord.ButtonStyle.success, "_open", 1),
+                ("admin.close_registration", discord.ButtonStyle.secondary, "_close", 1),
                 ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 2),
                 ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 2),
             ]
@@ -1569,8 +1571,10 @@ class AdminActionView(BaseView):
                 ("admin.remove_squad", discord.ButtonStyle.danger, "_remove_squad", 0),
                 ("admin.add_caster", discord.ButtonStyle.success, "_add_caster", 1),
                 ("admin.remove_caster", discord.ButtonStyle.danger, "_remove_caster", 1),
-                ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 2),
-                ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 2),
+                ("admin.open_registration", discord.ButtonStyle.success, "_open", 2),
+                ("admin.close_registration", discord.ButtonStyle.secondary, "_close", 2),
+                ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 3),
+                ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 3),
             ]
 
         for label_key, style, cb_name, row in buttons:
@@ -1622,6 +1626,68 @@ class AdminActionView(BaseView):
             color=discord.Color.red())
         view = DeleteConfirmationView(self.guild_id, self.channel_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    async def _open(self, interaction):
+        gid = self.guild_id
+        cid = self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+            if event.get("registration_open", False):
+                await send_feedback(interaction, t("reg.already_open", lang), ephemeral=True)
+                return
+            event["registration_open"] = True
+            event["is_closed"] = False
+            save_event(db_id, event, user_assignments)
+
+        await send_feedback(interaction, t("reg.manually_opened", lang, name=event["name"]), ephemeral=True)
+
+        ch = bot.get_channel(cid)
+        if ch and event.get("ping_on_open", False):
+            ping_text = _build_ping_text(event)
+            if ping_text:
+                content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
+                ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
+                event.setdefault("ping_message_ids", []).append(ping_msg.id)
+                save_event(db_id, event, user_assignments)
+
+        await update_event_displays(gid, cid)
+        await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild=interaction.guild)
+
+    async def _close(self, interaction):
+        gid = self.guild_id
+        cid = self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+            event["is_closed"] = True
+            event["registration_open"] = False
+            save_event(db_id, event, user_assignments)
+
+        await send_feedback(interaction, t("reg.manually_closed", lang, name=event["name"]), ephemeral=True)
+        await send_to_log_channel(t("log.reg_closed", lang, user=interaction.user.name, name=event["name"]), guild=interaction.guild)
+        await update_event_displays(gid, cid)
+
+        ch = bot.get_channel(cid)
+        if ch:
+            for ping_msg_id in event.get("ping_message_ids", []):
+                try:
+                    ping_msg = await ch.fetch_message(ping_msg_id)
+                    await ping_msg.edit(
+                        content=t("ping.reg_closed", lang, name=event["name"]),
+                        allowed_mentions=discord.AllowedMentions.none())
+                except Exception:
+                    pass
 
     async def _add_squad(self, interaction):
         lang = get_guild_language(self.guild_id)
@@ -4474,78 +4540,6 @@ async def delete_event_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-@bot.tree.command(name="open", description="Open registration immediately (organizer only)")
-async def open_command(interaction: discord.Interaction):
-    if not await check_organizer(interaction):
-        return
-    gid = interaction.guild.id
-    cid = interaction.channel_id
-    lang = _lang(interaction)
-
-    lock = _get_guild_lock(gid)
-    async with lock:
-        event, user_assignments, db_id = _get_channel_event(gid, cid)
-        if not event:
-            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-            return
-        if event.get("registration_open", False):
-            await send_feedback(interaction, t("reg.already_open", lang), ephemeral=True)
-            return
-        event["registration_open"] = True
-        event["is_closed"] = False
-        save_event(db_id, event, user_assignments)
-
-    await send_feedback(interaction, t("reg.manually_opened", lang, name=event["name"]), ephemeral=True)
-
-    settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
-    ch = bot.get_channel(cid)
-    if ch and event.get("ping_on_open", False):
-        ping_text = _build_ping_text(event)
-        if ping_text:
-            content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
-            ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-            event.setdefault("ping_message_ids", []).append(ping_msg.id)
-            save_event(db_id, event, user_assignments)
-
-    await update_event_displays(gid, cid)
-    await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild=interaction.guild)
-
-
-@bot.tree.command(name="close", description="Close registration (organizer only)")
-async def close_command(interaction: discord.Interaction):
-    if not await check_organizer(interaction):
-        return
-    gid = interaction.guild.id
-    cid = interaction.channel_id
-    lang = _lang(interaction)
-
-    lock = _get_guild_lock(gid)
-    async with lock:
-        event, user_assignments, db_id = _get_channel_event(gid, cid)
-        if not event:
-            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-            return
-        event["is_closed"] = True
-        event["registration_open"] = False
-        save_event(db_id, event, user_assignments)
-
-    await send_feedback(interaction, t("reg.manually_closed", lang, name=event["name"]), ephemeral=True)
-    await send_to_log_channel(t("log.reg_closed", lang, user=interaction.user.name, name=event["name"]), guild=interaction.guild)
-    await update_event_displays(gid, cid)
-
-    # Edit tracked ping messages to show "closed"
-    ch = bot.get_channel(cid)
-    if ch:
-        for ping_msg_id in event.get("ping_message_ids", []):
-            try:
-                ping_msg = await ch.fetch_message(ping_msg_id)
-                await ping_msg.edit(
-                    content=t("ping.reg_closed", lang, name=event["name"]),
-                    allowed_mentions=discord.AllowedMentions.none())
-            except Exception:
-                pass
-
-
 @bot.tree.command(name="register", description="Register a squad (guided flow)")
 async def register_command(interaction: discord.Interaction):
     if not await check_guild_configured(interaction):
@@ -5111,7 +5105,7 @@ async def help_command(interaction: discord.Interaction):
         embed.add_field(name="Events", value=(
             "`/event` - Event erstellen (im aktuellen Kanal)\n"
             "`/delete_event` - Event im Kanal löschen\n"
-            "`/open` / `/close` - Registrierung öffnen/schließen\n"
+            "Anmeldung öffnen/schließen → ⚙️ Admin-Button\n"
             "`/register` - Squad anmelden\n"
             "`/unregister` - Abmelden\n"
             "`/update` - Event-Anzeige aktualisieren\n"
@@ -5141,7 +5135,7 @@ async def help_command(interaction: discord.Interaction):
         embed.add_field(name="Events", value=(
             "`/event` - Create event (in current channel)\n"
             "`/delete_event` - Delete event in channel\n"
-            "`/open` / `/close` - Open/close registration\n"
+            "Open/close registration → ⚙️ Admin button\n"
             "`/register` - Register a squad\n"
             "`/unregister` - Unregister\n"
             "`/update` - Refresh event display\n"

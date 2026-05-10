@@ -266,10 +266,11 @@ Players removed from a squad trigger the waitlist promotion (DM + log channel no
 | Command | Description |
 |---|---|
 | `/create_event` | Create a new event (guided wizard) |
-| `/open` | Open registration immediately |
-| `/close` | Close registration |
 | `/delete_event` | Delete the event |
 | `/update` | Refresh the event display |
+
+Open and close registration manually via the **⚙️ Admin** button on the event embed.
+
 
 ### Admin Tools
 
