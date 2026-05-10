@@ -706,12 +706,14 @@ def build_event_summary_embed(event: dict, lang: str = "de") -> Embed:
     # List squads
     if squads:
         lines = []
+        playstyle_enabled = event.get("playstyle_enabled", True)
         for squad_id, data in squads.items():
             type_map = {"infantry": "Inf.", "vehicle": "Veh.", "heli": "Heli"}
             tl = type_map.get(data.get("type", ""), "?")
             rep = data.get("rep_name", "")
             rep_suffix = f" — {rep}" if rep else ""
-            lines.append(f"[{data.get('playstyle', 'Normal')}] **{data.get('name', squad_id)}** ({tl}, {data.get('size', 0)}){rep_suffix}")
+            ps_prefix = f"[{data.get('playstyle', 'Normal')}] " if playstyle_enabled else ""
+            lines.append(f"{ps_prefix}**{data.get('name', squad_id)}** ({tl}, {data.get('size', 0)}){rep_suffix}")
         embed.add_field(
             name=f"{t('embed.squads_label', lang)} ({len(squads)})",
             value="\n".join(lines[:25]) or "—",
@@ -812,6 +814,7 @@ def format_event_details(event: dict, lang: str = "de",
     unused = server_cap - max_casters - (max_inf_squads * inf_size) - vehicle_player_slots - heli_player_slots
 
     is_player_mode = event.get("mode") == "player"
+    playstyle_enabled = event.get("playstyle_enabled", True)
 
     # Slot overview — compact inline grid (row 1: server, caster, max/player)
     overview_name_key = "embed.seats_overview" if is_player_mode else "embed.server_overview"
@@ -848,7 +851,8 @@ def format_event_details(event: dict, lang: str = "de",
                     sq_size = data.get("size", 0)
                     rep = data.get("rep_name")
                     rep_suffix = f" — {rep}" if rep else ""
-                    text += f"[{playstyle}] **{data.get('name', squad_id)}** ({sq_size}){rep_suffix}\n"
+                    ps_prefix = f"[{playstyle}] " if playstyle_enabled else ""
+                    text += f"{ps_prefix}**{data.get('name', squad_id)}** ({sq_size}){rep_suffix}\n"
             embed.add_field(name=name, value=text, inline=False)
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
@@ -866,7 +870,8 @@ def format_event_details(event: dict, lang: str = "de",
                     squad_name, _squad_type, playstyle, sq_size, _squad_id, *_rest = entry
                     rep_name = _rest[0] if _rest else None
                     rep_suffix = f" — {rep_name}" if rep_name else ""
-                    wl_text += f"{i+1}. [{playstyle}] **{squad_name}** ({sq_size}){rep_suffix}\n"
+                    ps_prefix = f"[{playstyle}] " if playstyle_enabled else ""
+                    wl_text += f"{i+1}. {ps_prefix}**{squad_name}** ({sq_size}){rep_suffix}\n"
             embed.add_field(
                 name=t("embed.type_waitlist_label", lang, type=t(f"embed.type_{type_key}", lang), count=len(wl)),
                 value=wl_text, inline=False)

@@ -426,6 +426,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Wähle den Squad-Typ und Spielstil:",
         "en": "Choose squad type and playstyle:",
     },
+    "squad.step_1_desc_no_playstyle": {
+        "de": "Wähle den Squad-Typ:",
+        "en": "Choose squad type:",
+    },
     "squad.type_select": {
         "de": "Squad-Typ wählen...",
         "en": "Choose squad type...",
@@ -482,13 +486,25 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Squad **{name}** ({type}, {size} Spieler, {playstyle}) wurde erfolgreich angemeldet! {info}",
         "en": "Squad **{name}** ({type}, {size} players, {playstyle}) registered successfully! {info}",
     },
+    "squad.registered_no_playstyle": {
+        "de": "Squad **{name}** ({type}, {size} Spieler) wurde erfolgreich angemeldet! {info}",
+        "en": "Squad **{name}** ({type}, {size} players) registered successfully! {info}",
+    },
     "squad.waitlisted": {
         "de": "Nicht genügend Plätze! Squad **{name}** ({type}, {size} Spieler, {playstyle}) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
         "en": "Not enough slots! Squad **{name}** ({type}, {size} players, {playstyle}) has been waitlisted (position {pos}). {info}",
     },
+    "squad.waitlisted_no_playstyle": {
+        "de": "Nicht genügend Plätze! Squad **{name}** ({type}, {size} Spieler) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
+        "en": "Not enough slots! Squad **{name}** ({type}, {size} players) has been waitlisted (position {pos}). {info}",
+    },
     "squad.type_full": {
         "de": "Alle {type}-Plätze sind belegt! Squad **{name}** ({type}, {size} Spieler, {playstyle}) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
         "en": "All {type} slots are taken! Squad **{name}** ({type}, {size} players, {playstyle}) has been waitlisted (position {pos}). {info}",
+    },
+    "squad.type_full_no_playstyle": {
+        "de": "Alle {type}-Plätze sind belegt! Squad **{name}** ({type}, {size} Spieler) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
+        "en": "All {type} slots are taken! Squad **{name}** ({type}, {size} players) has been waitlisted (position {pos}). {info}",
     },
     "squad.duplicate_name": {
         "de": "Ein Squad mit dem Namen '{name}' existiert bereits.",
@@ -1643,16 +1659,40 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "No",
     },
     "wizard.squad_limit_title": {
-        "de": "Squad-Limit pro Spieler (optional)",
-        "en": "Squad Limit per User (optional)",
+        "de": "Squad-Limit & Optionen (optional)",
+        "en": "Squad Limit & Options (optional)",
     },
     "wizard.squad_limit_desc": {
-        "de": "Wie viele Squads darf ein Spieler maximal anmelden? Standard: {default}",
-        "en": "How many squads can a user register at most? Default: {default}",
+        "de": "Wie viele Squads darf ein Spieler maximal anmelden (Standard: {default}) und soll bei der Squad-Anmeldung ein Spielstil ausgewählt werden?",
+        "en": "How many squads can a user register at most (default: {default}), and should a playstyle be selected during squad registration?",
     },
     "wizard.squad_limit_placeholder": {
         "de": "Max. Squads pro Spieler",
         "en": "Max squads per user",
+    },
+    "wizard.playstyle_select_placeholder": {
+        "de": "Spielstil-Auswahl bei Anmeldung...",
+        "en": "Playstyle selection at registration...",
+    },
+    "wizard.playstyle_enabled": {
+        "de": "Spielstil-Auswahl aktivieren",
+        "en": "Enable playstyle selection",
+    },
+    "wizard.playstyle_disabled": {
+        "de": "Spielstil-Auswahl deaktivieren",
+        "en": "Disable playstyle selection",
+    },
+    "wizard.summary_playstyle": {
+        "de": "Spielstil-Auswahl",
+        "en": "Playstyle selection",
+    },
+    "wizard.summary_playstyle_yes": {
+        "de": "Aktiviert",
+        "en": "Enabled",
+    },
+    "wizard.summary_playstyle_no": {
+        "de": "Deaktiviert",
+        "en": "Disabled",
     },
     "ping.reg_closed": {
         "de": "**Die Registrierung für {name} ist geschlossen.**",
@@ -1816,6 +1856,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Squad **{name}** ({type}, {size} Spieler, {playstyle}) hinzugefügt. Status: {status}",
         "en": "Squad **{name}** ({type}, {size} players, {playstyle}) added. Status: {status}",
     },
+    "admin.squad_added_no_playstyle": {
+        "de": "Squad **{name}** ({type}, {size} Spieler) hinzugefügt. Status: {status}",
+        "en": "Squad **{name}** ({type}, {size} players) added. Status: {status}",
+    },
     "admin.squad_added_waitlist": {
         "de": "Warteliste (Position {pos})",
         "en": "Waitlist (position {pos})",
@@ -1859,6 +1903,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "admin.waitlist_squad_entry": {
         "de": "**{pos}.** {name} ({type}, {size} Spieler, {playstyle})",
         "en": "**{pos}.** {name} ({type}, {size} players, {playstyle})",
+    },
+    "admin.waitlist_squad_entry_no_playstyle": {
+        "de": "**{pos}.** {name} ({type}, {size} Spieler)",
+        "en": "**{pos}.** {name} ({type}, {size} players)",
     },
     "admin.waitlist_caster_entry": {
         "de": "**{pos}.** {name} (<@{uid}>)",

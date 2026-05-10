@@ -676,24 +676,28 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
     type_label = type_labels.get(squad_type, squad_type)
     user_squads_now = len(get_user_squad_ids(user_assignments, user_id))
     squad_info = t("squad.your_squads_info", lang, current=user_squads_now, max=max_squads)
+    playstyle_enabled = event.get("playstyle_enabled", True)
 
     if result == "registered":
+        msg_key = "squad.registered" if playstyle_enabled else "squad.registered_no_playstyle"
         await send_feedback(interaction,
-            t("squad.registered", lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, info=squad_info),
+            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, info=squad_info),
             ephemeral=True)
         await send_to_log_channel(
             t("log.squad_registered", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=playstyle),
             guild=interaction.guild)
     elif result == "type_full_waitlisted":
+        msg_key = "squad.type_full" if playstyle_enabled else "squad.type_full_no_playstyle"
         await send_feedback(interaction,
-            t("squad.type_full", lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
+            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
             ephemeral=True)
         await send_to_log_channel(
             t("log.squad_type_full_waitlisted", lang, user=interaction.user.name, squad=squad_name, type=type_label),
             guild=interaction.guild)
     else:
+        msg_key = "squad.waitlisted" if playstyle_enabled else "squad.waitlisted_no_playstyle"
         await send_feedback(interaction,
-            t("squad.waitlisted", lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
+            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
             ephemeral=True)
         await send_to_log_channel(
             t("log.squad_waitlisted", lang, user=interaction.user.name, squad=squad_name),
@@ -1166,8 +1170,9 @@ class EventActionView(ui.View):
 
         settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
         view = SquadRegistrationView(gid, cid, event)
+        desc_key = "squad.step_1_desc" if event.get("playstyle_enabled", True) else "squad.step_1_desc_no_playstyle"
         await interaction.response.send_message(
-            f"**{t('squad.step_1_title', lang)}**\n{t('squad.step_1_desc', lang)}",
+            f"**{t('squad.step_1_title', lang)}**\n{t(desc_key, lang)}",
             view=view, ephemeral=True)
 
     async def _register_caster(self, interaction: discord.Interaction):
@@ -1229,10 +1234,14 @@ class EventActionView(ui.View):
         else:
             squad_ids = [a for a in assignments if a != "__caster__"]
             desc_parts = []
+            playstyle_enabled = bool(event and event.get("playstyle_enabled", True))
             for sid in squad_ids:
                 if event and sid in event.get("squads", {}):
                     d = event["squads"][sid]
-                    desc_parts.append(f"**{d.get('name', sid)}** ({d.get('type', '?')}, {d.get('size', 0)}, {d.get('playstyle', 'Normal')})")
+                    if playstyle_enabled:
+                        desc_parts.append(f"**{d.get('name', sid)}** ({d.get('type', '?')}, {d.get('size', 0)}, {d.get('playstyle', 'Normal')})")
+                    else:
+                        desc_parts.append(f"**{d.get('name', sid)}** ({d.get('type', '?')}, {d.get('size', 0)})")
                 else:
                     display_name = _resolve_squad_name(event, sid) if event else sid
                     desc_parts.append(f"**{display_name}** (Waitlist)")
@@ -1339,7 +1348,8 @@ class SquadRegistrationView(BaseView):
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.selected_type = None
-        self.selected_playstyle = None
+        self.playstyle_enabled = bool(event.get("playstyle_enabled", True))
+        self.selected_playstyle = None if self.playstyle_enabled else "Normal"
         self.event = event
 
         sizes = _get_squad_sizes(event)
@@ -1356,29 +1366,38 @@ class SquadRegistrationView(BaseView):
         self.type_select.callback = lambda i: self._on_select(i, self.type_select, 'selected_type')
         self.add_item(self.type_select)
 
-        self.playstyle_select = ui.Select(
-            placeholder=t("squad.playstyle_select", lang),
-            options=[
-                discord.SelectOption(label="Casual", value="Casual"),
-                discord.SelectOption(label="Normal", value="Normal"),
-                discord.SelectOption(label="Focused", value="Focused"),
-            ],
-            custom_id="squad_playstyle_select", row=1)
-        self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
-        self.add_item(self.playstyle_select)
+        if self.playstyle_enabled:
+            self.playstyle_select = ui.Select(
+                placeholder=t("squad.playstyle_select", lang),
+                options=[
+                    discord.SelectOption(label="Casual", value="Casual"),
+                    discord.SelectOption(label="Normal", value="Normal"),
+                    discord.SelectOption(label="Focused", value="Focused"),
+                ],
+                custom_id="squad_playstyle_select", row=1)
+            self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
+            self.add_item(self.playstyle_select)
+        else:
+            self.playstyle_select = None
 
         self.continue_button = ui.Button(label=t("squad.continue", lang), style=discord.ButtonStyle.success, disabled=True, row=2)
         self.continue_button.callback = self._continue
         self.add_item(self.continue_button)
 
+    def _ready(self):
+        if self.playstyle_enabled:
+            return bool(self.selected_type and self.selected_playstyle)
+        return bool(self.selected_type)
+
     def _build_status_content(self):
         lang = get_guild_language(self.guild_id)
         sizes = _get_squad_sizes(self.event)
-        lines = [f"**{t('squad.step_1_title', lang)}**", t("squad.step_1_desc", lang)]
+        desc_key = "squad.step_1_desc" if self.playstyle_enabled else "squad.step_1_desc_no_playstyle"
+        lines = [f"**{t('squad.step_1_title', lang)}**", t(desc_key, lang)]
         if self.selected_type:
             type_label = t(f"squad.type_{self.selected_type}", lang, size=sizes.get(self.selected_type, "?"))
             lines.append(t("squad.selected_type", lang, label=type_label))
-        if self.selected_playstyle:
+        if self.playstyle_enabled and self.selected_playstyle:
             lines.append(t("squad.selected_playstyle", lang, label=self.selected_playstyle))
         return "\n".join(lines)
 
@@ -1386,13 +1405,12 @@ class SquadRegistrationView(BaseView):
         setattr(self, attr, select.values[0])
         for opt in select.options:
             opt.default = opt.value == select.values[0]
-        self.continue_button.disabled = not (self.selected_type and self.selected_playstyle)
+        self.continue_button.disabled = not self._ready()
         await interaction.response.edit_message(content=self._build_status_content(), view=self)
 
     async def _continue(self, interaction):
-        if not self.selected_type or not self.selected_playstyle:
+        if not self._ready():
             return
-        lang = get_guild_language(self.guild_id)
         modal = SquadNameModal(self.guild_id, self.channel_id, self.selected_type, self.selected_playstyle)
         await interaction.response.send_modal(modal)
 
@@ -1938,8 +1956,9 @@ class _AdminSquadRegView(BaseView):
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.event = event
+        self.playstyle_enabled = bool(event.get("playstyle_enabled", True))
         self.selected_type = None
-        self.selected_playstyle = None
+        self.selected_playstyle = None if self.playstyle_enabled else "Normal"
         self.selected_user = None
 
         sizes = _get_squad_sizes(event)
@@ -1955,15 +1974,18 @@ class _AdminSquadRegView(BaseView):
         self.type_select.callback = lambda i: self._on_select(i, self.type_select, 'selected_type')
         self.add_item(self.type_select)
 
-        self.playstyle_select = ui.Select(
-            placeholder=t("squad.playstyle_select", lang),
-            options=[
-                discord.SelectOption(label="Casual", value="Casual"),
-                discord.SelectOption(label="Normal", value="Normal"),
-                discord.SelectOption(label="Focused", value="Focused"),
-            ], row=1)
-        self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
-        self.add_item(self.playstyle_select)
+        if self.playstyle_enabled:
+            self.playstyle_select = ui.Select(
+                placeholder=t("squad.playstyle_select", lang),
+                options=[
+                    discord.SelectOption(label="Casual", value="Casual"),
+                    discord.SelectOption(label="Normal", value="Normal"),
+                    discord.SelectOption(label="Focused", value="Focused"),
+                ], row=1)
+            self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
+            self.add_item(self.playstyle_select)
+        else:
+            self.playstyle_select = None
 
         self.user_select = ui.UserSelect(
             placeholder=t("admin.select_rep_user", lang), min_values=1, max_values=1, row=2)
@@ -1978,18 +2000,21 @@ class _AdminSquadRegView(BaseView):
     def _build_status(self):
         lang = get_guild_language(self.guild_id)
         sizes = _get_squad_sizes(self.event)
-        lines = [f"**{t('squad.step_1_title', lang)}**", t("squad.step_1_desc", lang)]
+        desc_key = "squad.step_1_desc" if self.playstyle_enabled else "squad.step_1_desc_no_playstyle"
+        lines = [f"**{t('squad.step_1_title', lang)}**", t(desc_key, lang)]
         if self.selected_type:
             type_label = t(f"squad.type_{self.selected_type}", lang, size=sizes.get(self.selected_type, "?"))
             lines.append(t("squad.selected_type", lang, label=type_label))
-        if self.selected_playstyle:
+        if self.playstyle_enabled and self.selected_playstyle:
             lines.append(t("squad.selected_playstyle", lang, label=self.selected_playstyle))
         if self.selected_user:
             lines.append(t("admin.selected_rep_user", lang, user=self.selected_user.display_name))
         return "\n".join(lines)
 
     def _all_selected(self):
-        return self.selected_type and self.selected_playstyle and self.selected_user
+        if self.playstyle_enabled:
+            return self.selected_type and self.selected_playstyle and self.selected_user
+        return self.selected_type and self.selected_user
 
     async def _on_select(self, interaction, select, attr):
         setattr(self, attr, select.values[0])
@@ -2071,8 +2096,9 @@ class _AdminSquadNameModal(ui.Modal):
         type_labels = {"infantry": "Infanterie" if lang == "de" else "Infantry",
                        "vehicle": "Fahrzeug" if lang == "de" else "Vehicle", "heli": "Heli"}
         type_label = type_labels.get(self.squad_type, self.squad_type)
+        msg_key = "admin.squad_added" if event.get("playstyle_enabled", True) else "admin.squad_added_no_playstyle"
         await interaction.followup.send(
-            t("admin.squad_added", lang, name=squad_name, type=type_label, size=size, playstyle=self.playstyle, status=status),
+            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=self.playstyle, status=status),
             ephemeral=True)
         await send_to_log_channel(
             t("log.admin_squad_added", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=self.playstyle),
@@ -3280,7 +3306,7 @@ class WizardTimingView(BaseView):
 
 
 class WizardSquadLimitView(BaseView):
-    """Step 4: configure max squads per user for this event."""
+    """Step 4: configure max squads per user and squad-registration options."""
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
         super().__init__(timeout=300, title="Wizard Squad Limit")
@@ -3303,23 +3329,46 @@ class WizardSquadLimitView(BaseView):
         self.limit_select.callback = self._limit_selected
         self.add_item(self.limit_select)
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=1)
+        playstyle_default = bool(event.get("playstyle_enabled", True))
+        self.playstyle_select = ui.Select(
+            placeholder=t("wizard.playstyle_select_placeholder", lang),
+            options=[
+                discord.SelectOption(label=t("wizard.playstyle_enabled", lang),
+                                     value="yes", default=playstyle_default),
+                discord.SelectOption(label=t("wizard.playstyle_disabled", lang),
+                                     value="no", default=not playstyle_default),
+            ],
+            min_values=1, max_values=1, row=1)
+        self.playstyle_select.callback = self._playstyle_selected
+        self.add_item(self.playstyle_select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=2)
         skip_btn.callback = self._skip
         self.add_item(skip_btn)
 
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=1)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=2)
         continue_btn.callback = self._continue
         self.add_item(continue_btn)
 
         self._selected_limit = None
+        self._selected_playstyle_enabled = None
 
     async def _limit_selected(self, interaction):
         self._selected_limit = int(self.limit_select.values[0])
         await interaction.response.defer()
 
-    async def _continue(self, interaction):
+    async def _playstyle_selected(self, interaction):
+        self._selected_playstyle_enabled = self.playstyle_select.values[0] == "yes"
+        await interaction.response.defer()
+
+    def _save_selections(self):
         if self._selected_limit is not None:
             self.event["max_squads_per_user"] = self._selected_limit
+        if self._selected_playstyle_enabled is not None:
+            self.event["playstyle_enabled"] = self._selected_playstyle_enabled
+
+    async def _continue(self, interaction):
+        self._save_selections()
         embed = _build_confirmation_embed(self.event, self.guild_id)
         confirm_view = WizardConfirmationView(
             self.guild_id, self.channel_id, self.event, self.user_assignments,
@@ -3383,6 +3432,12 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
 
     ping_val = t("wizard.summary_ping_yes", lang) if event.get("ping_on_open", False) else t("wizard.summary_ping_no", lang)
     embed.add_field(name=t("wizard.summary_ping", lang), value=ping_val, inline=True)
+
+    if event.get("mode", "rep") != "player":
+        playstyle_val = (t("wizard.summary_playstyle_yes", lang)
+                         if event.get("playstyle_enabled", True)
+                         else t("wizard.summary_playstyle_no", lang))
+        embed.add_field(name=t("wizard.summary_playstyle", lang), value=playstyle_val, inline=True)
 
     if event.get("registration_start_time") is not None:
         cd_seconds = event.get("countdown_seconds")
@@ -4497,8 +4552,9 @@ async def register_command(interaction: discord.Interaction):
         return
 
     view = SquadRegistrationView(gid, cid, event)
+    desc_key = "squad.step_1_desc" if event.get("playstyle_enabled", True) else "squad.step_1_desc_no_playstyle"
     await interaction.response.send_message(
-        f"**{t('squad.step_1_title', lang)}**\n{t('squad.step_1_desc', lang)}",
+        f"**{t('squad.step_1_title', lang)}**\n{t(desc_key, lang)}",
         view=view, ephemeral=True)
 
 
@@ -4798,13 +4854,16 @@ async def admin_waitlist_cmd(interaction: discord.Interaction):
         color=discord.Color.orange())
 
     type_labels = {"infantry": "Inf.", "vehicle": "Veh.", "heli": "Heli"}
+    entry_key = ("admin.waitlist_squad_entry"
+                 if event.get("playstyle_enabled", True)
+                 else "admin.waitlist_squad_entry_no_playstyle")
     for st in SQUAD_TYPES:
         wl = event.get(_waitlist_key(st), [])
         if wl:
             lines = []
             for i, entry in enumerate(wl, 1):
                 squad_name, squad_type, playstyle, size, *_rest = entry
-                lines.append(t("admin.waitlist_squad_entry", lang,
+                lines.append(t(entry_key, lang,
                               pos=i, name=squad_name, type=type_labels.get(squad_type, squad_type),
                               size=size, playstyle=playstyle))
             embed.add_field(
