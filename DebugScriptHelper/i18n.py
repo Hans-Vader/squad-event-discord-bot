@@ -1312,6 +1312,26 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "18. Folgeevent-Verzögerung",
         "en": "18. Spawn delay",
     },
+    "edit.property.playstyle_enabled": {
+        "de": "19. Spielstil-Auswahl bei Anmeldung",
+        "en": "19. Playstyle selection at registration",
+    },
+    "edit.bool.enabled": {
+        "de": "Aktiviert",
+        "en": "Enabled",
+    },
+    "edit.bool.disabled": {
+        "de": "Deaktiviert",
+        "en": "Disabled",
+    },
+    "edit.bool_hint": {
+        "de": "Antworte mit `aktiviert` / `deaktiviert` (oder `ja` / `nein`).",
+        "en": "Reply with `enabled` / `disabled` (or `yes` / `no`).",
+    },
+    "edit.invalid_bool": {
+        "de": "Ungültige Eingabe. Antworte mit `aktiviert` oder `deaktiviert`.",
+        "en": "Invalid input. Reply with `enabled` or `disabled`.",
+    },
     "edit.duration.prompt": {
         "de": (
             "Wie lange dauert das Event?\n"

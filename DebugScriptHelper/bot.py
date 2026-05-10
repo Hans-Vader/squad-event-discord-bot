@@ -109,6 +109,7 @@ _EDIT_PROPERTIES = [
     (16, "recurrence",             "edit.property.recurrence",      "recurrence",      None),
     (17, "duration_minutes",       "edit.property.duration",        "duration",        None),
     (18, "spawn_offset_minutes",   "edit.property.spawn_offset",    "spawn_offset",    None),
+    (19, "playstyle_enabled",      "edit.property.playstyle_enabled","bool",           None),
 ]
 
 
@@ -204,6 +205,7 @@ def _ensure_event_keys(event: dict):
         "recurrence": {"type": "never"},
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "mode": "rep",
+        "playstyle_enabled": True,
     }
     for key, default in defaults.items():
         if key not in event:
@@ -2365,6 +2367,8 @@ def _format_property_value(event, key, vtype, lang):
     """Format a property value for display in the edit list."""
     not_set = t("edit.not_set", lang)
     val = event.get(key)
+    if vtype == "bool":
+        return t("edit.bool.enabled", lang) if val else t("edit.bool.disabled", lang)
     if vtype in ("string", "string_nullable"):
         return str(val) if val else not_set
     if vtype == "date":
@@ -2469,6 +2473,16 @@ def _validate_edit_value(message, key, vtype, lang):
             return text, None
         return None, "edit.invalid_url"
 
+    if vtype == "bool":
+        yes = {"yes", "ja", "y", "j", "true", "1", "on", "an", "aktiviert", "enabled", "enable"}
+        no_ = {"no", "nein", "n", "false", "0", "off", "aus", "deaktiviert", "disabled", "disable"}
+        lower = text.lower()
+        if lower in yes:
+            return True, None
+        if lower in no_:
+            return False, None
+        return None, "edit.invalid_bool"
+
     return text, None
 
 
@@ -2480,6 +2494,8 @@ def _format_display_value(value, vtype, lang, event=None):
         return _format_duration_value(value, lang)
     if vtype == "spawn_offset":
         return _format_spawn_offset_value(value, lang)
+    if vtype == "bool":
+        return t("edit.bool.enabled", lang) if value else t("edit.bool.disabled", lang)
     if value is None:
         return t("edit.not_set", lang)
     if value == "__immediate__":
@@ -2687,6 +2703,16 @@ class _EditMoreView(ui.View):
         self.stop()
 
 
+def _visible_edit_properties(event):
+    """Return the editable properties relevant to this event's mode.
+
+    Player-mode events never use playstyle, so the toggle is hidden there.
+    """
+    if is_player_mode(event):
+        return [p for p in _EDIT_PROPERTIES if p[1] != "playstyle_enabled"]
+    return list(_EDIT_PROPERTIES)
+
+
 async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
     """Run the full DM-based event editing conversation."""
     try:
@@ -2706,11 +2732,12 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                 await user.send(t("general.no_active_event", lang))
                 break
 
-            # Build grouped embed property list
+            # Build grouped embed property list (mode-filtered)
+            visible_props = _visible_edit_properties(event)
             groups = [
-                ("edit.group.general", _EDIT_PROPERTIES[0:4]),
-                ("edit.group.squad_config", _EDIT_PROPERTIES[4:12]),
-                ("edit.group.extras", _EDIT_PROPERTIES[12:]),
+                ("edit.group.general", visible_props[0:4]),
+                ("edit.group.squad_config", visible_props[4:12]),
+                ("edit.group.extras", visible_props[12:]),
             ]
             edit_embed = discord.Embed(
                 title=t("edit.title", lang),
@@ -2744,14 +2771,14 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
             try:
                 choice = int(reply.content.strip())
             except ValueError:
-                await user.send(t("edit.invalid_number", lang, max=len(_EDIT_PROPERTIES)))
+                await user.send(t("edit.invalid_number", lang, max=len(visible_props)))
                 continue
 
-            if choice < 1 or choice > len(_EDIT_PROPERTIES):
-                await user.send(t("edit.invalid_number", lang, max=len(_EDIT_PROPERTIES)))
+            if choice < 1 or choice > len(visible_props):
+                await user.send(t("edit.invalid_number", lang, max=len(visible_props)))
                 continue
 
-            num, key, label_key, vtype, special = _EDIT_PROPERTIES[choice - 1]
+            num, key, label_key, vtype, special = visible_props[choice - 1]
 
             # Show current value and prompt for new one
             current_display = _format_property_value(event, key, vtype, lang)
@@ -2794,6 +2821,8 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                     prompt += t("edit.reg_start_hint", lang)
                 elif vtype == "string_nullable":
                     prompt += t("edit.description_hint", lang)
+                elif vtype == "bool":
+                    prompt += t("edit.bool_hint", lang)
                 else:
                     prompt += t("edit.enter_new_value", lang)
 
