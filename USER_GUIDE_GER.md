@@ -266,10 +266,11 @@ Wenn ein Spieler aus einem Squad entfernt wird, wird die Warteliste-Beförderung
 | Befehl | Beschreibung |
 |---|---|
 | `/create_event` | Neues Event erstellen (geführter Wizard) |
-| `/open` | Anmeldung sofort öffnen |
-| `/close` | Anmeldung schließen |
 | `/delete_event` | Event löschen |
 | `/update` | Event-Anzeige aktualisieren |
+
+Anmeldung manuell öffnen oder schließen über den **⚙️ Admin**-Button im Event-Embed.
+
 
 ### Admin-Tools
 

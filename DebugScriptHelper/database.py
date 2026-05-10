@@ -347,6 +347,7 @@ def build_default_event(settings: dict, name: str, date: str, time_str: str,
         "duration_minutes": overrides.get("duration_minutes", 120),
         "spawn_offset_minutes": overrides.get("spawn_offset_minutes", 5),
         "mode": overrides.get("mode", "rep"),
+        "playstyle_enabled": overrides.get("playstyle_enabled", True),
     }
 
 
@@ -371,6 +372,7 @@ _CARRY_OVER_KEYS = (
     "recurrence",
     "duration_minutes", "spawn_offset_minutes",
     "mode",
+    "playstyle_enabled",
 )
 
 

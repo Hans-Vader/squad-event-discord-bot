@@ -55,12 +55,13 @@ All buttons are visible to every user. Permissions are checked on click.
 
 ### Admin Panel (Organizer role required)
 
-The admin panel opens via the **Admin** button and provides 6 actions in 3 rows:
+The admin panel opens via the **Admin** button and provides actions grouped per row:
 
 | Row | Buttons |
 |---|---|
 | Squad | Add Squad (with type, playstyle, and representative user selection) · Remove Squad |
 | Caster | Add Caster (user selector) · Remove Caster |
+| Registration | Open Registration · Close Registration |
 | Event | Edit Event (via DM) · Delete Event |
 
 ### Organizer Commands
@@ -69,8 +70,6 @@ The admin panel opens via the **Admin** button and provides 6 actions in 3 rows:
 |---|---|
 | `/create_event` | Create a new event (guided wizard) |
 | `/delete_event` | Delete the event in this channel |
-| `/open` | Open registration immediately |
-| `/close` | Close registration |
 | `/update` | Refresh event display |
 | `/set_event_roles` | Add roles to the event (ping, squad-rep, community-rep, caster, caster early-access) |
 | `/clear_event_roles` | Clear event roles (all or by category) |

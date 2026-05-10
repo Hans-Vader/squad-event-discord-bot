@@ -109,6 +109,7 @@ _EDIT_PROPERTIES = [
     (16, "recurrence",             "edit.property.recurrence",      "recurrence",      None),
     (17, "duration_minutes",       "edit.property.duration",        "duration",        None),
     (18, "spawn_offset_minutes",   "edit.property.spawn_offset",    "spawn_offset",    None),
+    (19, "playstyle_enabled",      "edit.property.playstyle_enabled","bool",           None),
 ]
 
 
@@ -204,6 +205,7 @@ def _ensure_event_keys(event: dict):
         "recurrence": {"type": "never"},
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "mode": "rep",
+        "playstyle_enabled": True,
     }
     for key, default in defaults.items():
         if key not in event:
@@ -676,24 +678,28 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
     type_label = type_labels.get(squad_type, squad_type)
     user_squads_now = len(get_user_squad_ids(user_assignments, user_id))
     squad_info = t("squad.your_squads_info", lang, current=user_squads_now, max=max_squads)
+    playstyle_enabled = event.get("playstyle_enabled", True)
 
     if result == "registered":
+        msg_key = "squad.registered" if playstyle_enabled else "squad.registered_no_playstyle"
         await send_feedback(interaction,
-            t("squad.registered", lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, info=squad_info),
+            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, info=squad_info),
             ephemeral=True)
         await send_to_log_channel(
             t("log.squad_registered", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=playstyle),
             guild=interaction.guild)
     elif result == "type_full_waitlisted":
+        msg_key = "squad.type_full" if playstyle_enabled else "squad.type_full_no_playstyle"
         await send_feedback(interaction,
-            t("squad.type_full", lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
+            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
             ephemeral=True)
         await send_to_log_channel(
             t("log.squad_type_full_waitlisted", lang, user=interaction.user.name, squad=squad_name, type=type_label),
             guild=interaction.guild)
     else:
+        msg_key = "squad.waitlisted" if playstyle_enabled else "squad.waitlisted_no_playstyle"
         await send_feedback(interaction,
-            t("squad.waitlisted", lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
+            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
             ephemeral=True)
         await send_to_log_channel(
             t("log.squad_waitlisted", lang, user=interaction.user.name, squad=squad_name),
@@ -1166,8 +1172,9 @@ class EventActionView(ui.View):
 
         settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
         view = SquadRegistrationView(gid, cid, event)
+        desc_key = "squad.step_1_desc" if event.get("playstyle_enabled", True) else "squad.step_1_desc_no_playstyle"
         await interaction.response.send_message(
-            f"**{t('squad.step_1_title', lang)}**\n{t('squad.step_1_desc', lang)}",
+            f"**{t('squad.step_1_title', lang)}**\n{t(desc_key, lang)}",
             view=view, ephemeral=True)
 
     async def _register_caster(self, interaction: discord.Interaction):
@@ -1229,10 +1236,14 @@ class EventActionView(ui.View):
         else:
             squad_ids = [a for a in assignments if a != "__caster__"]
             desc_parts = []
+            playstyle_enabled = bool(event and event.get("playstyle_enabled", True))
             for sid in squad_ids:
                 if event and sid in event.get("squads", {}):
                     d = event["squads"][sid]
-                    desc_parts.append(f"**{d.get('name', sid)}** ({d.get('type', '?')}, {d.get('size', 0)}, {d.get('playstyle', 'Normal')})")
+                    if playstyle_enabled:
+                        desc_parts.append(f"**{d.get('name', sid)}** ({d.get('type', '?')}, {d.get('size', 0)}, {d.get('playstyle', 'Normal')})")
+                    else:
+                        desc_parts.append(f"**{d.get('name', sid)}** ({d.get('type', '?')}, {d.get('size', 0)})")
                 else:
                     display_name = _resolve_squad_name(event, sid) if event else sid
                     desc_parts.append(f"**{display_name}** (Waitlist)")
@@ -1339,7 +1350,8 @@ class SquadRegistrationView(BaseView):
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.selected_type = None
-        self.selected_playstyle = None
+        self.playstyle_enabled = bool(event.get("playstyle_enabled", True))
+        self.selected_playstyle = None if self.playstyle_enabled else "Normal"
         self.event = event
 
         sizes = _get_squad_sizes(event)
@@ -1356,29 +1368,38 @@ class SquadRegistrationView(BaseView):
         self.type_select.callback = lambda i: self._on_select(i, self.type_select, 'selected_type')
         self.add_item(self.type_select)
 
-        self.playstyle_select = ui.Select(
-            placeholder=t("squad.playstyle_select", lang),
-            options=[
-                discord.SelectOption(label="Casual", value="Casual"),
-                discord.SelectOption(label="Normal", value="Normal"),
-                discord.SelectOption(label="Focused", value="Focused"),
-            ],
-            custom_id="squad_playstyle_select", row=1)
-        self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
-        self.add_item(self.playstyle_select)
+        if self.playstyle_enabled:
+            self.playstyle_select = ui.Select(
+                placeholder=t("squad.playstyle_select", lang),
+                options=[
+                    discord.SelectOption(label="Casual", value="Casual"),
+                    discord.SelectOption(label="Normal", value="Normal"),
+                    discord.SelectOption(label="Focused", value="Focused"),
+                ],
+                custom_id="squad_playstyle_select", row=1)
+            self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
+            self.add_item(self.playstyle_select)
+        else:
+            self.playstyle_select = None
 
         self.continue_button = ui.Button(label=t("squad.continue", lang), style=discord.ButtonStyle.success, disabled=True, row=2)
         self.continue_button.callback = self._continue
         self.add_item(self.continue_button)
 
+    def _ready(self):
+        if self.playstyle_enabled:
+            return bool(self.selected_type and self.selected_playstyle)
+        return bool(self.selected_type)
+
     def _build_status_content(self):
         lang = get_guild_language(self.guild_id)
         sizes = _get_squad_sizes(self.event)
-        lines = [f"**{t('squad.step_1_title', lang)}**", t("squad.step_1_desc", lang)]
+        desc_key = "squad.step_1_desc" if self.playstyle_enabled else "squad.step_1_desc_no_playstyle"
+        lines = [f"**{t('squad.step_1_title', lang)}**", t(desc_key, lang)]
         if self.selected_type:
             type_label = t(f"squad.type_{self.selected_type}", lang, size=sizes.get(self.selected_type, "?"))
             lines.append(t("squad.selected_type", lang, label=type_label))
-        if self.selected_playstyle:
+        if self.playstyle_enabled and self.selected_playstyle:
             lines.append(t("squad.selected_playstyle", lang, label=self.selected_playstyle))
         return "\n".join(lines)
 
@@ -1386,13 +1407,12 @@ class SquadRegistrationView(BaseView):
         setattr(self, attr, select.values[0])
         for opt in select.options:
             opt.default = opt.value == select.values[0]
-        self.continue_button.disabled = not (self.selected_type and self.selected_playstyle)
+        self.continue_button.disabled = not self._ready()
         await interaction.response.edit_message(content=self._build_status_content(), view=self)
 
     async def _continue(self, interaction):
-        if not self.selected_type or not self.selected_playstyle:
+        if not self._ready():
             return
-        lang = get_guild_language(self.guild_id)
         modal = SquadNameModal(self.guild_id, self.channel_id, self.selected_type, self.selected_playstyle)
         await interaction.response.send_modal(modal)
 
@@ -1540,6 +1560,8 @@ class AdminActionView(BaseView):
             buttons = [
                 ("admin.add_player", discord.ButtonStyle.success, "_add_player", 0),
                 ("admin.remove_player", discord.ButtonStyle.danger, "_remove_player", 0),
+                ("admin.open_registration", discord.ButtonStyle.success, "_open", 1),
+                ("admin.close_registration", discord.ButtonStyle.secondary, "_close", 1),
                 ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 2),
                 ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 2),
             ]
@@ -1549,8 +1571,10 @@ class AdminActionView(BaseView):
                 ("admin.remove_squad", discord.ButtonStyle.danger, "_remove_squad", 0),
                 ("admin.add_caster", discord.ButtonStyle.success, "_add_caster", 1),
                 ("admin.remove_caster", discord.ButtonStyle.danger, "_remove_caster", 1),
-                ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 2),
-                ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 2),
+                ("admin.open_registration", discord.ButtonStyle.success, "_open", 2),
+                ("admin.close_registration", discord.ButtonStyle.secondary, "_close", 2),
+                ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 3),
+                ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 3),
             ]
 
         for label_key, style, cb_name, row in buttons:
@@ -1602,6 +1626,68 @@ class AdminActionView(BaseView):
             color=discord.Color.red())
         view = DeleteConfirmationView(self.guild_id, self.channel_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    async def _open(self, interaction):
+        gid = self.guild_id
+        cid = self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+            if event.get("registration_open", False):
+                await send_feedback(interaction, t("reg.already_open", lang), ephemeral=True)
+                return
+            event["registration_open"] = True
+            event["is_closed"] = False
+            save_event(db_id, event, user_assignments)
+
+        await send_feedback(interaction, t("reg.manually_opened", lang, name=event["name"]), ephemeral=True)
+
+        ch = bot.get_channel(cid)
+        if ch and event.get("ping_on_open", False):
+            ping_text = _build_ping_text(event)
+            if ping_text:
+                content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
+                ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
+                event.setdefault("ping_message_ids", []).append(ping_msg.id)
+                save_event(db_id, event, user_assignments)
+
+        await update_event_displays(gid, cid)
+        await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild=interaction.guild)
+
+    async def _close(self, interaction):
+        gid = self.guild_id
+        cid = self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+            event["is_closed"] = True
+            event["registration_open"] = False
+            save_event(db_id, event, user_assignments)
+
+        await send_feedback(interaction, t("reg.manually_closed", lang, name=event["name"]), ephemeral=True)
+        await send_to_log_channel(t("log.reg_closed", lang, user=interaction.user.name, name=event["name"]), guild=interaction.guild)
+        await update_event_displays(gid, cid)
+
+        ch = bot.get_channel(cid)
+        if ch:
+            for ping_msg_id in event.get("ping_message_ids", []):
+                try:
+                    ping_msg = await ch.fetch_message(ping_msg_id)
+                    await ping_msg.edit(
+                        content=t("ping.reg_closed", lang, name=event["name"]),
+                        allowed_mentions=discord.AllowedMentions.none())
+                except Exception:
+                    pass
 
     async def _add_squad(self, interaction):
         lang = get_guild_language(self.guild_id)
@@ -1938,8 +2024,9 @@ class _AdminSquadRegView(BaseView):
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.event = event
+        self.playstyle_enabled = bool(event.get("playstyle_enabled", True))
         self.selected_type = None
-        self.selected_playstyle = None
+        self.selected_playstyle = None if self.playstyle_enabled else "Normal"
         self.selected_user = None
 
         sizes = _get_squad_sizes(event)
@@ -1955,15 +2042,18 @@ class _AdminSquadRegView(BaseView):
         self.type_select.callback = lambda i: self._on_select(i, self.type_select, 'selected_type')
         self.add_item(self.type_select)
 
-        self.playstyle_select = ui.Select(
-            placeholder=t("squad.playstyle_select", lang),
-            options=[
-                discord.SelectOption(label="Casual", value="Casual"),
-                discord.SelectOption(label="Normal", value="Normal"),
-                discord.SelectOption(label="Focused", value="Focused"),
-            ], row=1)
-        self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
-        self.add_item(self.playstyle_select)
+        if self.playstyle_enabled:
+            self.playstyle_select = ui.Select(
+                placeholder=t("squad.playstyle_select", lang),
+                options=[
+                    discord.SelectOption(label="Casual", value="Casual"),
+                    discord.SelectOption(label="Normal", value="Normal"),
+                    discord.SelectOption(label="Focused", value="Focused"),
+                ], row=1)
+            self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
+            self.add_item(self.playstyle_select)
+        else:
+            self.playstyle_select = None
 
         self.user_select = ui.UserSelect(
             placeholder=t("admin.select_rep_user", lang), min_values=1, max_values=1, row=2)
@@ -1978,18 +2068,21 @@ class _AdminSquadRegView(BaseView):
     def _build_status(self):
         lang = get_guild_language(self.guild_id)
         sizes = _get_squad_sizes(self.event)
-        lines = [f"**{t('squad.step_1_title', lang)}**", t("squad.step_1_desc", lang)]
+        desc_key = "squad.step_1_desc" if self.playstyle_enabled else "squad.step_1_desc_no_playstyle"
+        lines = [f"**{t('squad.step_1_title', lang)}**", t(desc_key, lang)]
         if self.selected_type:
             type_label = t(f"squad.type_{self.selected_type}", lang, size=sizes.get(self.selected_type, "?"))
             lines.append(t("squad.selected_type", lang, label=type_label))
-        if self.selected_playstyle:
+        if self.playstyle_enabled and self.selected_playstyle:
             lines.append(t("squad.selected_playstyle", lang, label=self.selected_playstyle))
         if self.selected_user:
             lines.append(t("admin.selected_rep_user", lang, user=self.selected_user.display_name))
         return "\n".join(lines)
 
     def _all_selected(self):
-        return self.selected_type and self.selected_playstyle and self.selected_user
+        if self.playstyle_enabled:
+            return self.selected_type and self.selected_playstyle and self.selected_user
+        return self.selected_type and self.selected_user
 
     async def _on_select(self, interaction, select, attr):
         setattr(self, attr, select.values[0])
@@ -2071,8 +2164,9 @@ class _AdminSquadNameModal(ui.Modal):
         type_labels = {"infantry": "Infanterie" if lang == "de" else "Infantry",
                        "vehicle": "Fahrzeug" if lang == "de" else "Vehicle", "heli": "Heli"}
         type_label = type_labels.get(self.squad_type, self.squad_type)
+        msg_key = "admin.squad_added" if event.get("playstyle_enabled", True) else "admin.squad_added_no_playstyle"
         await interaction.followup.send(
-            t("admin.squad_added", lang, name=squad_name, type=type_label, size=size, playstyle=self.playstyle, status=status),
+            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=self.playstyle, status=status),
             ephemeral=True)
         await send_to_log_channel(
             t("log.admin_squad_added", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=self.playstyle),
@@ -2339,6 +2433,8 @@ def _format_property_value(event, key, vtype, lang):
     """Format a property value for display in the edit list."""
     not_set = t("edit.not_set", lang)
     val = event.get(key)
+    if vtype == "bool":
+        return t("edit.bool.enabled", lang) if val else t("edit.bool.disabled", lang)
     if vtype in ("string", "string_nullable"):
         return str(val) if val else not_set
     if vtype == "date":
@@ -2443,6 +2539,16 @@ def _validate_edit_value(message, key, vtype, lang):
             return text, None
         return None, "edit.invalid_url"
 
+    if vtype == "bool":
+        yes = {"yes", "ja", "y", "j", "true", "1", "on", "an", "aktiviert", "enabled", "enable"}
+        no_ = {"no", "nein", "n", "false", "0", "off", "aus", "deaktiviert", "disabled", "disable"}
+        lower = text.lower()
+        if lower in yes:
+            return True, None
+        if lower in no_:
+            return False, None
+        return None, "edit.invalid_bool"
+
     return text, None
 
 
@@ -2454,6 +2560,8 @@ def _format_display_value(value, vtype, lang, event=None):
         return _format_duration_value(value, lang)
     if vtype == "spawn_offset":
         return _format_spawn_offset_value(value, lang)
+    if vtype == "bool":
+        return t("edit.bool.enabled", lang) if value else t("edit.bool.disabled", lang)
     if value is None:
         return t("edit.not_set", lang)
     if value == "__immediate__":
@@ -2661,6 +2769,16 @@ class _EditMoreView(ui.View):
         self.stop()
 
 
+def _visible_edit_properties(event):
+    """Return the editable properties relevant to this event's mode.
+
+    Player-mode events never use playstyle, so the toggle is hidden there.
+    """
+    if is_player_mode(event):
+        return [p for p in _EDIT_PROPERTIES if p[1] != "playstyle_enabled"]
+    return list(_EDIT_PROPERTIES)
+
+
 async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
     """Run the full DM-based event editing conversation."""
     try:
@@ -2680,11 +2798,12 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                 await user.send(t("general.no_active_event", lang))
                 break
 
-            # Build grouped embed property list
+            # Build grouped embed property list (mode-filtered)
+            visible_props = _visible_edit_properties(event)
             groups = [
-                ("edit.group.general", _EDIT_PROPERTIES[0:4]),
-                ("edit.group.squad_config", _EDIT_PROPERTIES[4:12]),
-                ("edit.group.extras", _EDIT_PROPERTIES[12:]),
+                ("edit.group.general", visible_props[0:4]),
+                ("edit.group.squad_config", visible_props[4:12]),
+                ("edit.group.extras", visible_props[12:]),
             ]
             edit_embed = discord.Embed(
                 title=t("edit.title", lang),
@@ -2718,14 +2837,14 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
             try:
                 choice = int(reply.content.strip())
             except ValueError:
-                await user.send(t("edit.invalid_number", lang, max=len(_EDIT_PROPERTIES)))
+                await user.send(t("edit.invalid_number", lang, max=len(visible_props)))
                 continue
 
-            if choice < 1 or choice > len(_EDIT_PROPERTIES):
-                await user.send(t("edit.invalid_number", lang, max=len(_EDIT_PROPERTIES)))
+            if choice < 1 or choice > len(visible_props):
+                await user.send(t("edit.invalid_number", lang, max=len(visible_props)))
                 continue
 
-            num, key, label_key, vtype, special = _EDIT_PROPERTIES[choice - 1]
+            num, key, label_key, vtype, special = visible_props[choice - 1]
 
             # Show current value and prompt for new one
             current_display = _format_property_value(event, key, vtype, lang)
@@ -2768,6 +2887,8 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                     prompt += t("edit.reg_start_hint", lang)
                 elif vtype == "string_nullable":
                     prompt += t("edit.description_hint", lang)
+                elif vtype == "bool":
+                    prompt += t("edit.bool_hint", lang)
                 else:
                     prompt += t("edit.enter_new_value", lang)
 
@@ -3280,7 +3401,7 @@ class WizardTimingView(BaseView):
 
 
 class WizardSquadLimitView(BaseView):
-    """Step 4: configure max squads per user for this event."""
+    """Step 4: configure max squads per user and squad-registration options."""
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
         super().__init__(timeout=300, title="Wizard Squad Limit")
@@ -3303,23 +3424,46 @@ class WizardSquadLimitView(BaseView):
         self.limit_select.callback = self._limit_selected
         self.add_item(self.limit_select)
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=1)
+        playstyle_default = bool(event.get("playstyle_enabled", True))
+        self.playstyle_select = ui.Select(
+            placeholder=t("wizard.playstyle_select_placeholder", lang),
+            options=[
+                discord.SelectOption(label=t("wizard.playstyle_enabled", lang),
+                                     value="yes", default=playstyle_default),
+                discord.SelectOption(label=t("wizard.playstyle_disabled", lang),
+                                     value="no", default=not playstyle_default),
+            ],
+            min_values=1, max_values=1, row=1)
+        self.playstyle_select.callback = self._playstyle_selected
+        self.add_item(self.playstyle_select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=2)
         skip_btn.callback = self._skip
         self.add_item(skip_btn)
 
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=1)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=2)
         continue_btn.callback = self._continue
         self.add_item(continue_btn)
 
         self._selected_limit = None
+        self._selected_playstyle_enabled = None
 
     async def _limit_selected(self, interaction):
         self._selected_limit = int(self.limit_select.values[0])
         await interaction.response.defer()
 
-    async def _continue(self, interaction):
+    async def _playstyle_selected(self, interaction):
+        self._selected_playstyle_enabled = self.playstyle_select.values[0] == "yes"
+        await interaction.response.defer()
+
+    def _save_selections(self):
         if self._selected_limit is not None:
             self.event["max_squads_per_user"] = self._selected_limit
+        if self._selected_playstyle_enabled is not None:
+            self.event["playstyle_enabled"] = self._selected_playstyle_enabled
+
+    async def _continue(self, interaction):
+        self._save_selections()
         embed = _build_confirmation_embed(self.event, self.guild_id)
         confirm_view = WizardConfirmationView(
             self.guild_id, self.channel_id, self.event, self.user_assignments,
@@ -3383,6 +3527,12 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
 
     ping_val = t("wizard.summary_ping_yes", lang) if event.get("ping_on_open", False) else t("wizard.summary_ping_no", lang)
     embed.add_field(name=t("wizard.summary_ping", lang), value=ping_val, inline=True)
+
+    if event.get("mode", "rep") != "player":
+        playstyle_val = (t("wizard.summary_playstyle_yes", lang)
+                         if event.get("playstyle_enabled", True)
+                         else t("wizard.summary_playstyle_no", lang))
+        embed.add_field(name=t("wizard.summary_playstyle", lang), value=playstyle_val, inline=True)
 
     if event.get("registration_start_time") is not None:
         cd_seconds = event.get("countdown_seconds")
@@ -4390,78 +4540,6 @@ async def delete_event_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-@bot.tree.command(name="open", description="Open registration immediately (organizer only)")
-async def open_command(interaction: discord.Interaction):
-    if not await check_organizer(interaction):
-        return
-    gid = interaction.guild.id
-    cid = interaction.channel_id
-    lang = _lang(interaction)
-
-    lock = _get_guild_lock(gid)
-    async with lock:
-        event, user_assignments, db_id = _get_channel_event(gid, cid)
-        if not event:
-            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-            return
-        if event.get("registration_open", False):
-            await send_feedback(interaction, t("reg.already_open", lang), ephemeral=True)
-            return
-        event["registration_open"] = True
-        event["is_closed"] = False
-        save_event(db_id, event, user_assignments)
-
-    await send_feedback(interaction, t("reg.manually_opened", lang, name=event["name"]), ephemeral=True)
-
-    settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
-    ch = bot.get_channel(cid)
-    if ch and event.get("ping_on_open", False):
-        ping_text = _build_ping_text(event)
-        if ping_text:
-            content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
-            ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-            event.setdefault("ping_message_ids", []).append(ping_msg.id)
-            save_event(db_id, event, user_assignments)
-
-    await update_event_displays(gid, cid)
-    await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild=interaction.guild)
-
-
-@bot.tree.command(name="close", description="Close registration (organizer only)")
-async def close_command(interaction: discord.Interaction):
-    if not await check_organizer(interaction):
-        return
-    gid = interaction.guild.id
-    cid = interaction.channel_id
-    lang = _lang(interaction)
-
-    lock = _get_guild_lock(gid)
-    async with lock:
-        event, user_assignments, db_id = _get_channel_event(gid, cid)
-        if not event:
-            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-            return
-        event["is_closed"] = True
-        event["registration_open"] = False
-        save_event(db_id, event, user_assignments)
-
-    await send_feedback(interaction, t("reg.manually_closed", lang, name=event["name"]), ephemeral=True)
-    await send_to_log_channel(t("log.reg_closed", lang, user=interaction.user.name, name=event["name"]), guild=interaction.guild)
-    await update_event_displays(gid, cid)
-
-    # Edit tracked ping messages to show "closed"
-    ch = bot.get_channel(cid)
-    if ch:
-        for ping_msg_id in event.get("ping_message_ids", []):
-            try:
-                ping_msg = await ch.fetch_message(ping_msg_id)
-                await ping_msg.edit(
-                    content=t("ping.reg_closed", lang, name=event["name"]),
-                    allowed_mentions=discord.AllowedMentions.none())
-            except Exception:
-                pass
-
-
 @bot.tree.command(name="register", description="Register a squad (guided flow)")
 async def register_command(interaction: discord.Interaction):
     if not await check_guild_configured(interaction):
@@ -4497,8 +4575,9 @@ async def register_command(interaction: discord.Interaction):
         return
 
     view = SquadRegistrationView(gid, cid, event)
+    desc_key = "squad.step_1_desc" if event.get("playstyle_enabled", True) else "squad.step_1_desc_no_playstyle"
     await interaction.response.send_message(
-        f"**{t('squad.step_1_title', lang)}**\n{t('squad.step_1_desc', lang)}",
+        f"**{t('squad.step_1_title', lang)}**\n{t(desc_key, lang)}",
         view=view, ephemeral=True)
 
 
@@ -4798,13 +4877,16 @@ async def admin_waitlist_cmd(interaction: discord.Interaction):
         color=discord.Color.orange())
 
     type_labels = {"infantry": "Inf.", "vehicle": "Veh.", "heli": "Heli"}
+    entry_key = ("admin.waitlist_squad_entry"
+                 if event.get("playstyle_enabled", True)
+                 else "admin.waitlist_squad_entry_no_playstyle")
     for st in SQUAD_TYPES:
         wl = event.get(_waitlist_key(st), [])
         if wl:
             lines = []
             for i, entry in enumerate(wl, 1):
                 squad_name, squad_type, playstyle, size, *_rest = entry
-                lines.append(t("admin.waitlist_squad_entry", lang,
+                lines.append(t(entry_key, lang,
                               pos=i, name=squad_name, type=type_labels.get(squad_type, squad_type),
                               size=size, playstyle=playstyle))
             embed.add_field(
@@ -5023,7 +5105,7 @@ async def help_command(interaction: discord.Interaction):
         embed.add_field(name="Events", value=(
             "`/event` - Event erstellen (im aktuellen Kanal)\n"
             "`/delete_event` - Event im Kanal löschen\n"
-            "`/open` / `/close` - Registrierung öffnen/schließen\n"
+            "Anmeldung öffnen/schließen → ⚙️ Admin-Button\n"
             "`/register` - Squad anmelden\n"
             "`/unregister` - Abmelden\n"
             "`/update` - Event-Anzeige aktualisieren\n"
@@ -5053,7 +5135,7 @@ async def help_command(interaction: discord.Interaction):
         embed.add_field(name="Events", value=(
             "`/event` - Create event (in current channel)\n"
             "`/delete_event` - Delete event in channel\n"
-            "`/open` / `/close` - Open/close registration\n"
+            "Open/close registration → ⚙️ Admin button\n"
             "`/register` - Register a squad\n"
             "`/unregister` - Unregister\n"
             "`/update` - Refresh event display\n"
