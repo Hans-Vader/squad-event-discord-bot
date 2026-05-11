@@ -935,9 +935,17 @@ def format_event_details(event: dict, lang: str = "de",
             wl_text = ""
             for i, entry in enumerate(wl):
                 if is_player_mode:
-                    # (display_name, type, None, 1, user_id, display_name)
+                    # (display_name, type, None, 1, user_id, display_name, roles)
                     player_name = entry[5] if len(entry) > 5 else entry[0]
-                    wl_text += f"{i+1}. **{player_name}**\n"
+                    role_data = entry[6] if len(entry) > 6 else None
+                    if isinstance(role_data, list):
+                        wl_roles = role_data
+                    elif isinstance(role_data, str) and role_data:
+                        wl_roles = [role_data]
+                    else:
+                        wl_roles = []
+                    wl_labels = [role_label(r, lang) for r in wl_roles] or [t("player.role_dont_care", lang)]
+                    wl_text += f"{i+1}. **{player_name}** ({', '.join(wl_labels)})\n"
                 else:
                     squad_name, _squad_type, playstyle, sq_size, _squad_id, *_rest = entry
                     rep_name = _rest[0] if _rest else None
