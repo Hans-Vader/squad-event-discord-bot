@@ -151,6 +151,16 @@ def role_label(role, lang):
     return _ROLE_LABEL_TRANSLATIONS.get(role, {}).get(lang, role)
 
 
+def _get_member_roles(member: dict) -> list:
+    """Return a list of role values for a member, supporting both the new
+    `roles` (list) and the legacy `role` (string) schemas."""
+    roles = member.get("roles")
+    if isinstance(roles, list):
+        return roles
+    single = member.get("role")
+    return [single] if single else []
+
+
 def _waitlist_key(squad_type: str) -> str:
     return f"{squad_type}_waitlist"
 
@@ -190,28 +200,30 @@ def _next_auto_squad_name(event: dict, squad_type: str) -> str:
 
 def _try_place_player(event: dict, user_assignments: dict, uid: str,
                       display_name: str, squad_type: str,
-                      role: Optional[str] = None) -> Optional[str]:
+                      roles: Optional[list] = None) -> Optional[str]:
     """Place the player into the first non-full squad of the given type, or
     create a new squad if under the cap. Returns the squad name on success,
     or None if there's no capacity (caller decides whether to waitlist).
 
     No waitlist side effects — safe to call from the waitlist promoter.
 
-    A "Squad Leader" role gets routed into a squad without an existing SL,
-    or into a freshly-created squad when the cap allows. Only when the squad
-    cap is reached does a second SL share a squad with another one.
+    When `roles` contains "Squad Leader", the player is routed into a squad
+    without an existing SL, or into a freshly-created squad when the cap
+    allows. Only when the squad cap is reached does a second SL share a
+    squad with another one.
     """
     squads = event.setdefault("squads", {})
-    is_sl = role == "Squad Leader"
+    roles = list(roles or [])
+    is_sl = "Squad Leader" in roles
 
     def _has_sl(squad):
-        return any(m.get("role") == "Squad Leader" for m in squad.get("members", []))
+        return any("Squad Leader" in _get_member_roles(m) for m in squad.get("members", []))
 
     def _add_member(name, squad):
         members = squad.setdefault("members", [])
         entry = {"user_id": uid, "name": display_name}
-        if role:
-            entry["role"] = role
+        if roles:
+            entry["roles"] = list(roles)
         members.append(entry)
         user_assignments[uid] = [name]
         event["player_slots_used"] = event.get("player_slots_used", 0) + 1
@@ -249,7 +261,7 @@ def _try_place_player(event: dict, user_assignments: dict, uid: str,
 
 
 def _player_register(event: dict, user_assignments: dict, user_id, display_name: str,
-                     squad_type: str, role: Optional[str] = None) -> tuple:
+                     squad_type: str, roles: Optional[list] = None) -> tuple:
     """Register a player into the first non-full squad of the type, creating a
     new squad if allowed, otherwise waitlisting them.
 
@@ -263,12 +275,12 @@ def _player_register(event: dict, user_assignments: dict, user_id, display_name:
     if uid in user_assignments:
         return None, "already_registered"
 
-    placed = _try_place_player(event, user_assignments, uid, display_name, squad_type, role)
+    placed = _try_place_player(event, user_assignments, uid, display_name, squad_type, roles)
     if placed is not None:
         return placed, "registered"
 
     event.setdefault(_waitlist_key(squad_type), []).append(
-        (display_name, squad_type, None, 1, uid, display_name, role))
+        (display_name, squad_type, None, 1, uid, display_name, list(roles or [])))
     return None, "waitlisted"
 
 
@@ -324,12 +336,18 @@ def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: st
             continue
         uid = str(entry[4])
         name = entry[5]
-        role = entry[6] if len(entry) > 6 else None
+        role_data = entry[6] if len(entry) > 6 else None
+        if isinstance(role_data, list):
+            roles = role_data
+        elif isinstance(role_data, str) and role_data:
+            roles = [role_data]
+        else:
+            roles = []
         if uid in user_assignments:
             # Stale waitlist entry for someone already placed — drop and keep going.
             waitlist.pop(0)
             continue
-        placed = _try_place_player(event, user_assignments, uid, name, squad_type, role)
+        placed = _try_place_player(event, user_assignments, uid, name, squad_type, roles)
         if placed is None:
             break
         waitlist.pop(0)
@@ -892,9 +910,12 @@ def format_event_details(event: dict, lang: str = "de",
                     none_label = t("player.role_dont_care", lang)
                     sorted_members = sorted(
                         members,
-                        key=lambda m: 0 if m.get("role") == "Squad Leader" else 1)
-                    parts = [f"{m.get('name', '?')} ({role_label(m.get('role'), lang) or none_label})"
-                             for m in sorted_members]
+                        key=lambda m: 0 if "Squad Leader" in _get_member_roles(m) else 1)
+                    parts = []
+                    for m in sorted_members:
+                        rls = _get_member_roles(m)
+                        labels = [role_label(r, lang) for r in rls] or [none_label]
+                        parts.append(f"{m.get('name', '?')} ({', '.join(labels)})")
                     names = ", ".join(parts) or "—"
                     text += f"**{data.get('name', squad_id)}** ({filled}/{data.get('size', 0)}): {names}\n"
                 else:

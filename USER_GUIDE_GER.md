@@ -38,11 +38,11 @@ Dieser Modus eignet sich für Pick-up-Matches oder Community-Events, bei denen s
 | Slots pro Anmeldung | `squad_size` (z.B. 6) | 1 |
 | Mehrere Anmeldungen pro User | Bis zum Limit | Immer 1 |
 | Spielstil-Auswahl | Ja | Nein |
-| Rollen-Auswahl im Squad | Nein | Optional (Squad Leader, Medic, Pilot, …) |
+| Rollen-Auswahl im Squad | Nein | Optionale Mehrfachauswahl (Squad Leader, Medic, Pilot, …) |
 | Caster | Konfigurierbar | Deaktiviert |
 | Anmelde-UI | Squad-Name-Modal + Spielstil | Typ + optionale Rolle, Discord-Anzeigename wird verwendet |
 | Slot-Übersicht-Label | „🖥️ Server — 100 Plätze" | „📋 Plätze — 17 Plätze" |
-| Admin-Hinzufügen | Squad hinzufügen (Name + Vertreter + Spielstil) | Spieler hinzufügen (Mehrfachauswahl Users + Typ + optionale Rolle) |
+| Admin-Hinzufügen | Squad hinzufügen (Name + Vertreter + Spielstil) | Spieler hinzufügen (Mehrfachauswahl Users + Typ + optionale Rollen) |
 
 ---
 
@@ -68,15 +68,15 @@ Der Button heißt **Beitreten** (🪖) statt **Squad**. Der Ablauf:
 
 1. Klicke auf **Beitreten** (🪖) in der Event-Anzeige
 2. Wähle deinen Squad-Typ im Dropdown: Infanterie, Fahrzeug oder Heli
-3. Wähle optional deine Rolle im Squad — das Dropdown passt sich deinem Typ an:
+3. Wähle optional eine oder mehrere Rollen im Squad — das Dropdown passt sich deinem Typ an und erlaubt Mehrfachauswahl:
    - **Infanterie**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout, Logi-Fahrer, Mörser
    - **Fahrzeug**: Driver, Gunner, Commander
    - **Heli**: Pilot, Spotter, Gunner
 
-   Lass den Standard **Egal**, wenn dir die Rolle gleichgültig ist.
+   Wähle nichts aus, wenn dir die Rolle gleichgültig ist — du erscheinst als **Egal**.
 4. Klicke auf **Weiter** — der Bot weist dich automatisch dem ersten nicht vollen Squad dieses Typs zu (erstellt automatisch ein neues Squad, falls nötig) oder setzt dich auf die Warteliste, wenn alle Plätze belegt sind. Dein Discord-Anzeigename wird verwendet; es gibt kein Namensfeld.
 
-Deine gewählte Rolle wird in Klammern hinter deinem Namen im Event-Embed angezeigt, z.B. `Infantry 1 (3/6): Alice (Squad Leader), Bob (Medic), Carol (Egal)`. **Squad Leader stehen immer ganz oben in ihrem Squad.** Wählst du **Squad Leader**, beeinflusst das auch die Platzierung: Der Bot bevorzugt Squads ohne bestehenden SL und öffnet ein neues Squad, sobald alle aktuellen Squads bereits einen SL haben.
+Deine gewählten Rollen werden in Klammern hinter deinem Namen im Event-Embed angezeigt, z.B. `Infantry 1 (3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol (Egal)`. **Squad Leader stehen immer ganz oben in ihrem Squad.** Wählst du **Squad Leader** (allein oder zusammen mit anderen Kits), beeinflusst das auch die Platzierung: Der Bot bevorzugt Squads ohne bestehenden SL und öffnet ein neues Squad, sobald alle aktuellen Squads bereits einen SL haben.
 
 Slash-Command: `/register` — derselbe Ablauf, angepasst für den Spieler-Modus.
 
@@ -256,7 +256,7 @@ Im Spieler-Modus hat das Admin-Panel 4 Buttons — die Squad- und Caster-Reihen 
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
-| Spieler | **Spieler hinzufügen** | Mehrere Discord-User (Mehrfachauswahl), einen Squad-Typ und (optional) eine Rolle im Squad wählen, die für alle ausgewählten User gilt; dann bestätigen. Alle User werden in einem Submit angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, werden die restlichen auf die Warteliste gesetzt. Die gewählte Rolle (oder **Egal**, wenn der Standard bleibt) wird für jeden User gespeichert und neben seinem Namen im Event-Embed angezeigt. |
+| Spieler | **Spieler hinzufügen** | Mehrere Discord-User (Mehrfachauswahl), einen Squad-Typ und (optional) eine oder mehrere Rollen im Squad wählen, die für alle ausgewählten User gelten; dann bestätigen. Alle User werden in einem Submit angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, werden die restlichen auf die Warteliste gesetzt. Die gewählten Rollen (oder **Egal**, falls keine ausgewählt) werden für jeden User gespeichert und neben seinem Namen im Event-Embed angezeigt. |
 | Spieler | **Spieler entfernen** | Einen oder mehrere Spieler auswählen (Mehrfachauswahl) — aus aktuellen Squad-Mitgliedern **und** aus jeder Warteliste (Wartelisten-Einträge sind mit `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]` markiert). Die Aktion ist hinter einem roten „Abmelden"-Bestätigungsbutton abgesichert. |
 | Event | **Event bearbeiten** | Öffnet DM-basierte Bearbeitungssitzung |
 | Event | **Event löschen** | Event mit Bestätigung löschen |
@@ -346,7 +346,7 @@ A: Das Event wurde im Spieler-Modus erstellt. Du meldest dich als einzelne Perso
 A: Klicke auf **Squad** (🪖) in der Event-Anzeige oder verwende `/register`. Du wirst durch Typ, Spielstil und Namenswahl geführt. (Das ist der Vertreter-Modus — der Spieler-Modus hat einen **Beitreten**-Ablauf mit Typ und optionaler Rolle.)
 
 **F: Was macht der Rollen-Picker im Spieler-Modus?**
-A: Rollen signalisieren, was du gerne spielen würdest (Squad Leader, Medic, Pilot, …), damit andere sehen, wer welche Position übernimmt. Die Liste passt sich dem gewählten Squad-Typ an. Rollen sind für alle in der Squad-Liste sichtbar (`Name (Rolle)`). Squad Leader werden ans obere Ende ihres Squads sortiert, und ein neuer SL wird bevorzugt in ein Squad ohne bestehenden SL platziert, sofern Kapazität vorhanden ist. Lass den Standard **Egal**, wenn dir die Rolle gleichgültig ist.
+A: Rollen signalisieren, was du gerne spielen würdest (Squad Leader, Medic, Pilot, …), damit andere sehen, wer welche Kits übernimmt. Du kannst **mehrere Rollen** in einer Anmeldung wählen — z.B. „Squad Leader + Medic", falls du beides spielen kannst. Die Liste passt sich dem gewählten Squad-Typ an. Rollen sind für alle in der Squad-Liste sichtbar (`Name (Rolle)` oder `Name (Rolle1, Rolle2)`). Squad Leader werden ans obere Ende ihres Squads sortiert, und ein neuer SL wird bevorzugt in ein Squad ohne bestehenden SL platziert, sofern Kapazität vorhanden ist. Wähle nichts aus, um als **Egal** registriert zu werden.
 
 **F: Kann ich gleichzeitig Caster und Squad-Mitglied sein?**
 A: Ja. Du kannst dich als Caster anmelden und parallel Squads registrieren.
@@ -358,7 +358,7 @@ A: Dein Squad wird automatisch auf die Warteliste gesetzt. Du rückst nach, soba
 A: Im Vertreter-Modus hängt das vom Event-Setting „Max Squads pro User" ab (Standard: 1, Maximum: 20). Im Spieler-Modus ist es immer **genau 1** — ein User, eine Anmeldung.
 
 **F: Wie melden Admins eine Gruppe von Spielern im Spieler-Modus an?**
-A: Admin → Spieler hinzufügen. Die Auswahl erlaubt Mehrfachauswahl von Discord-Usern zusammen mit einem einzelnen Squad-Typ und (optional) einer Rolle im Squad, die für jeden User im Batch gilt. Alle ausgewählten User werden mit einem Bestätigungsklick angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, gehen die restlichen automatisch auf die Warteliste. Wenn unterschiedliche Rollen für unterschiedliche Spieler gewünscht sind, einfach mehrere Batches hintereinander durchführen.
+A: Admin → Spieler hinzufügen. Die Auswahl erlaubt Mehrfachauswahl von Discord-Usern zusammen mit einem einzelnen Squad-Typ und (optional) einer oder mehrerer Rollen im Squad, die für jeden User im Batch gelten. Alle ausgewählten User werden mit einem Bestätigungsklick angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, gehen die restlichen automatisch auf die Warteliste. Wenn unterschiedliche Rollen-Sets für unterschiedliche Spieler gewünscht sind, einfach mehrere Batches hintereinander durchführen.
 
 **F: Was ist der Unterschied zwischen Infanterie, Fahrzeug und Heli?**
 A: Die drei Squad-Typen haben unterschiedliche Größen und separate Slot-Kontingente. Infanterie-Squads sind typischerweise am größten (z.B. 6 Spieler), Fahrzeug-Squads kleiner (z.B. 2) und Heli-Squads am kleinsten (z.B. 1).

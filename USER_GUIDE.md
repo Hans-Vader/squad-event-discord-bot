@@ -38,11 +38,11 @@ Use this mode for pick-up matches or community seat-filling events where individ
 | Slots per registration | `squad_size` (e.g. 6) | 1 |
 | Multiple registrations per user | Up to configured limit | Always 1 |
 | Playstyle selection | Yes | No |
-| In-squad role picker | No | Optional (Squad Leader, Medic, Pilot, …) |
+| In-squad role picker | No | Optional multi-select (Squad Leader, Medic, Pilot, …) |
 | Casters | Configurable | Disabled |
 | Registration UI | Squad name modal + playstyle picker | Type + optional role picker; Discord display name used |
 | Slot overview label | "🖥️ Server — 100 slots" | "📋 Seats — 17 slots" |
-| Admin-add | Add Squad (name + rep + playstyle) | Add Player (multi-select users + type + optional role) |
+| Admin-add | Add Squad (name + rep + playstyle) | Add Player (multi-select users + type + optional roles) |
 
 ---
 
@@ -68,15 +68,15 @@ The button is labeled **Join** (🪖) instead of **Squad**. The flow:
 
 1. Click **Join** (🪖) in the event display
 2. Select your squad type from the dropdown: Infantry, Vehicle, or Heli
-3. Optionally pick your in-squad role — the dropdown adapts to your type:
+3. Optionally pick one or more in-squad roles — the dropdown adapts to your type and supports multi-select:
    - **Infantry**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout, Logi driver, Mortar
    - **Vehicle**: Driver, Gunner, Commander
    - **Heli**: Pilot, Spotter, Gunner
 
-   Leave the default **I don't care** if you have no preference.
+   Select nothing if you have no preference — you'll be listed as **I don't care**.
 4. Click **Continue** — the bot auto-assigns you to the first non-full squad of that type (creating a new squad if none has free slots), or places you on the waitlist if all slots are full. Your Discord display name is used; there's no name modal to fill in.
 
-Your role is shown in parentheses next to your name in the event embed, e.g. `Infantry 1 (3/6): Alice (Squad Leader), Bob (Medic), Carol (I don't care)`. **Squad Leaders always sort to the top of their squad.** Picking **Squad Leader** also influences placement: the bot prefers squads without an existing SL and opens a new squad if every current squad already has one.
+Your role(s) are shown in parentheses next to your name in the event embed, e.g. `Infantry 1 (3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol (I don't care)`. **Squad Leaders always sort to the top of their squad.** Picking **Squad Leader** (alone or alongside other kits) also influences placement: the bot prefers squads without an existing SL and opens a new squad if every current squad already has one.
 
 Slash command: `/register` — the same flow, adapted to player mode.
 
@@ -256,7 +256,7 @@ In player mode the admin panel has 4 buttons — the Squad and Caster rows are r
 
 | Row | Button | Description |
 |---|---|---|
-| Player | **Add Player** | Pick one or more Discord users (multi-select), a squad type, and (optionally) an in-squad role applied to all picked users; then confirm. All picked users are registered in a single submit. If capacity is hit mid-batch, remaining users go to the waitlist. The chosen role (or **I don't care** if left default) is stored for each user and shown next to their name in the event embed. |
+| Player | **Add Player** | Pick one or more Discord users (multi-select), a squad type, and (optionally) one or more in-squad roles applied to all picked users; then confirm. All picked users are registered in a single submit. If capacity is hit mid-batch, remaining users go to the waitlist. The chosen roles (or **I don't care** if none selected) are stored for each user and shown next to their name in the event embed. |
 | Player | **Remove Player** | Pick one or more players (multi-select) — from current squad members **and** from any waitlist (waitlist entries are prefixed `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`). The action is gated behind a red "Unregister" confirm button. |
 | Event | **Edit Event** | Opens DM-based editing session |
 | Event | **Delete Event** | Delete the event with confirmation |
@@ -346,7 +346,7 @@ A: The event was created in player mode. You register yourself individually — 
 A: Click **Squad** (🪖) in the event display or use `/register`. You'll be guided through type, playstyle, and name selection. (This is rep mode — player mode's **Join** flow picks type and an optional in-squad role.)
 
 **Q: What does the in-squad role picker in player mode do?**
-A: Roles let you signal what you'd like to play (Squad Leader, Medic, Pilot, …) so others know who's filling which kit. The list adapts to the squad type you picked. Roles are visible to everyone in the squad list as `Name (Role)`. Squad Leaders sort to the top of their squad, and a new SL is routed into a squad without an existing one whenever capacity allows. Leave the default **I don't care** if you have no preference.
+A: Roles let you signal what you'd like to play (Squad Leader, Medic, Pilot, …) so others know who's filling which kits. You can pick **multiple roles** in one registration — for example "Squad Leader + Medic" if you can run either. The list adapts to the squad type you picked. Roles are visible to everyone in the squad list as `Name (Role)` or `Name (Role1, Role2)`. Squad Leaders sort to the top of their squad, and a new SL is routed into a squad without an existing one whenever capacity allows. Select nothing to register as **I don't care**.
 
 **Q: Can I be a caster and a squad member at the same time?**
 A: Yes. You can register as a caster and register squads in parallel.
@@ -358,7 +358,7 @@ A: Your squad is automatically placed on the waitlist. You'll be promoted when a
 A: In rep mode, it depends on the event's max-squads-per-user setting (default: 1, max: 20). In player mode it's always **exactly 1** — one user, one registration.
 
 **Q: How do admins register a group of players in player mode?**
-A: Admin → Add Player. The picker lets you select multiple Discord users at once along with a single squad type and (optionally) an in-squad role that's applied to every user in the batch. All selected users are registered in one confirm click. If capacity runs out mid-batch, the rest go to the waitlist automatically. If you need different roles for different players, run the picker once per role.
+A: Admin → Add Player. The picker lets you select multiple Discord users at once along with a single squad type and (optionally) one or more in-squad roles that are applied to every user in the batch. All selected users are registered in one confirm click. If capacity runs out mid-batch, the rest go to the waitlist automatically. If you need a different role set for different players, run the picker once per role set.
 
 **Q: What is the difference between Infantry, Vehicle, and Heli?**
 A: The three squad types have different sizes and separate slot pools. Infantry squads are typically the largest (e.g. 6 players), vehicle squads smaller (e.g. 2), and heli squads the smallest (e.g. 1).

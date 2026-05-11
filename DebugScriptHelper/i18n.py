@@ -713,8 +713,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Pick your squad type and – optionally – your role. You will be auto-assigned to a fitting squad.",
     },
     "player.role_select_placeholder": {
-        "de": "Rolle wählen...",
-        "en": "Choose role...",
+        "de": "Rolle(n) wählen...",
+        "en": "Choose role(s)...",
     },
     "player.role_dont_care": {
         "de": "Egal",

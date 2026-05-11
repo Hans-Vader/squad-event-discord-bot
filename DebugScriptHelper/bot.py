@@ -738,7 +738,7 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
 # ---------------------------------------------------------------------------
 # Core: player-mode registration
 # ---------------------------------------------------------------------------
-async def player_register(interaction, guild_id, channel_id, squad_type, target_user=None, role=None):
+async def player_register(interaction, guild_id, channel_id, squad_type, target_user=None, roles=None):
     """Register a single player into an auto-managed squad (player mode)."""
     lock = _get_guild_lock(guild_id)
     lang = get_guild_language(guild_id)
@@ -756,12 +756,13 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
             await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
             return False
 
-        squad_name, status = _player_register(event, user_assignments, user_id, display_name, squad_type, role)
+        squad_name, status = _player_register(event, user_assignments, user_id, display_name, squad_type, roles)
         if status in ("registered", "waitlisted"):
             save_event(db_id, event, user_assignments)
 
     type_label = t(f"embed.type_{squad_type}", lang) if squad_type in SQUAD_TYPES else squad_type
-    role_suffix = f", {role_label(role, lang)}" if role else ""
+    role_labels = [role_label(r, lang) for r in (roles or [])]
+    role_suffix = (", " + ", ".join(role_labels)) if role_labels else ""
 
     if status == "already_registered":
         await send_feedback(interaction, t("player.already_registered", lang), ephemeral=True)
@@ -1344,14 +1345,14 @@ class EventActionView(ui.View):
 # ---------------------------------------------------------------------------
 
 class PlayerTypePickerView(BaseView):
-    """Player mode: type picker + optional role dropdown, then a Continue
-    button that submits the registration."""
+    """Player mode: type picker + optional multi-select role dropdown,
+    then a Continue button that submits the registration."""
     def __init__(self, guild_id, channel_id):
         super().__init__(timeout=300, title="Player Registration")
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.selected_type = None
-        self.selected_role = None
+        self.selected_roles: list = []
         lang = get_guild_language(guild_id)
         event, _, _ = _get_channel_event(guild_id, channel_id)
         sizes = _get_squad_sizes(event) if event else {"infantry": 6, "vehicle": 2, "heli": 1}
@@ -1363,10 +1364,9 @@ class PlayerTypePickerView(BaseView):
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
 
-        none_label = t("player.role_dont_care", lang)
         self.role_select = ui.Select(
-            placeholder=none_label,
-            options=[discord.SelectOption(label=none_label, value="__none__", default=True)],
+            placeholder=t("player.role_select_placeholder", lang),
+            options=[discord.SelectOption(label="—", value="__placeholder__")],
             custom_id="player_role_select",
             min_values=0, max_values=1,
             disabled=True, row=1)
@@ -1382,33 +1382,31 @@ class PlayerTypePickerView(BaseView):
 
     async def _on_type(self, interaction: discord.Interaction):
         self.selected_type = self.type_select.values[0]
-        self.selected_role = None
+        self.selected_roles = []
         for opt in self.type_select.options:
             opt.default = (opt.value == self.selected_type)
         lang = get_guild_language(self.guild_id)
-        none_label = t("player.role_dont_care", lang)
-        new_opts = [discord.SelectOption(label=none_label, value="__none__", default=True)]
-        for r in ROLES_BY_TYPE.get(self.selected_type, []):
-            new_opts.append(discord.SelectOption(label=role_label(r, lang), value=r))
-        self.role_select.options = new_opts
-        self.role_select.placeholder = none_label
-        self.role_select.disabled = False
+        role_opts = [discord.SelectOption(label=role_label(r, lang), value=r)
+                     for r in ROLES_BY_TYPE.get(self.selected_type, [])]
+        self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
+        self.role_select.disabled = not role_opts
+        self.role_select.min_values = 0
+        self.role_select.max_values = max(1, len(role_opts))
+        self.role_select.placeholder = t("player.role_select_placeholder", lang)
         self.continue_button.disabled = False
         await interaction.response.edit_message(view=self)
 
     async def _on_role(self, interaction: discord.Interaction):
-        values = self.role_select.values
-        chosen = values[0] if values else "__none__"
-        self.selected_role = None if chosen == "__none__" else chosen
+        self.selected_roles = [v for v in self.role_select.values if v != "__placeholder__"]
         for opt in self.role_select.options:
-            opt.default = (opt.value == chosen)
+            opt.default = (opt.value in self.selected_roles)
         await interaction.response.edit_message(view=self)
 
     async def _on_continue(self, interaction: discord.Interaction):
         if not self.selected_type:
             return
         await player_register(interaction, self.guild_id, self.channel_id,
-                              self.selected_type, role=self.selected_role)
+                              self.selected_type, roles=self.selected_roles)
 
 
 class SquadRegistrationView(BaseView):
@@ -1876,14 +1874,14 @@ class AdminActionView(BaseView):
 # ---------------------------------------------------------------------------
 
 class _AdminPlayerAddView(BaseView):
-    """Admin: pick one or more users + a squad type + optional in-squad role; adds them in one submit."""
+    """Admin: pick one or more users + a squad type + optional in-squad roles; adds them in one submit."""
     def __init__(self, guild_id, channel_id):
         super().__init__(timeout=300, title="Admin Add Player")
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.selected_users: list = []
         self.selected_type = None
-        self.selected_role = None
+        self.selected_roles: list = []
         lang = get_guild_language(guild_id)
 
         self.user_select = ui.UserSelect(
@@ -1901,10 +1899,9 @@ class _AdminPlayerAddView(BaseView):
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
 
-        none_label = t("player.role_dont_care", lang)
         self.role_select = ui.Select(
-            placeholder=none_label,
-            options=[discord.SelectOption(label=none_label, value="__none__", default=True)],
+            placeholder=t("player.role_select_placeholder", lang),
+            options=[discord.SelectOption(label="—", value="__placeholder__")],
             min_values=0, max_values=1,
             disabled=True, row=2)
         self.role_select.callback = self._on_role
@@ -1926,26 +1923,24 @@ class _AdminPlayerAddView(BaseView):
 
     async def _on_type(self, interaction):
         self.selected_type = self.type_select.values[0]
-        self.selected_role = None
+        self.selected_roles = []
         for opt in self.type_select.options:
             opt.default = (opt.value == self.selected_type)
         lang = get_guild_language(self.guild_id)
-        none_label = t("player.role_dont_care", lang)
-        new_opts = [discord.SelectOption(label=none_label, value="__none__", default=True)]
-        for r in ROLES_BY_TYPE.get(self.selected_type, []):
-            new_opts.append(discord.SelectOption(label=role_label(r, lang), value=r))
-        self.role_select.options = new_opts
-        self.role_select.placeholder = none_label
-        self.role_select.disabled = False
+        role_opts = [discord.SelectOption(label=role_label(r, lang), value=r)
+                     for r in ROLES_BY_TYPE.get(self.selected_type, [])]
+        self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
+        self.role_select.disabled = not role_opts
+        self.role_select.min_values = 0
+        self.role_select.max_values = max(1, len(role_opts))
+        self.role_select.placeholder = t("player.role_select_placeholder", lang)
         self._update_confirm_state()
         await interaction.response.edit_message(view=self)
 
     async def _on_role(self, interaction):
-        values = self.role_select.values
-        chosen = values[0] if values else "__none__"
-        self.selected_role = None if chosen == "__none__" else chosen
+        self.selected_roles = [v for v in self.role_select.values if v != "__placeholder__"]
         for opt in self.role_select.options:
-            opt.default = (opt.value == chosen)
+            opt.default = (opt.value in self.selected_roles)
         await interaction.response.edit_message(view=self)
 
     async def _confirm(self, interaction):
@@ -1970,7 +1965,7 @@ class _AdminPlayerAddView(BaseView):
             for user in self.selected_users:
                 squad_name, status = _player_register(
                     event, user_assignments, user.id, user.display_name,
-                    self.selected_type, self.selected_role)
+                    self.selected_type, self.selected_roles)
                 if status == "registered":
                     registered.append((user, squad_name))
                 elif status == "waitlisted":
@@ -1980,7 +1975,8 @@ class _AdminPlayerAddView(BaseView):
             save_event(db_id, event, user_assignments)
 
         type_label = t(f"embed.type_{self.selected_type}", lang) if self.selected_type in SQUAD_TYPES else self.selected_type
-        role_suffix = f", {role_label(self.selected_role, lang)}" if self.selected_role else ""
+        role_labels = [role_label(r, lang) for r in self.selected_roles]
+        role_suffix = (", " + ", ".join(role_labels)) if role_labels else ""
         parts = []
         if registered:
             parts.append(t("admin.player_add_registered_count", lang, n=len(registered), type=type_label, role_suffix=role_suffix))
