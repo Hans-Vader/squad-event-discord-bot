@@ -709,12 +709,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Pick your squad type",
     },
     "player.pick_type_desc": {
-        "de": "Du wirst automatisch einem passenden Squad zugewiesen.",
-        "en": "You will be auto-assigned to a fitting squad.",
+        "de": "Wähle deinen Squad-Typ und – optional – deine Rolle. Du wirst automatisch einem passenden Squad zugewiesen.",
+        "en": "Pick your squad type and – optionally – your role. You will be auto-assigned to a fitting squad.",
+    },
+    "player.role_select_placeholder": {
+        "de": "Rolle wählen...",
+        "en": "Choose role...",
+    },
+    "player.role_dont_care": {
+        "de": "Egal",
+        "en": "I don't care",
     },
     "player.registered": {
-        "de": "✅ Du bist registriert in **{squad}** ({type}).",
-        "en": "✅ You are registered in **{squad}** ({type}).",
+        "de": "✅ Du bist registriert in **{squad}** ({type}{role_suffix}).",
+        "en": "✅ You are registered in **{squad}** ({type}{role_suffix}).",
     },
     "player.waitlisted": {
         "de": "⏳ Alle {type}-Plätze sind belegt. Du stehst auf der Warteliste.",
@@ -753,8 +761,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "This event is not in player mode.",
     },
     "log.player_registered": {
-        "de": "Spieler registriert: {user} → {squad} ({type})",
-        "en": "Player registered: {user} → {squad} ({type})",
+        "de": "Spieler registriert: {user} → {squad} ({type}{role_suffix})",
+        "en": "Player registered: {user} → {squad} ({type}{role_suffix})",
     },
     "log.player_waitlisted": {
         "de": "Spieler auf Warteliste: {user} ({type})",

@@ -476,6 +476,16 @@ def _is_squad_type_full(event: dict, squad_type: str) -> bool:
 
 SQUAD_TYPES = ("infantry", "vehicle", "heli")
 
+ROLES_BY_TYPE = {
+    "infantry": [
+        "Squad Leader", "Medic", "Rifleman", "Automatic Rifleman",
+        "Machine Gunner", "Combat Engineer", "Light Anti Tank",
+        "Heavy Anti Tank", "Grenadier", "Marksman", "Scout",
+    ],
+    "vehicle": ["Driver", "Gunner", "Commander"],
+    "heli":    ["Pilot", "Spotter", "Gunner"],
+}
+
 
 def _waitlist_key(squad_type: str) -> str:
     """Return the event dict key for a squad type's waitlist."""
@@ -712,7 +722,7 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
 # ---------------------------------------------------------------------------
 # Core: player-mode registration
 # ---------------------------------------------------------------------------
-async def player_register(interaction, guild_id, channel_id, squad_type, target_user=None):
+async def player_register(interaction, guild_id, channel_id, squad_type, target_user=None, role=None):
     """Register a single player into an auto-managed squad (player mode)."""
     lock = _get_guild_lock(guild_id)
     lang = get_guild_language(guild_id)
@@ -730,11 +740,12 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
             await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
             return False
 
-        squad_name, status = _player_register(event, user_assignments, user_id, display_name, squad_type)
+        squad_name, status = _player_register(event, user_assignments, user_id, display_name, squad_type, role)
         if status in ("registered", "waitlisted"):
             save_event(db_id, event, user_assignments)
 
     type_label = t(f"embed.type_{squad_type}", lang) if squad_type in SQUAD_TYPES else squad_type
+    role_suffix = f", {role}" if role else ""
 
     if status == "already_registered":
         await send_feedback(interaction, t("player.already_registered", lang), ephemeral=True)
@@ -744,9 +755,9 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
         return False
     if status == "registered":
         await send_feedback(interaction,
-            t("player.registered", lang, squad=squad_name, type=type_label), ephemeral=True)
+            t("player.registered", lang, squad=squad_name, type=type_label, role_suffix=role_suffix), ephemeral=True)
         await send_to_log_channel(
-            t("log.player_registered", lang, user=user.name, type=type_label, squad=squad_name),
+            t("log.player_registered", lang, user=user.name, type=type_label, squad=squad_name, role_suffix=role_suffix),
             guild=interaction.guild)
     else:  # waitlisted
         await send_feedback(interaction,
@@ -1317,11 +1328,14 @@ class EventActionView(ui.View):
 # ---------------------------------------------------------------------------
 
 class PlayerTypePickerView(BaseView):
-    """Player mode: single-step type picker (no playstyle, no name modal)."""
+    """Player mode: type picker + optional role dropdown, then a Continue
+    button that submits the registration."""
     def __init__(self, guild_id, channel_id):
         super().__init__(timeout=300, title="Player Registration")
         self.guild_id = guild_id
         self.channel_id = channel_id
+        self.selected_type = None
+        self.selected_role = None
         lang = get_guild_language(guild_id)
         event, _, _ = _get_channel_event(guild_id, channel_id)
         sizes = _get_squad_sizes(event) if event else {"infantry": 6, "vehicle": 2, "heli": 1}
@@ -1333,15 +1347,56 @@ class PlayerTypePickerView(BaseView):
                 discord.SelectOption(label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"),
                 discord.SelectOption(label=t("squad.type_heli", lang, size=sizes["heli"]), value="heli"),
             ],
-            custom_id="player_type_select")
+            custom_id="player_type_select", row=0)
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
 
+        none_label = t("player.role_dont_care", lang)
+        self.role_select = ui.Select(
+            placeholder=none_label,
+            options=[discord.SelectOption(label=none_label, value="__none__", default=True)],
+            custom_id="player_role_select",
+            min_values=0, max_values=1,
+            disabled=True, row=1)
+        self.role_select.callback = self._on_role
+        self.add_item(self.role_select)
+
+        self.continue_button = ui.Button(
+            label=t("squad.continue", lang),
+            style=discord.ButtonStyle.success,
+            disabled=True, row=2)
+        self.continue_button.callback = self._on_continue
+        self.add_item(self.continue_button)
+
     async def _on_type(self, interaction: discord.Interaction):
-        if self.check_response(interaction):
+        self.selected_type = self.type_select.values[0]
+        self.selected_role = None
+        for opt in self.type_select.options:
+            opt.default = (opt.value == self.selected_type)
+        lang = get_guild_language(self.guild_id)
+        none_label = t("player.role_dont_care", lang)
+        new_opts = [discord.SelectOption(label=none_label, value="__none__", default=True)]
+        for r in ROLES_BY_TYPE.get(self.selected_type, []):
+            new_opts.append(discord.SelectOption(label=r, value=r))
+        self.role_select.options = new_opts
+        self.role_select.placeholder = none_label
+        self.role_select.disabled = False
+        self.continue_button.disabled = False
+        await interaction.response.edit_message(view=self)
+
+    async def _on_role(self, interaction: discord.Interaction):
+        values = self.role_select.values
+        chosen = values[0] if values else "__none__"
+        self.selected_role = None if chosen == "__none__" else chosen
+        for opt in self.role_select.options:
+            opt.default = (opt.value == chosen)
+        await interaction.response.edit_message(view=self)
+
+    async def _on_continue(self, interaction: discord.Interaction):
+        if not self.selected_type:
             return
-        squad_type = self.type_select.values[0]
-        await player_register(interaction, self.guild_id, self.channel_id, squad_type)
+        await player_register(interaction, self.guild_id, self.channel_id,
+                              self.selected_type, role=self.selected_role)
 
 
 class SquadRegistrationView(BaseView):
@@ -1904,7 +1959,7 @@ class _AdminPlayerAddView(BaseView):
 
         for user, squad_name in registered:
             await send_to_log_channel(
-                t("log.player_registered", lang, user=user.name, type=type_label, squad=squad_name),
+                t("log.player_registered", lang, user=user.name, type=type_label, squad=squad_name, role_suffix=""),
                 guild=interaction.guild)
         for user in waitlisted:
             await send_to_log_channel(
