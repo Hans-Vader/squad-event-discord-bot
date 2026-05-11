@@ -69,7 +69,7 @@ The button is labeled **Join** (🪖) instead of **Squad**. The flow:
 1. Click **Join** (🪖) in the event display
 2. Select your squad type from the dropdown: Infantry, Vehicle, or Heli
 3. Optionally pick your in-squad role — the dropdown adapts to your type:
-   - **Infantry**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout
+   - **Infantry**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout, Logi driver, Mortar
    - **Vehicle**: Driver, Gunner, Commander
    - **Heli**: Pilot, Spotter, Gunner
 

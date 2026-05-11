@@ -132,6 +132,24 @@ def compute_expiry_date(date_str: str, time_str: str = None) -> Optional[datetim
 _SQUAD_TYPES = ("infantry", "vehicle", "heli")
 _SQUAD_TYPE_LABEL = {"infantry": "Infantry", "vehicle": "Vehicle", "heli": "Heli"}
 
+# Per-role display translations. Stored role values are English; the dropdown
+# label and the embed parenthetical render the localized form. Roles missing
+# from this map fall back to the raw English value (matching the playstyle
+# convention).
+_ROLE_LABEL_TRANSLATIONS = {
+    "Logi driver": {"de": "Logi-Fahrer"},
+    "Mortar":      {"de": "Mörser"},
+}
+
+
+def role_label(role, lang):
+    """Return the localized display label for a stored role value. Returns
+    None if `role` is falsy. Falls back to the English value when no
+    translation exists for `lang`."""
+    if not role:
+        return None
+    return _ROLE_LABEL_TRANSLATIONS.get(role, {}).get(lang, role)
+
 
 def _waitlist_key(squad_type: str) -> str:
     return f"{squad_type}_waitlist"
@@ -875,7 +893,7 @@ def format_event_details(event: dict, lang: str = "de",
                     sorted_members = sorted(
                         members,
                         key=lambda m: 0 if m.get("role") == "Squad Leader" else 1)
-                    parts = [f"{m.get('name', '?')} ({m.get('role') or none_label})"
+                    parts = [f"{m.get('name', '?')} ({role_label(m.get('role'), lang) or none_label})"
                              for m in sorted_members]
                     names = ", ".join(parts) or "—"
                     text += f"**{data.get('name', squad_id)}** ({filled}/{data.get('size', 0)}): {names}\n"

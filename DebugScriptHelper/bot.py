@@ -38,7 +38,7 @@ from utils import (
     format_event_details, build_event_summary_embed,
     send_to_log_channel, set_log_channel, get_log_channel,
     export_log_file, clear_log_file, logger,
-    resolve_event_defaults,
+    resolve_event_defaults, role_label,
     _player_register, _player_unregister, _player_remove_from_waitlist,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
@@ -481,6 +481,7 @@ ROLES_BY_TYPE = {
         "Squad Leader", "Medic", "Rifleman", "Automatic Rifleman",
         "Machine Gunner", "Combat Engineer", "Light Anti Tank",
         "Heavy Anti Tank", "Grenadier", "Marksman", "Scout",
+        "Logi driver", "Mortar",
     ],
     "vehicle": ["Driver", "Gunner", "Commander"],
     "heli":    ["Pilot", "Spotter", "Gunner"],
@@ -760,7 +761,7 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
             save_event(db_id, event, user_assignments)
 
     type_label = t(f"embed.type_{squad_type}", lang) if squad_type in SQUAD_TYPES else squad_type
-    role_suffix = f", {role}" if role else ""
+    role_suffix = f", {role_label(role, lang)}" if role else ""
 
     if status == "already_registered":
         await send_feedback(interaction, t("player.already_registered", lang), ephemeral=True)
@@ -1388,7 +1389,7 @@ class PlayerTypePickerView(BaseView):
         none_label = t("player.role_dont_care", lang)
         new_opts = [discord.SelectOption(label=none_label, value="__none__", default=True)]
         for r in ROLES_BY_TYPE.get(self.selected_type, []):
-            new_opts.append(discord.SelectOption(label=r, value=r))
+            new_opts.append(discord.SelectOption(label=role_label(r, lang), value=r))
         self.role_select.options = new_opts
         self.role_select.placeholder = none_label
         self.role_select.disabled = False
@@ -1932,7 +1933,7 @@ class _AdminPlayerAddView(BaseView):
         none_label = t("player.role_dont_care", lang)
         new_opts = [discord.SelectOption(label=none_label, value="__none__", default=True)]
         for r in ROLES_BY_TYPE.get(self.selected_type, []):
-            new_opts.append(discord.SelectOption(label=r, value=r))
+            new_opts.append(discord.SelectOption(label=role_label(r, lang), value=r))
         self.role_select.options = new_opts
         self.role_select.placeholder = none_label
         self.role_select.disabled = False
@@ -1979,7 +1980,7 @@ class _AdminPlayerAddView(BaseView):
             save_event(db_id, event, user_assignments)
 
         type_label = t(f"embed.type_{self.selected_type}", lang) if self.selected_type in SQUAD_TYPES else self.selected_type
-        role_suffix = f", {self.selected_role}" if self.selected_role else ""
+        role_suffix = f", {role_label(self.selected_role, lang)}" if self.selected_role else ""
         parts = []
         if registered:
             parts.append(t("admin.player_add_registered_count", lang, n=len(registered), type=type_label, role_suffix=role_suffix))

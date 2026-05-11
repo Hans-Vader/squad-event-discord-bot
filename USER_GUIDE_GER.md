@@ -69,7 +69,7 @@ Der Button heißt **Beitreten** (🪖) statt **Squad**. Der Ablauf:
 1. Klicke auf **Beitreten** (🪖) in der Event-Anzeige
 2. Wähle deinen Squad-Typ im Dropdown: Infanterie, Fahrzeug oder Heli
 3. Wähle optional deine Rolle im Squad — das Dropdown passt sich deinem Typ an:
-   - **Infanterie**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout
+   - **Infanterie**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout, Logi-Fahrer, Mörser
    - **Fahrzeug**: Driver, Gunner, Commander
    - **Heli**: Pilot, Spotter, Gunner
 
