@@ -915,7 +915,7 @@ def format_event_details(event: dict, lang: str = "de",
                     for m in sorted_members:
                         rls = _get_member_roles(m)
                         labels = [role_label(r, lang) for r in rls] or [none_label]
-                        parts.append(f"{m.get('name', '?')} ({', '.join(labels)})")
+                        parts.append(f"**{m.get('name', '?')}** ({', '.join(labels)})")
                     names = ", ".join(parts) or "—"
                     text += f"**{data.get('name', squad_id)}** ({filled}/{data.get('size', 0)}): {names}\n"
                 else:
