@@ -1868,13 +1868,14 @@ class AdminActionView(BaseView):
 # ---------------------------------------------------------------------------
 
 class _AdminPlayerAddView(BaseView):
-    """Admin: pick one or more users + a squad type; adds them in one submit."""
+    """Admin: pick one or more users + a squad type + optional in-squad role; adds them in one submit."""
     def __init__(self, guild_id, channel_id):
         super().__init__(timeout=300, title="Admin Add Player")
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.selected_users: list = []
         self.selected_type = None
+        self.selected_role = None
         lang = get_guild_language(guild_id)
 
         self.user_select = ui.UserSelect(
@@ -1895,9 +1896,18 @@ class _AdminPlayerAddView(BaseView):
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
 
+        none_label = t("player.role_dont_care", lang)
+        self.role_select = ui.Select(
+            placeholder=none_label,
+            options=[discord.SelectOption(label=none_label, value="__none__", default=True)],
+            min_values=0, max_values=1,
+            disabled=True, row=2)
+        self.role_select.callback = self._on_role
+        self.add_item(self.role_select)
+
         self.confirm_btn = ui.Button(
             label=t("general.confirm", lang), style=discord.ButtonStyle.success,
-            disabled=True, row=2)
+            disabled=True, row=3)
         self.confirm_btn.callback = self._confirm
         self.add_item(self.confirm_btn)
 
@@ -1911,9 +1921,26 @@ class _AdminPlayerAddView(BaseView):
 
     async def _on_type(self, interaction):
         self.selected_type = self.type_select.values[0]
+        self.selected_role = None
         for opt in self.type_select.options:
             opt.default = (opt.value == self.selected_type)
+        lang = get_guild_language(self.guild_id)
+        none_label = t("player.role_dont_care", lang)
+        new_opts = [discord.SelectOption(label=none_label, value="__none__", default=True)]
+        for r in ROLES_BY_TYPE.get(self.selected_type, []):
+            new_opts.append(discord.SelectOption(label=r, value=r))
+        self.role_select.options = new_opts
+        self.role_select.placeholder = none_label
+        self.role_select.disabled = False
         self._update_confirm_state()
+        await interaction.response.edit_message(view=self)
+
+    async def _on_role(self, interaction):
+        values = self.role_select.values
+        chosen = values[0] if values else "__none__"
+        self.selected_role = None if chosen == "__none__" else chosen
+        for opt in self.role_select.options:
+            opt.default = (opt.value == chosen)
         await interaction.response.edit_message(view=self)
 
     async def _confirm(self, interaction):
@@ -1937,7 +1964,8 @@ class _AdminPlayerAddView(BaseView):
                 return
             for user in self.selected_users:
                 squad_name, status = _player_register(
-                    event, user_assignments, user.id, user.display_name, self.selected_type)
+                    event, user_assignments, user.id, user.display_name,
+                    self.selected_type, self.selected_role)
                 if status == "registered":
                     registered.append((user, squad_name))
                 elif status == "waitlisted":
@@ -1947,9 +1975,10 @@ class _AdminPlayerAddView(BaseView):
             save_event(db_id, event, user_assignments)
 
         type_label = t(f"embed.type_{self.selected_type}", lang) if self.selected_type in SQUAD_TYPES else self.selected_type
+        role_suffix = f", {self.selected_role}" if self.selected_role else ""
         parts = []
         if registered:
-            parts.append(t("admin.player_add_registered_count", lang, n=len(registered), type=type_label))
+            parts.append(t("admin.player_add_registered_count", lang, n=len(registered), type=type_label, role_suffix=role_suffix))
         if waitlisted:
             parts.append(t("admin.player_add_waitlisted_count", lang, n=len(waitlisted)))
         if already:
@@ -1959,7 +1988,7 @@ class _AdminPlayerAddView(BaseView):
 
         for user, squad_name in registered:
             await send_to_log_channel(
-                t("log.player_registered", lang, user=user.name, type=type_label, squad=squad_name, role_suffix=""),
+                t("log.player_registered", lang, user=user.name, type=type_label, squad=squad_name, role_suffix=role_suffix),
                 guild=interaction.guild)
         for user in waitlisted:
             await send_to_log_channel(

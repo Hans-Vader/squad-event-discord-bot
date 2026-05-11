@@ -42,7 +42,7 @@ Dieser Modus eignet sich für Pick-up-Matches oder Community-Events, bei denen s
 | Caster | Konfigurierbar | Deaktiviert |
 | Anmelde-UI | Squad-Name-Modal + Spielstil | Typ + optionale Rolle, Discord-Anzeigename wird verwendet |
 | Slot-Übersicht-Label | „🖥️ Server — 100 Plätze" | „📋 Plätze — 17 Plätze" |
-| Admin-Hinzufügen | Squad hinzufügen (Name + Vertreter + Spielstil) | Spieler hinzufügen (Mehrfachauswahl Users + Typ) |
+| Admin-Hinzufügen | Squad hinzufügen (Name + Vertreter + Spielstil) | Spieler hinzufügen (Mehrfachauswahl Users + Typ + optionale Rolle) |
 
 ---
 
@@ -256,7 +256,7 @@ Im Spieler-Modus hat das Admin-Panel 4 Buttons — die Squad- und Caster-Reihen 
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
-| Spieler | **Spieler hinzufügen** | Mehrere Discord-User (Mehrfachauswahl) + einen Squad-Typ wählen, dann bestätigen. Alle ausgewählten User werden in einem Submit angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, werden die restlichen auf die Warteliste gesetzt. |
+| Spieler | **Spieler hinzufügen** | Mehrere Discord-User (Mehrfachauswahl), einen Squad-Typ und (optional) eine Rolle im Squad wählen, die für alle ausgewählten User gilt; dann bestätigen. Alle User werden in einem Submit angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, werden die restlichen auf die Warteliste gesetzt. Die gewählte Rolle (oder **Egal**, wenn der Standard bleibt) wird für jeden User gespeichert und neben seinem Namen im Event-Embed angezeigt. |
 | Spieler | **Spieler entfernen** | Einen oder mehrere Spieler auswählen (Mehrfachauswahl) — aus aktuellen Squad-Mitgliedern **und** aus jeder Warteliste (Wartelisten-Einträge sind mit `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]` markiert). Die Aktion ist hinter einem roten „Abmelden"-Bestätigungsbutton abgesichert. |
 | Event | **Event bearbeiten** | Öffnet DM-basierte Bearbeitungssitzung |
 | Event | **Event löschen** | Event mit Bestätigung löschen |
@@ -358,7 +358,7 @@ A: Dein Squad wird automatisch auf die Warteliste gesetzt. Du rückst nach, soba
 A: Im Vertreter-Modus hängt das vom Event-Setting „Max Squads pro User" ab (Standard: 1, Maximum: 20). Im Spieler-Modus ist es immer **genau 1** — ein User, eine Anmeldung.
 
 **F: Wie melden Admins eine Gruppe von Spielern im Spieler-Modus an?**
-A: Admin → Spieler hinzufügen. Die Auswahl erlaubt Mehrfachauswahl von Discord-Usern zusammen mit einem einzelnen Squad-Typ. Alle ausgewählten User werden mit einem Bestätigungsklick angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, gehen die restlichen automatisch auf die Warteliste.
+A: Admin → Spieler hinzufügen. Die Auswahl erlaubt Mehrfachauswahl von Discord-Usern zusammen mit einem einzelnen Squad-Typ und (optional) einer Rolle im Squad, die für jeden User im Batch gilt. Alle ausgewählten User werden mit einem Bestätigungsklick angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, gehen die restlichen automatisch auf die Warteliste. Wenn unterschiedliche Rollen für unterschiedliche Spieler gewünscht sind, einfach mehrere Batches hintereinander durchführen.
 
 **F: Was ist der Unterschied zwischen Infanterie, Fahrzeug und Heli?**
 A: Die drei Squad-Typen haben unterschiedliche Größen und separate Slot-Kontingente. Infanterie-Squads sind typischerweise am größten (z.B. 6 Spieler), Fahrzeug-Squads kleiner (z.B. 2) und Heli-Squads am kleinsten (z.B. 1).

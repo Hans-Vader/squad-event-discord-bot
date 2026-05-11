@@ -841,8 +841,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Pick players to remove.",
     },
     "admin.player_add_registered_count": {
-        "de": "✅ {n} Spieler als {type} registriert.",
-        "en": "✅ Registered {n} players as {type}.",
+        "de": "✅ {n} Spieler als {type}{role_suffix} registriert.",
+        "en": "✅ Registered {n} players as {type}{role_suffix}.",
     },
     "admin.player_add_waitlisted_count": {
         "de": "⏳ {n} Spieler auf die Warteliste gesetzt.",
