@@ -861,6 +861,8 @@ def format_event_details(event: dict, lang: str = "de",
         (vehicle_squads, "vehicle", vehicle_count, max_vehicles, veh_size),
         (heli_squads, "heli", heli_count, max_helis, heli_size),
     ]:
+        if type_key != "infantry" and max_count == 0:
+            continue
         size_label = "Größe" if lang == "de" else "Size"
         name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count}) [{size_label}: {size}]"
         if squad_group:

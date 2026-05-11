@@ -97,8 +97,8 @@ _EDIT_PROPERTIES = [
     (4,  "description",            "edit.property.description",     "string_nullable", None),
     (5,  "server_max_players",     "edit.property.server_max",      "int",             "recalc_slots"),
     (6,  "max_caster_slots",       "edit.property.max_casters",     "int_zero",        "recalc_slots"),
-    (7,  "max_vehicle_squads",     "edit.property.max_vehicles",    "int",             None),
-    (8,  "max_heli_squads",        "edit.property.max_helis",       "int",             None),
+    (7,  "max_vehicle_squads",     "edit.property.max_vehicles",    "int_zero",        None),
+    (8,  "max_heli_squads",        "edit.property.max_helis",       "int_zero",        None),
     (9,  "infantry_squad_size",    "edit.property.infantry_size",   "int",             None),
     (10, "vehicle_squad_size",     "edit.property.vehicle_size",    "int",             None),
     (11, "heli_squad_size",        "edit.property.heli_size",       "int",             None),
@@ -485,6 +485,21 @@ ROLES_BY_TYPE = {
     "vehicle": ["Driver", "Gunner", "Commander"],
     "heli":    ["Pilot", "Spotter", "Gunner"],
 }
+
+
+def _squad_type_options(event: dict, lang: str) -> list:
+    """Squad-type SelectOption list for a registration dropdown. Vehicle and
+    Heli are omitted when their `max_*_squads` is 0; Infantry is always shown."""
+    sizes = _get_squad_sizes(event) if event else {"infantry": 6, "vehicle": 2, "heli": 1}
+    opts = [discord.SelectOption(
+        label=t("squad.type_infantry", lang, size=sizes["infantry"]), value="infantry")]
+    if event and event.get("max_vehicle_squads", 0) > 0:
+        opts.append(discord.SelectOption(
+            label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"))
+    if event and event.get("max_heli_squads", 0) > 0:
+        opts.append(discord.SelectOption(
+            label=t("squad.type_heli", lang, size=sizes["heli"]), value="heli"))
+    return opts
 
 
 def _waitlist_key(squad_type: str) -> str:
@@ -1342,11 +1357,7 @@ class PlayerTypePickerView(BaseView):
 
         self.type_select = ui.Select(
             placeholder=t("squad.type_select", lang),
-            options=[
-                discord.SelectOption(label=t("squad.type_infantry", lang, size=sizes["infantry"]), value="infantry"),
-                discord.SelectOption(label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"),
-                discord.SelectOption(label=t("squad.type_heli", lang, size=sizes["heli"]), value="heli"),
-            ],
+            options=_squad_type_options(event, lang),
             custom_id="player_type_select", row=0)
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
@@ -1414,11 +1425,7 @@ class SquadRegistrationView(BaseView):
 
         self.type_select = ui.Select(
             placeholder=t("squad.type_select", lang),
-            options=[
-                discord.SelectOption(label=t("squad.type_infantry", lang, size=sizes["infantry"]), value="infantry", ),
-                discord.SelectOption(label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"),
-                discord.SelectOption(label=t("squad.type_heli", lang, size=sizes["heli"]), value="heli"),
-            ],
+            options=_squad_type_options(event, lang),
             custom_id="squad_type_select", row=0)
         self.type_select.callback = lambda i: self._on_select(i, self.type_select, 'selected_type')
         self.add_item(self.type_select)
@@ -1888,11 +1895,8 @@ class _AdminPlayerAddView(BaseView):
         sizes = _get_squad_sizes(event) if event else {"infantry": 6, "vehicle": 2, "heli": 1}
         self.type_select = ui.Select(
             placeholder=t("squad.type_select", lang),
-            options=[
-                discord.SelectOption(label=t("squad.type_infantry", lang, size=sizes["infantry"]), value="infantry"),
-                discord.SelectOption(label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"),
-                discord.SelectOption(label=t("squad.type_heli", lang, size=sizes["heli"]), value="heli"),
-            ], row=1)
+            options=_squad_type_options(event, lang),
+            row=1)
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
 
@@ -2118,11 +2122,8 @@ class _AdminSquadRegView(BaseView):
 
         self.type_select = ui.Select(
             placeholder=t("squad.type_select", lang),
-            options=[
-                discord.SelectOption(label=t("squad.type_infantry", lang, size=sizes["infantry"]), value="infantry"),
-                discord.SelectOption(label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"),
-                discord.SelectOption(label=t("squad.type_heli", lang, size=sizes["heli"]), value="heli"),
-            ], row=0)
+            options=_squad_type_options(event, lang),
+            row=0)
         self.type_select.callback = lambda i: self._on_select(i, self.type_select, 'selected_type')
         self.add_item(self.type_select)
 
@@ -3024,6 +3025,15 @@ async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
                 if not event:
                     await user.send(t("general.no_active_event", lang))
                     break
+
+                if key in ("max_vehicle_squads", "max_heli_squads") and new_value == 0:
+                    type_key = "vehicle" if key == "max_vehicle_squads" else "heli"
+                    has_squads = any(s.get("type") == type_key for s in event.get("squads", {}).values())
+                    has_wl = bool(event.get(f"{type_key}_waitlist", []))
+                    if has_squads or has_wl:
+                        await user.send(t("edit.cannot_disable_type_with_entries", lang,
+                                          type=t(f"embed.type_{type_key}", lang)))
+                        continue
 
                 # Handle registration start special case
                 if key == "registration_start_time":

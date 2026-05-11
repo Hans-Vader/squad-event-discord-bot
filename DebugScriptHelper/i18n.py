@@ -1136,6 +1136,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Ungültige Eingabe. Bitte gib eine positive ganze Zahl ein.",
         "en": "Invalid input. Please enter a positive integer.",
     },
+    "edit.cannot_disable_type_with_entries": {
+        "de": "Du kannst {type} nicht auf 0 setzen, solange Squads oder Wartelisten-Einträge dieses Typs existieren. Bitte entferne sie zuerst.",
+        "en": "Cannot set {type} to 0 while squads or waitlist entries of this type still exist. Remove them first.",
+    },
     "edit.recalculated": {
         "de": "Spieler-Slots neu berechnet: {slots}",
         "en": "Player slots recalculated: {slots}",
