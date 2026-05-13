@@ -235,12 +235,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Squad Sizes (Inf / Veh / Heli)",
     },
     "event.max_vehicles_label": {
-        "de": "Max Fahrzeug-Squads",
-        "en": "Max Vehicle Squads",
+        "de": "Max Fahrzeug-Squads (0 = deaktiviert)",
+        "en": "Max Vehicle Squads (0 = disabled)",
     },
     "event.max_helis_label": {
-        "de": "Max Heli-Squads",
-        "en": "Max Heli Squads",
+        "de": "Max Heli-Squads (0 = deaktiviert)",
+        "en": "Max Heli Squads (0 = disabled)",
     },
     "event.config_prompt": {
         "de": "Passe die Server-Konfiguration an:",
@@ -1081,12 +1081,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "6. Max caster slots",
     },
     "edit.property.max_vehicles": {
-        "de": "7. Max. Fahrzeug-Squads",
-        "en": "7. Max vehicle squads",
+        "de": "7. Max. Fahrzeug-Squads (0 = deaktiviert)",
+        "en": "7. Max vehicle squads (0 = disabled)",
     },
     "edit.property.max_helis": {
-        "de": "8. Max. Heli-Squads",
-        "en": "8. Max heli squads",
+        "de": "8. Max. Heli-Squads (0 = deaktiviert)",
+        "en": "8. Max heli squads (0 = disabled)",
     },
     "edit.property.infantry_size": {
         "de": "9. Infanterie-Squadgröße",

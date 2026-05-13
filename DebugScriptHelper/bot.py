@@ -3877,6 +3877,10 @@ class EventServerConfigModal(ui.Modal):
             await interaction.response.send_message(t("event.invalid_time", lang), ephemeral=True)
             return
 
+        if max_veh < 0 or max_heli < 0:
+            await interaction.response.send_message(t("event.invalid_time", lang), ephemeral=True)
+            return
+
         # Parse combined squad sizes
         parts = self.squad_sizes.value.split("/")
         if len(parts) != 3:
