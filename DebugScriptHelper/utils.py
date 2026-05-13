@@ -132,6 +132,34 @@ def compute_expiry_date(date_str: str, time_str: str = None) -> Optional[datetim
 _SQUAD_TYPES = ("infantry", "vehicle", "heli")
 _SQUAD_TYPE_LABEL = {"infantry": "Infantry", "vehicle": "Vehicle", "heli": "Heli"}
 
+# Per-role display translations. Stored role values are English; the dropdown
+# label and the embed parenthetical render the localized form. Roles missing
+# from this map fall back to the raw English value (matching the playstyle
+# convention).
+_ROLE_LABEL_TRANSLATIONS = {
+    "Logi driver": {"de": "Logi-Fahrer"},
+    "Mortar":      {"de": "Mörser"},
+}
+
+
+def role_label(role, lang):
+    """Return the localized display label for a stored role value. Returns
+    None if `role` is falsy. Falls back to the English value when no
+    translation exists for `lang`."""
+    if not role:
+        return None
+    return _ROLE_LABEL_TRANSLATIONS.get(role, {}).get(lang, role)
+
+
+def _get_member_roles(member: dict) -> list:
+    """Return a list of role values for a member, supporting both the new
+    `roles` (list) and the legacy `role` (string) schemas."""
+    roles = member.get("roles")
+    if isinstance(roles, list):
+        return roles
+    single = member.get("role")
+    return [single] if single else []
+
 
 def _waitlist_key(squad_type: str) -> str:
     return f"{squad_type}_waitlist"
@@ -171,24 +199,44 @@ def _next_auto_squad_name(event: dict, squad_type: str) -> str:
 
 
 def _try_place_player(event: dict, user_assignments: dict, uid: str,
-                      display_name: str, squad_type: str) -> Optional[str]:
+                      display_name: str, squad_type: str,
+                      roles: Optional[list] = None) -> Optional[str]:
     """Place the player into the first non-full squad of the given type, or
     create a new squad if under the cap. Returns the squad name on success,
     or None if there's no capacity (caller decides whether to waitlist).
 
     No waitlist side effects — safe to call from the waitlist promoter.
+
+    When `roles` contains "Squad Leader", the player is routed into a squad
+    without an existing SL, or into a freshly-created squad when the cap
+    allows. Only when the squad cap is reached does a second SL share a
+    squad with another one.
     """
     squads = event.setdefault("squads", {})
+    roles = list(roles or [])
+    is_sl = "Squad Leader" in roles
+
+    def _has_sl(squad):
+        return any("Squad Leader" in _get_member_roles(m) for m in squad.get("members", []))
+
+    def _add_member(name, squad):
+        members = squad.setdefault("members", [])
+        entry = {"user_id": uid, "name": display_name}
+        if roles:
+            entry["roles"] = list(roles)
+        members.append(entry)
+        user_assignments[uid] = [name]
+        event["player_slots_used"] = event.get("player_slots_used", 0) + 1
+        return name
 
     for name, squad in squads.items():
         if squad.get("type") != squad_type:
             continue
-        members = squad.setdefault("members", [])
-        if len(members) < squad.get("size", 0):
-            members.append({"user_id": uid, "name": display_name})
-            user_assignments[uid] = [name]
-            event["player_slots_used"] = event.get("player_slots_used", 0) + 1
-            return name
+        if len(squad.setdefault("members", [])) >= squad.get("size", 0):
+            continue
+        if is_sl and _has_sl(squad):
+            continue
+        return _add_member(name, squad)
 
     existing_count = sum(1 for s in squads.values() if s.get("type") == squad_type)
     if existing_count < _max_squads_for_type(event, squad_type):
@@ -197,17 +245,23 @@ def _try_place_player(event: dict, user_assignments: dict, uid: str,
             "type": squad_type,
             "size": _squad_size_for_type(event, squad_type),
             "id": generate_squad_id(new_name, squad_type),
-            "members": [{"user_id": uid, "name": display_name}],
+            "members": [],
         }
-        user_assignments[uid] = [new_name]
-        event["player_slots_used"] = event.get("player_slots_used", 0) + 1
-        return new_name
+        return _add_member(new_name, squads[new_name])
+
+    if is_sl:
+        for name, squad in squads.items():
+            if squad.get("type") != squad_type:
+                continue
+            if len(squad.get("members", [])) >= squad.get("size", 0):
+                continue
+            return _add_member(name, squad)
 
     return None
 
 
 def _player_register(event: dict, user_assignments: dict, user_id, display_name: str,
-                     squad_type: str) -> tuple:
+                     squad_type: str, roles: Optional[list] = None) -> tuple:
     """Register a player into the first non-full squad of the type, creating a
     new squad if allowed, otherwise waitlisting them.
 
@@ -221,12 +275,12 @@ def _player_register(event: dict, user_assignments: dict, user_id, display_name:
     if uid in user_assignments:
         return None, "already_registered"
 
-    placed = _try_place_player(event, user_assignments, uid, display_name, squad_type)
+    placed = _try_place_player(event, user_assignments, uid, display_name, squad_type, roles)
     if placed is not None:
         return placed, "registered"
 
     event.setdefault(_waitlist_key(squad_type), []).append(
-        (display_name, squad_type, None, 1, uid, display_name))
+        (display_name, squad_type, None, 1, uid, display_name, list(roles or [])))
     return None, "waitlisted"
 
 
@@ -282,11 +336,18 @@ def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: st
             continue
         uid = str(entry[4])
         name = entry[5]
+        role_data = entry[6] if len(entry) > 6 else None
+        if isinstance(role_data, list):
+            roles = role_data
+        elif isinstance(role_data, str) and role_data:
+            roles = [role_data]
+        else:
+            roles = []
         if uid in user_assignments:
             # Stale waitlist entry for someone already placed — drop and keep going.
             waitlist.pop(0)
             continue
-        placed = _try_place_player(event, user_assignments, uid, name, squad_type)
+        placed = _try_place_player(event, user_assignments, uid, name, squad_type, roles)
         if placed is None:
             break
         waitlist.pop(0)
@@ -836,6 +897,8 @@ def format_event_details(event: dict, lang: str = "de",
         (vehicle_squads, "vehicle", vehicle_count, max_vehicles, veh_size),
         (heli_squads, "heli", heli_count, max_helis, heli_size),
     ]:
+        if type_key != "infantry" and max_count == 0:
+            continue
         size_label = "Größe" if lang == "de" else "Size"
         name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count}) [{size_label}: {size}]"
         if squad_group:
@@ -844,7 +907,16 @@ def format_event_details(event: dict, lang: str = "de",
                 if is_player_mode:
                     members = data.get("members", [])
                     filled = len(members)
-                    names = ", ".join(m.get("name", "?") for m in members) or "—"
+                    none_label = t("player.role_dont_care", lang)
+                    sorted_members = sorted(
+                        members,
+                        key=lambda m: 0 if "Squad Leader" in _get_member_roles(m) else 1)
+                    parts = []
+                    for m in sorted_members:
+                        rls = _get_member_roles(m)
+                        labels = [role_label(r, lang) for r in rls] or [none_label]
+                        parts.append(f"**{m.get('name', '?')}** ({', '.join(labels)})")
+                    names = ", ".join(parts) or "—"
                     text += f"**{data.get('name', squad_id)}** ({filled}/{data.get('size', 0)}): {names}\n"
                 else:
                     playstyle = data.get("playstyle", "Normal")
@@ -863,9 +935,17 @@ def format_event_details(event: dict, lang: str = "de",
             wl_text = ""
             for i, entry in enumerate(wl):
                 if is_player_mode:
-                    # (display_name, type, None, 1, user_id, display_name)
+                    # (display_name, type, None, 1, user_id, display_name, roles)
                     player_name = entry[5] if len(entry) > 5 else entry[0]
-                    wl_text += f"{i+1}. **{player_name}**\n"
+                    role_data = entry[6] if len(entry) > 6 else None
+                    if isinstance(role_data, list):
+                        wl_roles = role_data
+                    elif isinstance(role_data, str) and role_data:
+                        wl_roles = [role_data]
+                    else:
+                        wl_roles = []
+                    wl_labels = [role_label(r, lang) for r in wl_roles] or [t("player.role_dont_care", lang)]
+                    wl_text += f"{i+1}. **{player_name}** ({', '.join(wl_labels)})\n"
                 else:
                     squad_name, _squad_type, playstyle, sq_size, _squad_id, *_rest = entry
                     rep_name = _rest[0] if _rest else None

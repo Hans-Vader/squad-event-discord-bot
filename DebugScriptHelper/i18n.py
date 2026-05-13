@@ -709,12 +709,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Pick your squad type",
     },
     "player.pick_type_desc": {
-        "de": "Du wirst automatisch einem passenden Squad zugewiesen.",
-        "en": "You will be auto-assigned to a fitting squad.",
+        "de": "Wähle deinen Squad-Typ und – optional – deine Rolle. Du wirst automatisch einem passenden Squad zugewiesen.",
+        "en": "Pick your squad type and – optionally – your role. You will be auto-assigned to a fitting squad.",
+    },
+    "player.role_select_placeholder": {
+        "de": "Rolle(n) wählen...",
+        "en": "Choose role(s)...",
+    },
+    "player.role_dont_care": {
+        "de": "Egal",
+        "en": "I don't care",
     },
     "player.registered": {
-        "de": "✅ Du bist registriert in **{squad}** ({type}).",
-        "en": "✅ You are registered in **{squad}** ({type}).",
+        "de": "✅ Du bist registriert in **{squad}** ({type}{role_suffix}).",
+        "en": "✅ You are registered in **{squad}** ({type}{role_suffix}).",
     },
     "player.waitlisted": {
         "de": "⏳ Alle {type}-Plätze sind belegt. Du stehst auf der Warteliste.",
@@ -753,8 +761,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "This event is not in player mode.",
     },
     "log.player_registered": {
-        "de": "Spieler registriert: {user} → {squad} ({type})",
-        "en": "Player registered: {user} → {squad} ({type})",
+        "de": "Spieler registriert: {user} → {squad} ({type}{role_suffix})",
+        "en": "Player registered: {user} → {squad} ({type}{role_suffix})",
     },
     "log.player_waitlisted": {
         "de": "Spieler auf Warteliste: {user} ({type})",
@@ -833,8 +841,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Pick players to remove.",
     },
     "admin.player_add_registered_count": {
-        "de": "✅ {n} Spieler als {type} registriert.",
-        "en": "✅ Registered {n} players as {type}.",
+        "de": "✅ {n} Spieler als {type}{role_suffix} registriert.",
+        "en": "✅ Registered {n} players as {type}{role_suffix}.",
     },
     "admin.player_add_waitlisted_count": {
         "de": "⏳ {n} Spieler auf die Warteliste gesetzt.",
@@ -1127,6 +1135,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "edit.invalid_integer": {
         "de": "Ungültige Eingabe. Bitte gib eine positive ganze Zahl ein.",
         "en": "Invalid input. Please enter a positive integer.",
+    },
+    "edit.cannot_disable_type_with_entries": {
+        "de": "Du kannst {type} nicht auf 0 setzen, solange Squads oder Wartelisten-Einträge dieses Typs existieren. Bitte entferne sie zuerst.",
+        "en": "Cannot set {type} to 0 while squads or waitlist entries of this type still exist. Remove them first.",
     },
     "edit.recalculated": {
         "de": "Spieler-Slots neu berechnet: {slots}",
