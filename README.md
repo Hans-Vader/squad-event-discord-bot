@@ -163,6 +163,38 @@ See [USER_GUIDE.md](USER_GUIDE.md#recurring-events) for the 12 recurrence types,
 - Or: Python 3.12+
 - Discord Bot Token ([Developer Portal](https://discord.com/developers/applications))
 
+### Discord Bot Permissions
+
+#### Privileged Gateway Intents (Developer Portal → Bot)
+
+Both must be enabled manually:
+
+| Intent | Reason |
+|---|---|
+| **Server Members Intent** | Read member roles to check organizer/squad-rep/caster permissions |
+| **Message Content Intent** | Read DM replies during the guided event-edit conversation |
+
+Presence Intent is not required.
+
+#### Bot Permissions (OAuth2 invite)
+
+| Permission | Reason |
+|---|---|
+| View Channels | Access event channels |
+| Send Messages | Post event embeds, responses, and DMs |
+| Embed Links | Render event displays as embeds |
+| Attach Files | Deliver `/export_csv` output |
+| Read Message History | Re-fetch event messages to refresh the display |
+| Manage Messages | Edit/delete event, countdown, and ping messages |
+| Create Public Threads | Attach the event reminder as a thread on the event message |
+| Send Messages in Threads | Post the reminder content inside that thread |
+| Mention @everyone, @here and All Roles | Ping configured roles on registration open / event reminder |
+| Use Application Commands | Run the slash commands |
+
+Permission integer: `397284488256`. Alternatively, grant **Administrator** for a quick setup.
+
+The bot does **not** need: Manage Roles, Manage Channels, Manage Server, Kick/Ban/Moderate Members, Manage Nicknames, voice permissions, or Add Reactions.
+
 ### Docker (recommended)
 
 1. Clone the repository:
