@@ -788,6 +788,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Admin",
         "en": "Admin",
     },
+    "button.ics": {
+        "de": "Kalender",
+        "en": "Calendar",
+    },
 
     # ── ICS calendar export ───────────────────────────────────────────────
     "ics.delivered": {

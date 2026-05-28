@@ -1142,7 +1142,7 @@ class EventActionView(ui.View):
             disabled=is_closed,
         ))
         self.add_item(ui.Button(
-            style=discord.ButtonStyle.secondary,
+            label=t("button.ics", lang), style=discord.ButtonStyle.secondary,
             custom_id="event_ics", emoji="📅",
         ))
         self.add_item(ui.Button(
