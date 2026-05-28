@@ -1146,12 +1146,12 @@ class EventActionView(ui.View):
             disabled=is_closed,
         ))
         self.add_item(ui.Button(
-            label=t("button.admin", lang), style=discord.ButtonStyle.secondary,
-            custom_id="event_admin", emoji="⚙️",
-        ))
-        self.add_item(ui.Button(
             style=discord.ButtonStyle.secondary,
             custom_id="event_ics", emoji="📅",
+        ))
+        self.add_item(ui.Button(
+            label=t("button.admin", lang), style=discord.ButtonStyle.secondary,
+            custom_id="event_admin", emoji="⚙️",
         ))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
