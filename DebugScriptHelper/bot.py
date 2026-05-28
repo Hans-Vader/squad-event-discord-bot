@@ -5187,9 +5187,10 @@ async def help_command(interaction: discord.Interaction):
 
     if lang == "de":
         embed.add_field(name="Events", value=(
-            "`/event` - Event erstellen (im aktuellen Kanal)\n"
+            "`/create_event` - Event erstellen (im aktuellen Kanal)\n"
             "`/delete_event` - Event im Kanal löschen\n"
             "Anmeldung öffnen/schließen → ⚙️ Admin-Button\n"
+            "Kalender-Datei (.ics) exportieren → 📅 Kalender-Button\n"
             "`/register` - Squad anmelden\n"
             "`/unregister` - Abmelden\n"
             "`/update` - Event-Anzeige aktualisieren\n"
@@ -5217,9 +5218,10 @@ async def help_command(interaction: discord.Interaction):
         ), inline=False)
     else:
         embed.add_field(name="Events", value=(
-            "`/event` - Create event (in current channel)\n"
+            "`/create_event` - Create event (in current channel)\n"
             "`/delete_event` - Delete event in channel\n"
             "Open/close registration → ⚙️ Admin button\n"
+            "Export calendar file (.ics) → 📅 Calendar button\n"
             "`/register` - Register a squad\n"
             "`/unregister` - Unregister\n"
             "`/update` - Refresh event display\n"
