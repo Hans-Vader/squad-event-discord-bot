@@ -90,10 +90,6 @@ Nur im **Vertreter-Modus** verfügbar (Caster ist im Spieler-Modus deaktiviert).
 
 Spieler können gleichzeitig als Caster **und** mit Squads angemeldet sein.
 
-### Status einsehen
-
-- **Info** (ℹ️) Button — Zeigt deine Zuweisungen und ggf. Wartelistenposition
-
 ### Abmelden
 
 - Klicke auf **Abmelden** (❌) in der Event-Anzeige, oder
@@ -314,7 +310,6 @@ Die Event-Anzeige enthält folgende Buttons. Alle Buttons sind für jeden sichtb
 | **Squad** (🪖) | Vertreter-Modus: startet die geführte Anmeldung (Typ → Spielstil → Name) |
 | **Beitreten** (🪖) | Spieler-Modus: Typ und optionale Rolle im Squad wählen, dann automatische Zuweisung zu einem Squad |
 | **Caster** (🎙️) | Direkte Caster-Anmeldung |
-| **Info** (ℹ️) | Zeigt eigene Zuweisungen und Wartelistenposition |
 | **Abmelden** (❌) | Squad/Caster abmelden mit Bestätigung |
 | **Admin** (⚙️) | Öffnet Admin-Panel (nur Organisator) |
 | **Kalender** (📅) | Lädt eine `.ics`-Datei zum Import des Events in deinen Kalender herunter |
@@ -330,7 +325,7 @@ Die Wartelisten-Semantik ist in beiden Modi identisch — nur die Einheit unters
 - **Reihenfolge** — First Come, First Served. Die Warteliste wird strikt von vorne nach hinten abgearbeitet.
 - **DM-Benachrichtigung** — Wenn du von der Warteliste ins Event nachrückst, erhältst du eine automatische DM. Im Vertreter-Modus erhält der Squad-Vertreter die DM; im Spieler-Modus der einzelne Spieler.
 - **Log-Channel-Eintrag** — Der Bot schreibt pro Nachrücken einen Eintrag in den Log-Kanal des Servers für den Audit-Trail.
-- **Warteliste einsehen** — Spieler sehen ihre Position über den **Info** Button. Organisatoren sehen die vollständige Warteliste mit `/admin_waitlist`.
+- **Warteliste einsehen** — Organisatoren sehen die vollständige Warteliste mit `/admin_waitlist`.
 - **Von der Warteliste entfernen** — Ein Warteliste-User kann sich selbst abmelden (mit Bestätigung). Organisatoren können Warteliste-Einträge über **Admin → Squad entfernen** (Vertreter-Modus) bzw. **Admin → Spieler entfernen** (Spieler-Modus) entfernen — die Auswahl listet sowohl registrierte als auch Warteliste-Einträge.
 
 ---

@@ -51,7 +51,6 @@ All buttons are visible to every user. Permissions are checked on click.
 - **Squad** (🪖) — Rep mode: starts the guided registration (type → playstyle → name)
 - **Join** (🪖) — Player mode: pick type and optional in-squad role, then auto-assigned to a squad
 - **Caster** (🎙️) — Direct caster registration
-- **Info** (ℹ️) — Shows your assignments and waitlist position
 - **Abmelden** (❌) — Unregister squad/caster with confirmation
 - **Admin** (⚙️) — Opens admin panel (organizer only)
 - **Calendar** (📅) — Download an `.ics` file to import the event into any calendar app

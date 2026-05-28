@@ -90,10 +90,6 @@ Only available in **representative mode** (caster is disabled in player mode).
 
 Players can be registered as a caster **and** with squads at the same time.
 
-### Viewing Status
-
-- **Info** (ℹ️) button — Shows your assignments and waitlist position
-
 ### Unregistering
 
 - Click **Abmelden** (❌) in the event display, or
@@ -314,7 +310,6 @@ The event display contains the following buttons. All buttons are visible to eve
 | **Squad** (🪖) | Rep mode: starts the guided registration (type → playstyle → name) |
 | **Join** (🪖) | Player mode: pick type and optional in-squad role, then auto-assigned to a squad |
 | **Caster** (🎙️) | Direct caster registration |
-| **Info** (ℹ️) | Shows your assignments and waitlist position |
 | **Abmelden** (❌) | Unregister squad/caster with confirmation |
 | **Admin** (⚙️) | Opens admin panel (organizer only) |
 | **Calendar** (📅) | Download an `.ics` file to import the event into your calendar app |
@@ -330,7 +325,7 @@ Waitlist semantics are the same in both modes — only the unit differs (a full 
 - **Order** — First come, first served. The waitlist is processed strictly front-to-back.
 - **DM notification** — When you're promoted from the waitlist into the event, you receive an automatic DM. Rep mode DMs the squad rep; player mode DMs the individual player.
 - **Log channel line** — The bot writes a line to the guild log channel per promotion so organizers have an audit trail.
-- **Viewing the waitlist** — Players can see their position via the **Info** button. Organizers can see the full waitlist with `/admin_waitlist`.
+- **Viewing the waitlist** — Organizers can see the full waitlist with `/admin_waitlist`.
 - **Removing from the waitlist** — A waitlisted user can unregister themselves (confirmation dialog). Organizers can remove waitlist entries via **Admin → Remove Squad** (rep) or **Admin → Remove Player** (player) — the picker lists both registered and waitlisted entries.
 
 ---

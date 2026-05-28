@@ -1137,10 +1137,6 @@ class EventActionView(ui.View):
                 disabled=is_closed,
             ))
         self.add_item(ui.Button(
-            label=t("button.my_info", lang), style=discord.ButtonStyle.secondary,
-            custom_id="event_info", emoji="ℹ️",
-        ))
-        self.add_item(ui.Button(
             label=t("button.unregister", lang), style=discord.ButtonStyle.danger,
             custom_id="event_unregister", emoji="❌",
             disabled=is_closed,
@@ -1160,8 +1156,6 @@ class EventActionView(ui.View):
             await self._register_squad(interaction)
         elif custom_id == "event_register_caster":
             await self._register_caster(interaction)
-        elif custom_id == "event_info":
-            await self._info(interaction)
         elif custom_id == "event_unregister":
             await self._unregister(interaction)
         elif custom_id == "event_admin":
@@ -1249,44 +1243,6 @@ class EventActionView(ui.View):
 
         await interaction.response.defer(ephemeral=True)
         await register_caster(interaction, gid, cid)
-
-    async def _info(self, interaction: discord.Interaction):
-        if not interaction.guild:
-            return
-        await interaction.response.defer(ephemeral=True)
-        gid = interaction.guild.id
-        cid = interaction.channel_id
-        lang = _lang(interaction)
-        event, user_assignments, _ = _get_channel_event(gid, cid)
-        user_id = str(interaction.user.id)
-        assignments = get_user_assignments(user_assignments or {}, user_id)
-
-        if not assignments:
-            embed = discord.Embed(title="Info", description=t("info.no_assignment", lang), color=discord.Color.blue())
-        elif "__caster__" in assignments:
-            if event and user_id in event.get("casters", {}):
-                embed = discord.Embed(title="Caster", description=t("info.caster_assigned", lang), color=discord.Color.green())
-            else:
-                embed = discord.Embed(title="Caster", description=t("info.caster_waitlisted", lang), color=discord.Color.orange())
-        else:
-            squad_ids = [a for a in assignments if a != "__caster__"]
-            desc_parts = []
-            playstyle_enabled = bool(event and event.get("playstyle_enabled", True))
-            for sid in squad_ids:
-                if event and sid in event.get("squads", {}):
-                    d = event["squads"][sid]
-                    if playstyle_enabled:
-                        desc_parts.append(f"**{d.get('name', sid)}** ({d.get('type', '?')}, {d.get('size', 0)}, {d.get('playstyle', 'Normal')})")
-                    else:
-                        desc_parts.append(f"**{d.get('name', sid)}** ({d.get('type', '?')}, {d.get('size', 0)})")
-                else:
-                    display_name = _resolve_squad_name(event, sid) if event else sid
-                    desc_parts.append(f"**{display_name}** (Waitlist)")
-            embed = discord.Embed(title="Squads", description="\n".join(desc_parts), color=discord.Color.green())
-
-        if event:
-            embed.add_field(name="Event", value=f"{event['name']} ({event['date']}, {event.get('time', '?')})", inline=False)
-        await interaction.followup.send(embed=embed, ephemeral=True)
 
     async def _unregister(self, interaction: discord.Interaction):
         if not interaction.guild:

@@ -780,10 +780,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Spieler von der {type}-Warteliste entfernt: {user}",
         "en": "Player removed from the {type} waitlist: {user}",
     },
-    "button.my_info": {
-        "de": "Info",
-        "en": "Info",
-    },
     "button.unregister": {
         "de": "Abmelden",
         "en": "Unregister",
@@ -804,18 +800,6 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
 
     # ── Info ──────────────────────────────────────────────────────────────
-    "info.no_assignment": {
-        "de": "Du bist aktuell keinem Squad und keinem Caster-Slot zugewiesen.",
-        "en": "You are not currently assigned to any squad or caster slot.",
-    },
-    "info.caster_assigned": {
-        "de": "Du bist als **Caster** für dieses Event angemeldet.",
-        "en": "You are registered as a **caster** for this event.",
-    },
-    "info.caster_waitlisted": {
-        "de": "Du stehst auf der **Caster-Warteliste**.",
-        "en": "You are on the **caster waitlist**.",
-    },
     "info.not_registered": {
         "de": "Du bist nicht angemeldet.",
         "en": "You are not registered.",
