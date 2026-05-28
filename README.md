@@ -40,8 +40,6 @@ A Discord bot for managing squad-based events with interactive registration, wai
 
 | Command | Description |
 |---|---|
-| `/register` | Guided registration — rep mode: type → playstyle → name; player mode: type → optional in-squad role |
-| `/unregister` | Unregister from the event |
 | `/help` | Show available commands |
 
 ### Interactive Buttons (in the Event Embed)

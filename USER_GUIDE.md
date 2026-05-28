@@ -59,9 +59,6 @@ There are two ways to register a squad:
 4. Enter the squad name in the modal
 5. The bot confirms the registration or places the squad on the waitlist
 
-**Via slash command:**
-- `/register` — Starts the same guided flow (type → playstyle → name)
-
 ### Registering — Player Mode
 
 The button is labeled **Join** (🪖) instead of **Squad**. The flow:
@@ -78,8 +75,6 @@ The button is labeled **Join** (🪖) instead of **Squad**. The flow:
 
 Your role(s) are shown in parentheses next to your name in the event embed, e.g. `Infantry 1 (3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol (I don't care)`. **Squad Leaders always sort to the top of their squad.** Picking **Squad Leader** (alone or alongside other kits) also influences placement: the bot prefers squads without an existing SL and opens a new squad if every current squad already has one.
 
-Slash command: `/register` — the same flow, adapted to player mode.
-
 **One user, one registration.** If you try to register again while already registered, the bot reports that you're already signed up.
 
 ### Registering as Caster
@@ -92,8 +87,7 @@ Players can be registered as a caster **and** with squads at the same time.
 
 ### Unregistering
 
-- Click **Abmelden** (❌) in the event display, or
-- Use `/unregister`
+- Click **Abmelden** (❌) in the event display
 
 A confirmation dialog is shown before the unregistration is processed in **both modes** — you'll see "Do you really want to unregister? You will lose your spot." and must click Unregister to confirm. You receive a confirmation message once complete.
 
@@ -101,8 +95,6 @@ A confirmation dialog is shown before the unregistration is processed in **both 
 
 | Command | Description |
 |---|---|
-| `/register` | Guided registration — rep mode: type → playstyle → name; player mode: type → optional in-squad role |
-| `/unregister` | Unregister from the event |
 | `/help` | Show available commands |
 
 ---
@@ -339,7 +331,7 @@ A: Rep mode has you register a whole squad (with a name, playstyle, and a user a
 A: The event was created in player mode. You register yourself individually — the bot handles squad assignment. You pick a squad type, optionally an in-squad role (Squad Leader, Medic, …), then click Continue; your Discord display name is used automatically.
 
 **Q: How do I register my squad?**
-A: Click **Squad** (🪖) in the event display or use `/register`. You'll be guided through type, playstyle, and name selection. (This is rep mode — player mode's **Join** flow picks type and an optional in-squad role.)
+A: Click **Squad** (🪖) in the event display. You'll be guided through type, playstyle, and name selection. (This is rep mode — player mode's **Join** flow picks type and an optional in-squad role.)
 
 **Q: What does the in-squad role picker in player mode do?**
 A: Roles let you signal what you'd like to play (Squad Leader, Medic, Pilot, …) so others know who's filling which kits. You can pick **multiple roles** in one registration — for example "Squad Leader + Medic" if you can run either. The list adapts to the squad type you picked. Roles are visible to everyone in the squad list as `Name (Role)` or `Name (Role1, Role2)`. Squad Leaders sort to the top of their squad, and a new SL is routed into a squad without an existing one whenever capacity allows. Select nothing to register as **I don't care**.

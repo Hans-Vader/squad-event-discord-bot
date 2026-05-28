@@ -59,9 +59,6 @@ Es gibt zwei Wege, einen Squad anzumelden:
 4. Gib im Modal den Squad-Namen ein
 5. Der Bot bestätigt die Anmeldung oder setzt den Squad auf die Warteliste
 
-**Per Slash-Command:**
-- `/register` — Startet denselben geführten Ablauf (Typ → Spielstil → Name)
-
 ### Anmelden — Spieler-Modus
 
 Der Button heißt **Beitreten** (🪖) statt **Squad**. Der Ablauf:
@@ -78,8 +75,6 @@ Der Button heißt **Beitreten** (🪖) statt **Squad**. Der Ablauf:
 
 Deine gewählten Rollen werden in Klammern hinter deinem Namen im Event-Embed angezeigt, z.B. `Infantry 1 (3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol (Egal)`. **Squad Leader stehen immer ganz oben in ihrem Squad.** Wählst du **Squad Leader** (allein oder zusammen mit anderen Kits), beeinflusst das auch die Platzierung: Der Bot bevorzugt Squads ohne bestehenden SL und öffnet ein neues Squad, sobald alle aktuellen Squads bereits einen SL haben.
 
-Slash-Command: `/register` — derselbe Ablauf, angepasst für den Spieler-Modus.
-
 **Ein User, eine Anmeldung.** Wenn du dich erneut anmeldest, obwohl du bereits registriert bist, meldet der Bot das zurück.
 
 ### Als Caster anmelden
@@ -92,8 +87,7 @@ Spieler können gleichzeitig als Caster **und** mit Squads angemeldet sein.
 
 ### Abmelden
 
-- Klicke auf **Abmelden** (❌) in der Event-Anzeige, oder
-- Verwende `/unregister`
+- Klicke auf **Abmelden** (❌) in der Event-Anzeige
 
 In **beiden Modi** erscheint ein Bestätigungsdialog, bevor die Abmeldung durchgeführt wird — „Möchtest du dich wirklich abmelden? Du verlierst deinen Platz." Du musst auf Abmelden klicken, um zu bestätigen. Nach Abschluss erhältst du eine Bestätigungsnachricht.
 
@@ -101,8 +95,6 @@ In **beiden Modi** erscheint ein Bestätigungsdialog, bevor die Abmeldung durchg
 
 | Befehl | Beschreibung |
 |---|---|
-| `/register` | Geführte Anmeldung — Vertreter-Modus: Typ → Spielstil → Name; Spieler-Modus: Typ → optionale Rolle im Squad |
-| `/unregister` | Vom Event abmelden |
 | `/help` | Verfügbare Befehle anzeigen |
 
 ---
@@ -339,7 +331,7 @@ A: Im Vertreter-Modus meldest du einen ganzen Squad an (mit Name, Spielstil und 
 A: Das Event wurde im Spieler-Modus erstellt. Du meldest dich als einzelne Person an — der Bot kümmert sich um die Squad-Zuweisung. Du wählst einen Squad-Typ, optional eine Rolle im Squad (Squad Leader, Medic, …), und klickst dann auf Weiter; dein Discord-Anzeigename wird automatisch verwendet.
 
 **F: Wie melde ich meinen Squad an?**
-A: Klicke auf **Squad** (🪖) in der Event-Anzeige oder verwende `/register`. Du wirst durch Typ, Spielstil und Namenswahl geführt. (Das ist der Vertreter-Modus — der Spieler-Modus hat einen **Beitreten**-Ablauf mit Typ und optionaler Rolle.)
+A: Klicke auf **Squad** (🪖) in der Event-Anzeige. Du wirst durch Typ, Spielstil und Namenswahl geführt. (Das ist der Vertreter-Modus — der Spieler-Modus hat einen **Beitreten**-Ablauf mit Typ und optionaler Rolle.)
 
 **F: Was macht der Rollen-Picker im Spieler-Modus?**
 A: Rollen signalisieren, was du gerne spielen würdest (Squad Leader, Medic, Pilot, …), damit andere sehen, wer welche Kits übernimmt. Du kannst **mehrere Rollen** in einer Anmeldung wählen — z.B. „Squad Leader + Medic", falls du beides spielen kannst. Die Liste passt sich dem gewählten Squad-Typ an. Rollen sind für alle in der Squad-Liste sichtbar (`Name (Rolle)` oder `Name (Rolle1, Rolle2)`). Squad Leader werden ans obere Ende ihres Squads sortiert, und ein neuer SL wird bevorzugt in ein Squad ohne bestehenden SL platziert, sofern Kapazität vorhanden ist. Wähle nichts aus, um als **Egal** registriert zu werden.

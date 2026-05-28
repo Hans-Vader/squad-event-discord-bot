@@ -127,7 +127,7 @@ def is_player_mode(event) -> bool:
 
 async def _dispatch_player_register(interaction, guild_id: int, channel_id: int, lang: str):
     """Send the player-mode type picker as an ephemeral response. Entry point
-    shared by the Squad button and the /register slash command."""
+    for the Squad button."""
     view = PlayerTypePickerView(guild_id, channel_id)
     await interaction.response.send_message(
         f"**{t('player.pick_type_title', lang)}**\n{t('player.pick_type_desc', lang)}",
@@ -137,7 +137,7 @@ async def _dispatch_player_register(interaction, guild_id: int, channel_id: int,
 async def _dispatch_player_unregister(interaction, guild_id: int, channel_id: int,
                                       lang: str, user_assignments: dict):
     """Show a confirmation dialog for player-mode self-unregister. Entry point
-    shared by the Unregister button and the /unregister slash command."""
+    for the Unregister button."""
     user_id = str(interaction.user.id)
     if user_id not in (user_assignments or {}):
         await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
@@ -4624,88 +4624,6 @@ async def delete_event_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-@bot.tree.command(name="register", description="Register a squad (guided flow)")
-async def register_command(interaction: discord.Interaction):
-    if not await check_guild_configured(interaction):
-        return
-    gid = interaction.guild.id
-    cid = interaction.channel_id
-    lang = _lang(interaction)
-
-    event, user_assignments, _ = _get_channel_event(gid, cid)
-    if not event:
-        await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
-        return
-
-    is_open, msg_key = check_registration_open(event, user=interaction.user, registration_type="squad")
-    if not is_open:
-        await interaction.response.send_message(_resolve_reg_message(msg_key, lang), ephemeral=True)
-        return
-
-    allowed, gate_key = check_role_gate(event, interaction.user, "squad")
-    if not allowed:
-        await interaction.response.send_message(t(gate_key, lang), ephemeral=True)
-        return
-
-    if is_player_mode(event):
-        await _dispatch_player_register(interaction, gid, cid, lang)
-        return
-
-    user_id = str(interaction.user.id)
-    max_squads = event.get("max_squads_per_user", 1)
-    current = get_user_squad_ids(user_assignments, user_id)
-    if len(current) >= max_squads:
-        await interaction.response.send_message(t("squad.max_reached", lang, current=len(current), max=max_squads), ephemeral=True)
-        return
-
-    view = SquadRegistrationView(gid, cid, event)
-    desc_key = "squad.step_1_desc" if event.get("playstyle_enabled", True) else "squad.step_1_desc_no_playstyle"
-    await interaction.response.send_message(
-        f"**{t('squad.step_1_title', lang)}**\n{t(desc_key, lang)}",
-        view=view, ephemeral=True)
-
-
-@bot.tree.command(name="unregister", description="Unregister from the event")
-async def unregister_command(interaction: discord.Interaction):
-    if not await check_guild_configured(interaction):
-        return
-    gid = interaction.guild.id
-    cid = interaction.channel_id
-    lang = _lang(interaction)
-
-    event, user_assignments, _ = _get_channel_event(gid, cid)
-    if not user_assignments:
-        await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
-        return
-
-    user_id = str(interaction.user.id)
-
-    if is_player_mode(event):
-        await _dispatch_player_unregister(interaction, gid, cid, lang, user_assignments)
-        return
-
-    assignments = get_user_assignments(user_assignments, user_id)
-    if not assignments:
-        await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
-        return
-
-    if "__caster__" in assignments:
-        embed = discord.Embed(title=t("caster.unregister_title", lang),
-                              description=t("caster.unregister_confirm", lang), color=discord.Color.red())
-        view = CasterUnregisterConfirmView(gid, cid)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-    elif len(assignments) == 1:
-        display_name = _resolve_squad_name(event, assignments[0]) if event else assignments[0]
-        embed = discord.Embed(title=t("squad.unregister_title", lang),
-                              description=t("squad.unregister_confirm", lang, name=display_name), color=discord.Color.red())
-        view = SquadUnregisterConfirmView(gid, cid, assignments[0])
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-    else:
-        options = [discord.SelectOption(label=_resolve_squad_name(event, sn) if event else sn, value=sn) for sn in assignments if sn != "__caster__"]
-        view = UserSquadUnregisterSelector(gid, cid, options)
-        await interaction.response.send_message(t("squad.pick_to_unregister", lang), view=view, ephemeral=True)
-
-
 @bot.tree.command(name="update", description="Refresh event display (organizer only)")
 async def update_command(interaction: discord.Interaction):
     if not await check_organizer(interaction):
@@ -5189,10 +5107,10 @@ async def help_command(interaction: discord.Interaction):
         embed.add_field(name="Events", value=(
             "`/create_event` - Event erstellen (im aktuellen Kanal)\n"
             "`/delete_event` - Event im Kanal löschen\n"
-            "Anmeldung öffnen/schließen → ⚙️ Admin-Button\n"
+            "Event verwalten (öffnen/schließen, bearbeiten, löschen) → ⚙️ Admin-Button\n"
+            "Anmelden → 🪖 / 🎙️ Buttons\n"
+            "Abmelden → ❌ Button\n"
             "Kalender-Datei (.ics) exportieren → 📅 Kalender-Button\n"
-            "`/register` - Squad anmelden\n"
-            "`/unregister` - Abmelden\n"
             "`/update` - Event-Anzeige aktualisieren\n"
             "`/export_csv` - Squad-Liste als CSV exportieren"
         ), inline=False)
@@ -5220,10 +5138,10 @@ async def help_command(interaction: discord.Interaction):
         embed.add_field(name="Events", value=(
             "`/create_event` - Create event (in current channel)\n"
             "`/delete_event` - Delete event in channel\n"
-            "Open/close registration → ⚙️ Admin button\n"
+            "Event management (open/close, edit, delete) → ⚙️ Admin button\n"
+            "Register → 🪖 / 🎙️ buttons\n"
+            "Unregister → ❌ button\n"
             "Export calendar file (.ics) → 📅 Calendar button\n"
-            "`/register` - Register a squad\n"
-            "`/unregister` - Unregister\n"
             "`/update` - Refresh event display\n"
             "`/export_csv` - Export squad list as CSV"
         ), inline=False)
