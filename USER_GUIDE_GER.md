@@ -317,6 +317,7 @@ Die Event-Anzeige enthält folgende Buttons. Alle Buttons sind für jeden sichtb
 | **Info** (ℹ️) | Zeigt eigene Zuweisungen und Wartelistenposition |
 | **Abmelden** (❌) | Squad/Caster abmelden mit Bestätigung |
 | **Admin** (⚙️) | Öffnet Admin-Panel (nur Organisator) |
+| **Kalender** (📅) | Lädt eine `.ics`-Datei zum Import des Events in deinen Kalender herunter |
 
 ---
 

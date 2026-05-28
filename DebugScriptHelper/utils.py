@@ -10,10 +10,12 @@ import hashlib
 import io
 import logging
 import os
+import re
 import shutil
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import discord
 from discord import Embed
@@ -1020,3 +1022,113 @@ def clear_log_file() -> bool:
     except Exception as e:
         logger.error(f"Error clearing log: {e}")
         return False
+
+
+# ---------------------------------------------------------------------------
+# ICS (iCalendar) export
+# ---------------------------------------------------------------------------
+
+_ICS_TZ = ZoneInfo("Europe/Berlin")
+_ICS_DATE_FMT = "%d.%m.%Y %H:%M"
+
+
+def _ics_escape(value: str) -> str:
+    """Escape per RFC 5545 §3.3.11. Colons are intentionally left untouched."""
+    if not value:
+        return ""
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    return (
+        value
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\n", "\\n")
+    )
+
+
+def _ics_fold(line: str) -> str:
+    """Fold a content line at 75 octets per RFC 5545, respecting UTF-8 boundaries."""
+    encoded = line.encode("utf-8")
+    if len(encoded) <= 75:
+        return line
+    pieces: list[bytes] = []
+    pos = 0
+    limit = 75
+    while pos < len(encoded):
+        end = min(pos + limit, len(encoded))
+        if end < len(encoded):
+            while end > pos and (encoded[end] & 0xC0) == 0x80:
+                end -= 1
+        pieces.append(encoded[pos:end])
+        pos = end
+        limit = 74  # subsequent lines are prefixed with one space
+    return "\r\n ".join(p.decode("utf-8") for p in pieces)
+
+
+def _ics_dt(dt: datetime) -> str:
+    """Format a UTC datetime as YYYYMMDDTHHMMSSZ."""
+    if dt.tzinfo is None:
+        raise ValueError("_ics_dt requires a timezone-aware datetime")
+    return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _ics_slug(name: str) -> str:
+    """Filesystem-safe slug for the ICS filename. ASCII only, max 40 chars."""
+    if not name:
+        return ""
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_").lower()
+    return slug[:40]
+
+
+def build_event_ics(
+    event: dict,
+    guild_id: int,
+    channel_id: int,
+    jump_url: Optional[str],
+) -> bytes:
+    """Build the ICS file for an event.
+
+    Returns UTF-8 encoded bytes with CRLF line endings. Times are converted
+    from the bot's local timezone (Europe/Berlin) to UTC.
+    """
+    date_str = event.get("date", "")
+    time_str = event.get("time", "20:00")
+    naive = datetime.strptime(f"{date_str} {time_str}", _ICS_DATE_FMT)
+    start_local = naive.replace(tzinfo=_ICS_TZ)
+    duration = int(event.get("duration_minutes") or 120)
+    end_local = start_local + timedelta(minutes=duration)
+
+    msg_id = event.get("event_message_id")
+    uid_suffix = str(msg_id) if msg_id else "no-msg"
+    uid = f"{guild_id}-{channel_id}-{uid_suffix}@squad-event-bot"
+
+    name = event.get("name") or "Event"
+    description_text = event.get("description") or ""
+    description_parts = []
+    if description_text:
+        description_parts.append(description_text)
+    if jump_url:
+        description_parts.append(jump_url)
+    description = "\n\n".join(description_parts)
+
+    now_utc = datetime.now(timezone.utc)
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//squad-event-discord-bot//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        _ics_fold(f"UID:{uid}"),
+        f"DTSTAMP:{_ics_dt(now_utc)}",
+        f"DTSTART:{_ics_dt(start_local)}",
+        f"DTEND:{_ics_dt(end_local)}",
+        _ics_fold(f"SUMMARY:{_ics_escape(name)}"),
+    ]
+    if description:
+        lines.append(_ics_fold(f"DESCRIPTION:{_ics_escape(description)}"))
+    lines.append("END:VEVENT")
+    lines.append("END:VCALENDAR")
+
+    return ("\r\n".join(lines) + "\r\n").encode("utf-8")

@@ -792,6 +792,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Admin",
         "en": "Admin",
     },
+    "button.ics": {
+        "de": "Kalender",
+        "en": "Calendar",
+    },
+
+    # ── ICS calendar export ───────────────────────────────────────────────
+    "ics.delivered": {
+        "de": "📅 Hier ist die Kalender-Datei für **{name}**. Importiere sie in deinen Kalender.",
+        "en": "📅 Here's the calendar file for **{name}**. Import it into your calendar.",
+    },
+    "ics.error.invalid_datetime": {
+        "de": "❌ Ungültiges Event-Datum, Kalender-Datei kann nicht erstellt werden.",
+        "en": "❌ Invalid event date/time — cannot build the calendar file.",
+    },
 
     # ── Info ──────────────────────────────────────────────────────────────
     "info.no_assignment": {

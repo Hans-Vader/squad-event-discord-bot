@@ -40,6 +40,7 @@ from utils import (
     export_log_file, clear_log_file, logger,
     resolve_event_defaults, role_label,
     _player_register, _player_unregister, _player_remove_from_waitlist,
+    build_event_ics, _ics_slug,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
 
@@ -1148,6 +1149,10 @@ class EventActionView(ui.View):
             label=t("button.admin", lang), style=discord.ButtonStyle.secondary,
             custom_id="event_admin", emoji="⚙️",
         ))
+        self.add_item(ui.Button(
+            label=t("button.ics", lang), style=discord.ButtonStyle.secondary,
+            custom_id="event_ics", emoji="📅", row=1,
+        ))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         custom_id = interaction.data.get("custom_id", "")
@@ -1161,6 +1166,8 @@ class EventActionView(ui.View):
             await self._unregister(interaction)
         elif custom_id == "event_admin":
             await self._admin(interaction)
+        elif custom_id == "event_ics":
+            await self._ics(interaction)
         return False
 
     async def _register_squad(self, interaction: discord.Interaction):
@@ -1338,6 +1345,32 @@ class EventActionView(ui.View):
         embed = discord.Embed(title=t("admin.title", lang), color=discord.Color.dark_red())
         view = AdminActionView(gid, interaction.channel_id)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+    async def _ics(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return
+        gid = interaction.guild.id
+        cid = interaction.channel_id
+        lang = _lang(interaction)
+        event, _, _ = _get_channel_event(gid, cid)
+        if not event:
+            await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
+            return
+        msg_id = event.get("event_message_id")
+        jump_url = f"https://discord.com/channels/{gid}/{cid}/{msg_id}" if msg_id else None
+        try:
+            ics_bytes = build_event_ics(event, gid, cid, jump_url)
+        except ValueError:
+            await interaction.response.send_message(t("ics.error.invalid_datetime", lang), ephemeral=True)
+            return
+        filename_stem = _ics_slug(event.get("name", "")) or "event"
+        date_str = event.get("date", "").replace(".", "-") or "event"
+        filename = f"{filename_stem}_{date_str}.ics"
+        file = discord.File(fp=io.BytesIO(ics_bytes), filename=filename)
+        await interaction.response.send_message(
+            t("ics.delivered", lang, name=event.get("name", "")),
+            file=file, ephemeral=True,
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ A Discord bot for managing squad-based events with interactive registration, wai
 - **Registration countdown** — Configurable countdown message before registration opens (auto-deleted when registration starts)
 - **Event reminders** — Configurable reminder notification X minutes before event start
 - **Event image** — Optional embed image configurable via DM (upload or URL)
+- **Calendar export** — Any user can click the **Calendar** button on the event embed to download a `.ics` file for import into Google Calendar, Outlook, Apple Calendar, etc.
 - **DM-based event editing** — Organizers edit event properties in a guided DM conversation (18 editable properties)
 - **Recurring events** — 12 recurrence types (intervals, weekday-of-month, specific date, specific weekdays/month-days). When the cycle fires, the old event is archived (summary logged + embed deleted) and a fresh event is posted automatically with the same config
 - **Configurable event duration** — Set event length (30min–24h presets). Event is archived at `start + duration`; recurrence anchors on this
@@ -53,6 +54,7 @@ All buttons are visible to every user. Permissions are checked on click.
 - **Info** (ℹ️) — Shows your assignments and waitlist position
 - **Abmelden** (❌) — Unregister squad/caster with confirmation
 - **Admin** (⚙️) — Opens admin panel (organizer only)
+- **Calendar** (📅) — Download an `.ics` file to import the event into any calendar app
 
 ### Admin Panel (Organizer role required)
 

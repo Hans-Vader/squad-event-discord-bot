@@ -317,6 +317,7 @@ The event display contains the following buttons. All buttons are visible to eve
 | **Info** (ℹ️) | Shows your assignments and waitlist position |
 | **Abmelden** (❌) | Unregister squad/caster with confirmation |
 | **Admin** (⚙️) | Opens admin panel (organizer only) |
+| **Calendar** (📅) | Download an `.ics` file to import the event into your calendar app |
 
 ---
 
