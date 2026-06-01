@@ -670,6 +670,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "🚁 Heli",
         "en": "🚁 Heli",
     },
+    # Plain (no emoji) labels for localizing auto-generated player-mode squad
+    # names, e.g. the stored "Infantry 1" renders as "Infanterie 1" in German.
+    "squad.label_infantry": {
+        "de": "Infanterie",
+        "en": "Infantry",
+    },
+    "squad.label_vehicle": {
+        "de": "Fahrzeug",
+        "en": "Vehicle",
+    },
+    "squad.label_heli": {
+        "de": "Heli",
+        "en": "Heli",
+    },
     "embed.squads_label": {
         "de": "Squads",
         "en": "Squads",

@@ -919,7 +919,13 @@ def format_event_details(event: dict, lang: str = "de",
                         labels = [role_label(r, lang) for r in rls] or [none_label]
                         parts.append(f"**{m.get('name', '?')}** ({', '.join(labels)})")
                     names = ", ".join(parts) or "—"
-                    text += f"**{data.get('name', squad_id)}** ({filled}/{data.get('size', 0)}): {names}\n"
+                    # Auto squad names are stored canonically ("Infantry 1");
+                    # localize the label using the known type for display.
+                    raw_name = data.get('name', squad_id)
+                    number = raw_name.rsplit(" ", 1)[-1]
+                    squad_label = (f"{t('squad.label_' + type_key, lang)} {number}"
+                                   if number.isdigit() else raw_name)
+                    text += f"**{squad_label}** ({filled}/{data.get('size', 0)}): {names}\n"
                 else:
                     playstyle = data.get("playstyle", "Normal")
                     sq_size = data.get("size", 0)
