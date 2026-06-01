@@ -235,12 +235,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Squad Sizes (Inf / Veh / Heli)",
     },
     "event.max_vehicles_label": {
-        "de": "Max Fahrzeug-Squads",
-        "en": "Max Vehicle Squads",
+        "de": "Max Fahrzeug-Squads (0 = deaktiviert)",
+        "en": "Max Vehicle Squads (0 = disabled)",
     },
     "event.max_helis_label": {
-        "de": "Max Heli-Squads",
-        "en": "Max Heli Squads",
+        "de": "Max Heli-Squads (0 = deaktiviert)",
+        "en": "Max Heli Squads (0 = disabled)",
     },
     "event.config_prompt": {
         "de": "Passe die Server-Konfiguration an:",
@@ -780,10 +780,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Spieler von der {type}-Warteliste entfernt: {user}",
         "en": "Player removed from the {type} waitlist: {user}",
     },
-    "button.my_info": {
-        "de": "Info",
-        "en": "Info",
-    },
     "button.unregister": {
         "de": "Abmelden",
         "en": "Unregister",
@@ -792,20 +788,22 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Admin",
         "en": "Admin",
     },
+    "button.ics": {
+        "de": "Kalender",
+        "en": "Calendar",
+    },
+
+    # ── ICS calendar export ───────────────────────────────────────────────
+    "ics.delivered": {
+        "de": "📅 Hier ist die Kalender-Datei für **{name}**. Importiere sie in deinen Kalender.",
+        "en": "📅 Here's the calendar file for **{name}**. Import it into your calendar.",
+    },
+    "ics.error.invalid_datetime": {
+        "de": "❌ Ungültiges Event-Datum, Kalender-Datei kann nicht erstellt werden.",
+        "en": "❌ Invalid event date/time — cannot build the calendar file.",
+    },
 
     # ── Info ──────────────────────────────────────────────────────────────
-    "info.no_assignment": {
-        "de": "Du bist aktuell keinem Squad und keinem Caster-Slot zugewiesen.",
-        "en": "You are not currently assigned to any squad or caster slot.",
-    },
-    "info.caster_assigned": {
-        "de": "Du bist als **Caster** für dieses Event angemeldet.",
-        "en": "You are registered as a **caster** for this event.",
-    },
-    "info.caster_waitlisted": {
-        "de": "Du stehst auf der **Caster-Warteliste**.",
-        "en": "You are on the **caster waitlist**.",
-    },
     "info.not_registered": {
         "de": "Du bist nicht angemeldet.",
         "en": "You are not registered.",
@@ -1081,12 +1079,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "6. Max caster slots",
     },
     "edit.property.max_vehicles": {
-        "de": "7. Max. Fahrzeug-Squads",
-        "en": "7. Max vehicle squads",
+        "de": "7. Max. Fahrzeug-Squads (0 = deaktiviert)",
+        "en": "7. Max vehicle squads (0 = disabled)",
     },
     "edit.property.max_helis": {
-        "de": "8. Max. Heli-Squads",
-        "en": "8. Max heli squads",
+        "de": "8. Max. Heli-Squads (0 = deaktiviert)",
+        "en": "8. Max heli squads (0 = disabled)",
     },
     "edit.property.infantry_size": {
         "de": "9. Infanterie-Squadgröße",
