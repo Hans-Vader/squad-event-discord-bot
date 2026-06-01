@@ -920,6 +920,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Event erstellt: '{name}' am {date} um {time} durch {user}. {reg_info}",
         "en": "Event created: '{name}' on {date} at {time} by {user}. {reg_info}",
     },
+    "log.event_created_settings_title": {
+        "de": "Event-Einstellungen: {name}",
+        "en": "Event settings: {name}",
+    },
     "log.event_deleted": {
         "de": "Event gelöscht: {user} hat das Event '{name}' gelöscht",
         "en": "Event deleted: {user} deleted the event '{name}'",

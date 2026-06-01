@@ -3764,6 +3764,18 @@ class WizardConfirmationView(BaseView):
               user=self.interaction_user.name, reg_info=reg_info),
             guild_id=self.guild_id)
 
+        # Also post the full approved settings (the embed the creator confirmed)
+        # to the log channel for traceability. Best-effort: never break creation.
+        settings_embed = _build_confirmation_embed(self.event, self.guild_id)
+        settings_embed.title = t("log.event_created_settings_title", lang, name=self.event["name"])
+        settings_embed.color = discord.Color.blue()
+        log_ch = get_log_channel(self.guild_id)
+        if log_ch:
+            try:
+                await log_ch.send(embed=settings_embed)
+            except Exception as e:
+                logger.error(f"Could not send event settings to log: {e}")
+
         await interaction.edit_original_response(
             content=t("event.created", lang, name=self.event["name"], reg_info=reg_info))
 
