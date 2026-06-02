@@ -1591,8 +1591,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Optionally select a reminder to be sent before the event starts.",
     },
     "wizard.reminder_placeholder": {
-        "de": "Erinnerung auswählen...",
-        "en": "Select reminder...",
+        "de": "Erinnerung vor Event-Start...",
+        "en": "Reminder before event start...",
     },
     "wizard.reminder_none": {
         "de": "Keine Erinnerung",
@@ -1635,12 +1635,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Reminder & Countdown",
     },
     "wizard.timing_desc": {
-        "de": "Konfiguriere optionale Erinnerung und Countdown-Nachricht.",
-        "en": "Configure optional reminder and countdown message.",
+        "de": "Optional: eine Erinnerung vor dem Event-Start und ein Countdown vor dem Anmeldestart. Wähle unten oder überspringe.",
+        "en": "Optional: a reminder before the event starts, and a countdown before registration opens. Pick below or skip.",
     },
     "wizard.countdown_placeholder": {
-        "de": "Countdown auswählen...",
-        "en": "Select countdown...",
+        "de": "Countdown vor Anmeldestart...",
+        "en": "Countdown before registration opens...",
     },
     "wizard.countdown_none": {
         "de": "Kein Countdown",
