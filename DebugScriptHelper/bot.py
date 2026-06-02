@@ -3749,15 +3749,20 @@ class WizardSquadRolesView(BaseView):
         self.community_rep_select.callback = self._community_rep_selected
         self.add_item(self.community_rep_select)
 
-        self.ping_select = ui.Select(
-            placeholder=t("wizard.ping_select_title", lang),
-            options=[
-                discord.SelectOption(label=t("wizard.ping_no", lang), value="no", default=True),
-                discord.SelectOption(label=t("wizard.ping_yes", lang), value="yes"),
-            ],
-            min_values=1, max_values=1, row=2)
-        self.ping_select.callback = self._ping_selected
-        self.add_item(self.ping_select)
+        # The "notify when registration opens" question only makes sense when
+        # registration isn't already open at creation; otherwise there's no
+        # open moment to announce, so we skip it (ping_on_open stays False).
+        self.ping_select = None
+        if not event.get("registration_open", False):
+            self.ping_select = ui.Select(
+                placeholder=t("wizard.ping_select_title", lang),
+                options=[
+                    discord.SelectOption(label=t("wizard.ping_no", lang), value="no", default=True),
+                    discord.SelectOption(label=t("wizard.ping_yes", lang), value="yes"),
+                ],
+                min_values=1, max_values=1, row=2)
+            self.ping_select.callback = self._ping_selected
+            self.add_item(self.ping_select)
 
         skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=3)
         skip_btn.callback = self._skip
