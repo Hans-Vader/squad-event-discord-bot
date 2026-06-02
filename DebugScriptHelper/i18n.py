@@ -1532,6 +1532,22 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Kein Limit",
         "en": "No limit",
     },
+    "limit.prefix.regular": {
+        "de": "Regulär",
+        "en": "Regular",
+    },
+    "limit.prefix.early": {
+        "de": "Vorab-Zugang",
+        "en": "Early access",
+    },
+    "limit.squads_per_user": {
+        "de": "{n} Squads/Nutzer",
+        "en": "{n} squads/user",
+    },
+    "limit.squads_per_role": {
+        "de": "{n} Squads/Rolle",
+        "en": "{n} squads/role",
+    },
     "percent.value": {
         "de": "{n}%",
         "en": "{n}%",
@@ -1541,20 +1557,44 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Slot Limits — Registration Quotas",
     },
     "wizard.slot_limits_desc": {
-        "de": "Begrenze optional, wie viele Slots/Squads jede Registrierungsart belegen darf. Caster sind ausgenommen.\nÜberspringe diesen Schritt, wenn es keine Limits geben soll.",
-        "en": "Optionally limit how many slots/squads each registration type may use. Casters are exempt.\nSkip this step if there should be no limits.",
+        "de": ("So begrenzt du optional, wie viel jede Registrierungsart belegen darf. "
+               "Caster zählen nie mit; Prozente beziehen sich nur auf die Spieler-Slots.\n"
+               "• Reguläre Rollen — max. % der Slots (alle regulären Rollen teilen sich diesen Anteil)\n"
+               "• Vorab-Zugang-Rollen — max. % der Slots (alle Vorab-Rollen teilen sich diesen Anteil)\n"
+               "• Reguläre Rollen — max. Squads pro Nutzer (Limit je Person)\n"
+               "• Vorab-Zugang-Rollen — max. Squads pro Rolle (Gesamtsumme je Rolle)\n"
+               "Lass einen Wert auf „Kein Limit“ oder überspringe für keine Begrenzung."),
+        "en": ("Optionally cap how much each registration type may take. Casters never count; "
+               "percentages are of the player slots only.\n"
+               "• Regular roles — max % of slots (all regular roles share this)\n"
+               "• Early-access roles — max % of slots (all early-access roles share this)\n"
+               "• Regular roles — max squads per user (limit per person)\n"
+               "• Early-access roles — max squads per role (each role's total)\n"
+               "Leave any on “No limit” or skip for no restriction."),
     },
     "wizard.cap_regular_pct_title": {
-        "de": "Reguläre Anmeldung: max. % der Slots",
-        "en": "Regular: max % of slots",
+        "de": "Reguläre Rollen — max. % der Slots",
+        "en": "Regular roles — max % of slots",
     },
     "wizard.cap_early_pct_title": {
-        "de": "Vorab-Zugang: max. % der Slots",
-        "en": "Early access: max % of slots",
+        "de": "Vorab-Zugang-Rollen — max. % der Slots",
+        "en": "Early-access roles — max % of slots",
+    },
+    "wizard.cap_regular_squads_title": {
+        "de": "Reguläre Rollen — max. Squads pro Nutzer",
+        "en": "Regular roles — max squads per user",
     },
     "wizard.cap_early_squads_title": {
-        "de": "Vorab-Zugang: max. Squads pro Rolle",
-        "en": "Early access: max squads per role",
+        "de": "Vorab-Zugang-Rollen — max. Squads pro Rolle",
+        "en": "Early-access roles — max squads per role",
+    },
+    "wizard.playstyle_step_title": {
+        "de": "Spielstil-Auswahl",
+        "en": "Playstyle selection",
+    },
+    "wizard.playstyle_step_desc": {
+        "de": "Sollen Squads bei der Anmeldung einen Spielstil wählen?",
+        "en": "Should squads pick a playstyle when registering?",
     },
     "edit.property.regular_pct_cap": {
         "de": "20. Slot-Limit: reguläre Anmeldung (%)",

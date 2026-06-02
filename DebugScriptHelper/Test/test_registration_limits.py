@@ -151,9 +151,11 @@ class TestFormattingAndPresets(unittest.TestCase):
         self.assertLessEqual(len(bot._PERCENT_PRESETS), 25)
         self.assertLessEqual(len(bot._COUNT_PRESETS), 25)
         self.assertNotIn(96, bot._PERCENT_PRESETS)  # 96–99 dropped to fit the cap
-        opts = bot._limit_select_options(bot._PERCENT_PRESETS, "percent", "en", 50)
+        opts = bot._capped_options("limit.prefix.regular", bot._PERCENT_PRESETS,
+                                   bot._format_percent_value, "en", 50)
         self.assertEqual(opts[0].value, "none")
-        self.assertTrue(any(o.value == "50" and o.default for o in opts))
+        self.assertEqual(opts[0].label, "Regular: No limit")  # context-carrying label
+        self.assertTrue(any(o.value == "50" and o.default and o.label == "Regular: 50%" for o in opts))
         self.assertIsNone(bot.WizardSlotLimitsView._value("none"))
         self.assertEqual(bot.WizardSlotLimitsView._value("50"), 50)
 
@@ -164,6 +166,8 @@ class TestI18nKeys(unittest.TestCase):
         "wizard.cap_regular_pct_title", "wizard.cap_early_pct_title", "wizard.cap_early_squads_title",
         "edit.property.regular_pct_cap", "edit.property.early_pct_cap", "edit.property.early_squad_cap",
         "gate.seat_cap_reached", "gate.squad_role_cap_reached",
+        "limit.prefix.regular", "limit.prefix.early", "limit.squads_per_user", "limit.squads_per_role",
+        "wizard.cap_regular_squads_title", "wizard.playstyle_step_title", "wizard.playstyle_step_desc",
     ]
 
     def test_present_both_languages(self):

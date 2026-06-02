@@ -2590,6 +2590,8 @@ _SPAWN_KEYS = ["1m", "5m", "10m", "30m", "1h", "6h", "1d", "1w"]
 # Registration-limit dropdowns. `None` = "no limit". Both fit Discord's 25-option cap.
 _PERCENT_PRESETS = [None, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95]
 _COUNT_PRESETS = [None, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+# Regular per-user squad limit (#12): required value 1–20, no "no limit".
+_REGULAR_SQUAD_PRESETS = list(range(1, 21))
 
 
 def _format_percent_value(percent, lang):
@@ -2610,6 +2612,20 @@ def _format_count_value(count, lang):
         return str(int(count))
     except (TypeError, ValueError):
         return t("limit.none", lang)
+
+
+def _format_squads_per_user(count, lang):
+    """Context-carrying value for the regular per-user squad dropdown."""
+    if count is None:
+        return t("limit.none", lang)
+    return t("limit.squads_per_user", lang, n=int(count))
+
+
+def _format_squads_per_role(count, lang):
+    """Context-carrying value for the early-access per-role squad dropdown."""
+    if count is None:
+        return t("limit.none", lang)
+    return t("limit.squads_per_role", lang, n=int(count))
 
 
 def _format_duration_value(minutes, lang):
@@ -3841,10 +3857,11 @@ async def _advance_to_post_roles(interaction, guild_id, channel_id, event,
 
 
 class WizardSlotLimitsView(BaseView):
-    """Optional per-register-type limits: seat % per type + early-access squads/role.
+    """Optional per-register-type limits, shown only when a role gate is configured.
 
-    Shown only when a role gate is configured. Regular per-user squad count stays
-    in WizardSquadLimitView (#12). Squad-count cap is rep mode only.
+    Rep mode shows four dropdowns (two seat-% caps + two squad caps); player mode
+    shows only the two % caps (squad limits don't apply; #12 forced to 1). Option
+    labels carry their register-type prefix so a chosen value stays self-explanatory.
     """
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
@@ -3856,34 +3873,47 @@ class WizardSlotLimitsView(BaseView):
         self.settings = settings
         self.interaction_user = interaction_user
         lang = get_guild_language(guild_id)
+        rep_mode = not is_player_mode(event)
 
         self._reg_pct = event.get("squad_rep_cap_percent")
         self._early_pct = event.get("community_rep_cap_percent")
+        self._reg_squads = event.get("max_squads_per_user", 1) or 1
         self._early_squads = event.get("early_access_squads_per_role")
 
         self.reg_pct_select = ui.Select(
             placeholder=t("wizard.cap_regular_pct_title", lang),
-            options=_limit_select_options(_PERCENT_PRESETS, "percent", lang, self._reg_pct),
+            options=_capped_options("limit.prefix.regular", _PERCENT_PRESETS,
+                                    _format_percent_value, lang, self._reg_pct),
             min_values=1, max_values=1, row=0)
         self.reg_pct_select.callback = self._reg_pct_selected
         self.add_item(self.reg_pct_select)
 
         self.early_pct_select = ui.Select(
             placeholder=t("wizard.cap_early_pct_title", lang),
-            options=_limit_select_options(_PERCENT_PRESETS, "percent", lang, self._early_pct),
+            options=_capped_options("limit.prefix.early", _PERCENT_PRESETS,
+                                    _format_percent_value, lang, self._early_pct),
             min_values=1, max_values=1, row=1)
         self.early_pct_select.callback = self._early_pct_selected
         self.add_item(self.early_pct_select)
 
         btn_row = 2
-        if not is_player_mode(event):
+        if rep_mode:
+            self.reg_squads_select = ui.Select(
+                placeholder=t("wizard.cap_regular_squads_title", lang),
+                options=_capped_options("limit.prefix.regular", _REGULAR_SQUAD_PRESETS,
+                                        _format_squads_per_user, lang, self._reg_squads),
+                min_values=1, max_values=1, row=2)
+            self.reg_squads_select.callback = self._reg_squads_selected
+            self.add_item(self.reg_squads_select)
+
             self.early_squads_select = ui.Select(
                 placeholder=t("wizard.cap_early_squads_title", lang),
-                options=_limit_select_options(_COUNT_PRESETS, "squad_count", lang, self._early_squads),
-                min_values=1, max_values=1, row=2)
+                options=_capped_options("limit.prefix.early", _COUNT_PRESETS,
+                                        _format_squads_per_role, lang, self._early_squads),
+                min_values=1, max_values=1, row=3)
             self.early_squads_select.callback = self._early_squads_selected
             self.add_item(self.early_squads_select)
-            btn_row = 3
+            btn_row = 4
 
         skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=btn_row)
         skip_btn.callback = self._skip
@@ -3904,6 +3934,10 @@ class WizardSlotLimitsView(BaseView):
         self._early_pct = self._value(self.early_pct_select.values[0])
         await interaction.response.defer()
 
+    async def _reg_squads_selected(self, interaction):
+        self._reg_squads = int(self.reg_squads_select.values[0])
+        await interaction.response.defer()
+
     async def _early_squads_selected(self, interaction):
         self._early_squads = self._value(self.early_squads_select.values[0])
         await interaction.response.defer()
@@ -3912,6 +3946,7 @@ class WizardSlotLimitsView(BaseView):
         self.event["squad_rep_cap_percent"] = self._reg_pct
         self.event["community_rep_cap_percent"] = self._early_pct
         if not is_player_mode(self.event):
+            self.event["max_squads_per_user"] = self._reg_squads
             self.event["early_access_squads_per_role"] = self._early_squads
 
     async def _continue(self, interaction):
@@ -3924,12 +3959,16 @@ class WizardSlotLimitsView(BaseView):
                                      self.user_assignments, self.settings, self.interaction_user)
 
 
-def _limit_select_options(presets, vtype, lang, current):
-    """Build SelectOptions for a limit dropdown; None preset → value 'none'."""
+def _capped_options(prefix_key, presets, value_fmt, lang, current):
+    """SelectOptions labeled '<type>: <value>' so the choice stays self-explanatory.
+
+    A `None` preset becomes the option value "none" (→ stored None / no limit).
+    """
+    prefix = t(prefix_key, lang)
     opts = []
     for v in presets:
         opts.append(discord.SelectOption(
-            label=_preset_label(v, vtype, lang)[:100],
+            label=f"{prefix}: {value_fmt(v, lang)}"[:100],
             value="none" if v is None else str(v),
             default=(v == current)))
     return opts
@@ -4111,9 +4150,13 @@ class WizardTimingView(BaseView):
         default_limit = self.event.get("max_squads_per_user", 1)
         next_view = WizardSquadLimitView(self.guild_id, self.channel_id, self.event, self.user_assignments,
                                          self.settings, self.interaction_user)
-        await interaction.response.edit_message(
-            content=f"**{t('wizard.squad_limit_title', lang)}**\n{t('wizard.squad_limit_desc', lang, default=default_limit)}",
-            embed=None, view=next_view)
+        if _gate_configured(self.event):
+            # The per-user squad limit was already set in the Slot Limits step;
+            # this step now only configures playstyle.
+            content = f"**{t('wizard.playstyle_step_title', lang)}**\n{t('wizard.playstyle_step_desc', lang)}"
+        else:
+            content = f"**{t('wizard.squad_limit_title', lang)}**\n{t('wizard.squad_limit_desc', lang, default=default_limit)}"
+        await interaction.response.edit_message(content=content, embed=None, view=next_view)
 
     async def _continue(self, interaction):
         self._save_selections()
@@ -4136,16 +4179,21 @@ class WizardSquadLimitView(BaseView):
         self.interaction_user = interaction_user
         lang = get_guild_language(guild_id)
 
-        current_default = event.get("max_squads_per_user", 1)
-        options = []
-        for n in range(1, 21):
-            label = f"{n} Squad" if n == 1 else f"{n} Squads"
-            options.append(discord.SelectOption(label=label, value=str(n), default=(n == current_default)))
-
-        self.limit_select = ui.Select(placeholder=t("wizard.squad_limit_placeholder", lang),
-                                      options=options, min_values=1, max_values=1, row=0)
-        self.limit_select.callback = self._limit_selected
-        self.add_item(self.limit_select)
+        # When a role gate is configured, the per-user squad limit (#12) is set in
+        # the Slot Limits step instead, so this step only configures playstyle.
+        self.limit_select = None
+        play_row = 0
+        if not _gate_configured(event):
+            current_default = event.get("max_squads_per_user", 1)
+            options = []
+            for n in range(1, 21):
+                label = f"{n} Squad" if n == 1 else f"{n} Squads"
+                options.append(discord.SelectOption(label=label, value=str(n), default=(n == current_default)))
+            self.limit_select = ui.Select(placeholder=t("wizard.squad_limit_placeholder", lang),
+                                          options=options, min_values=1, max_values=1, row=0)
+            self.limit_select.callback = self._limit_selected
+            self.add_item(self.limit_select)
+            play_row = 1
 
         playstyle_default = bool(event.get("playstyle_enabled", True))
         self.playstyle_select = ui.Select(
@@ -4156,7 +4204,7 @@ class WizardSquadLimitView(BaseView):
                 discord.SelectOption(label=t("wizard.playstyle_disabled", lang),
                                      value="no", default=not playstyle_default),
             ],
-            min_values=1, max_values=1, row=1)
+            min_values=1, max_values=1, row=play_row)
         self.playstyle_select.callback = self._playstyle_selected
         self.add_item(self.playstyle_select)
 
