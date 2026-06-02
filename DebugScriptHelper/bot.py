@@ -5246,7 +5246,7 @@ async def settings_command(interaction: discord.Interaction):
     app_commands.Choice(name="Register as representative (squad rep)", value="rep"),
     app_commands.Choice(name="Register as player (individual)", value="player"),
 ])
-async def event_command(interaction: discord.Interaction, mode: str = "rep"):
+async def event_command(interaction: discord.Interaction, mode: str):
     if not await check_organizer(interaction):
         return
     lang = _lang(interaction)
