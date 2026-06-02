@@ -381,8 +381,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "The event has already started. Registration is no longer possible.",
     },
     "reg.opened_announcement": {
-        "de": "**Die Registrierung für {name} ist jetzt geöffnet!**\nMeldet eure Squads an!",
-        "en": "**Registration for {name} is now open!**\nRegister your squads!",
+        "de": "**Die Registrierung für {name} ist jetzt geöffnet!**\nRegistriert euch jetzt!",
+        "en": "**Registration for {name} is now open!**\nRegister now!",
     },
     "reg.early_access_announcement": {
         "de": "**Ihr habt Early Access zur Anmeldung für {name}!**\nIhr könnt eure Squads bereits jetzt anmelden.",
