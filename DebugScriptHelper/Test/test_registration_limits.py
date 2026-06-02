@@ -45,7 +45,6 @@ def _event(**over):
         "max_player_slots": 98,
         "squad_rep_role_ids": [REG],
         "community_rep_role_ids": [EARLY],
-        "squad_rep_cap_percent": None,
         "community_rep_cap_percent": None,
         "early_access_squads_per_role": None,
         "squads": {},
@@ -67,10 +66,11 @@ class TestRegisterType(unittest.TestCase):
 
 class TestSeatCap(unittest.TestCase):
     def test_floor_math_and_none(self):
-        ev = _event(squad_rep_cap_percent=50, community_rep_cap_percent=5)
-        self.assertEqual(bot._seat_cap_slots(ev, "squad_rep"), 49)      # 50% of 98
+        ev = _event(community_rep_cap_percent=5)
+        # Only early access (community_rep) is capped; regular registration never is.
+        self.assertIsNone(bot._seat_cap_slots(ev, "squad_rep"))
         self.assertEqual(bot._seat_cap_slots(ev, "community_rep"), 4)   # 5% of 98 = 4.9 → 4
-        self.assertIsNone(bot._seat_cap_slots(_event(), "squad_rep"))   # unset → None
+        self.assertIsNone(bot._seat_cap_slots(_event(), "community_rep"))  # unset → None
 
 
 class TestSeatsUsed(unittest.TestCase):
@@ -132,7 +132,7 @@ class TestCheckRegistrationLimits(unittest.TestCase):
         self.assertTrue(ok)  # squad-count cap is rep-only; no seat-% cap set
 
     def test_ungrouped_member_unrestricted(self):
-        ev = _event(community_rep_cap_percent=1, squad_rep_cap_percent=1)
+        ev = _event(community_rep_cap_percent=1)
         ok, key = bot._check_registration_limits(ev, {}, _Guild({}), _Member([999]), 50, "rep")
         self.assertTrue(ok)
         self.assertIsNone(key)
@@ -140,8 +140,8 @@ class TestCheckRegistrationLimits(unittest.TestCase):
 
 class TestFormattingAndPresets(unittest.TestCase):
     def test_percent_and_count_format(self):
-        self.assertEqual(bot._format_property_value({"squad_rep_cap_percent": 50}, "squad_rep_cap_percent", "percent", "en"), "50%")
-        self.assertEqual(bot._format_property_value({"squad_rep_cap_percent": None}, "squad_rep_cap_percent", "percent", "en"), "No limit")
+        self.assertEqual(bot._format_property_value({"community_rep_cap_percent": 50}, "community_rep_cap_percent", "percent", "en"), "50%")
+        self.assertEqual(bot._format_property_value({"community_rep_cap_percent": None}, "community_rep_cap_percent", "percent", "en"), "No limit")
         self.assertEqual(bot._format_property_value({"early_access_squads_per_role": 3}, "early_access_squads_per_role", "squad_count", "en"), "3")
         self.assertEqual(bot._format_property_value({"early_access_squads_per_role": None}, "early_access_squads_per_role", "squad_count", "de"), "Kein Limit")
 
@@ -163,8 +163,8 @@ class TestFormattingAndPresets(unittest.TestCase):
 class TestI18nKeys(unittest.TestCase):
     KEYS = [
         "limit.none", "percent.value", "wizard.slot_limits_title", "wizard.slot_limits_desc",
-        "wizard.cap_regular_pct_title", "wizard.cap_early_pct_title", "wizard.cap_early_squads_title",
-        "edit.property.regular_pct_cap", "edit.property.early_pct_cap", "edit.property.early_squad_cap",
+        "wizard.cap_early_pct_title", "wizard.cap_early_squads_title",
+        "edit.property.early_pct_cap", "edit.property.early_squad_cap",
         "gate.seat_cap_reached", "gate.squad_role_cap_reached",
         "limit.prefix.regular", "limit.prefix.early", "limit.squads_per_user", "limit.squads_per_role",
         "wizard.cap_regular_squads_title", "wizard.playstyle_step_title", "wizard.playstyle_step_desc",

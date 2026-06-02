@@ -117,9 +117,8 @@ _EDIT_PROPERTIES = [
     (17, "duration_minutes",       "edit.property.duration",        "duration",        None),
     (18, "spawn_offset_minutes",   "edit.property.spawn_offset",    "spawn_offset",    None),
     (19, "playstyle_enabled",      "edit.property.playstyle_enabled","bool",           None),
-    (20, "squad_rep_cap_percent",        "edit.property.regular_pct_cap", "percent",     None),
-    (21, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
-    (22, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
+    (20, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
+    (21, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
 ]
 
 
@@ -216,7 +215,7 @@ def _ensure_event_keys(event: dict):
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "mode": "rep",
         "playstyle_enabled": True,
-        "squad_rep_cap_percent": None, "community_rep_cap_percent": None,
+        "community_rep_cap_percent": None,
         "early_access_squads_per_role": None,
     }
     for key, default in defaults.items():
@@ -454,9 +453,13 @@ def _member_register_type(member, event):
 
 
 def _seat_cap_slots(event, group):
-    """Max player slots this register-type group may consume, or None if uncapped."""
-    key = "community_rep_cap_percent" if group == "community_rep" else "squad_rep_cap_percent"
-    pct = event.get(key)
+    """Max player slots a register-type group may consume, or None if uncapped.
+
+    Only early access (community_rep) has a seat-% cap; regular registration has none.
+    """
+    if group != "community_rep":
+        return None
+    pct = event.get("community_rep_cap_percent")
     if pct is None:
         return None
     return int(pct) * int(event.get("max_player_slots", 0)) // 100
@@ -3875,29 +3878,28 @@ class WizardSlotLimitsView(BaseView):
         lang = get_guild_language(guild_id)
         rep_mode = not is_player_mode(event)
 
-        self._reg_pct = event.get("squad_rep_cap_percent")
         self._early_pct = event.get("community_rep_cap_percent")
         self._reg_squads = event.get("max_squads_per_user", 1) or 1
         self._early_squads = event.get("early_access_squads_per_role")
-
-        self.reg_pct_select = ui.Select(
-            placeholder=t("wizard.cap_regular_pct_title", lang),
-            options=_capped_options("limit.prefix.regular", _PERCENT_PRESETS,
-                                    _format_percent_value, lang, self._reg_pct),
-            min_values=1, max_values=1, row=0)
-        self.reg_pct_select.callback = self._reg_pct_selected
-        self.add_item(self.reg_pct_select)
 
         self.early_pct_select = ui.Select(
             placeholder=t("wizard.cap_early_pct_title", lang),
             options=_capped_options("limit.prefix.early", _PERCENT_PRESETS,
                                     _format_percent_value, lang, self._early_pct),
-            min_values=1, max_values=1, row=1)
+            min_values=1, max_values=1, row=0)
         self.early_pct_select.callback = self._early_pct_selected
         self.add_item(self.early_pct_select)
 
-        btn_row = 2
+        btn_row = 1
         if rep_mode:
+            self.early_squads_select = ui.Select(
+                placeholder=t("wizard.cap_early_squads_title", lang),
+                options=_capped_options("limit.prefix.early", _COUNT_PRESETS,
+                                        _format_squads_per_role, lang, self._early_squads),
+                min_values=1, max_values=1, row=1)
+            self.early_squads_select.callback = self._early_squads_selected
+            self.add_item(self.early_squads_select)
+
             self.reg_squads_select = ui.Select(
                 placeholder=t("wizard.cap_regular_squads_title", lang),
                 options=_capped_options("limit.prefix.regular", _REGULAR_SQUAD_PRESETS,
@@ -3905,15 +3907,7 @@ class WizardSlotLimitsView(BaseView):
                 min_values=1, max_values=1, row=2)
             self.reg_squads_select.callback = self._reg_squads_selected
             self.add_item(self.reg_squads_select)
-
-            self.early_squads_select = ui.Select(
-                placeholder=t("wizard.cap_early_squads_title", lang),
-                options=_capped_options("limit.prefix.early", _COUNT_PRESETS,
-                                        _format_squads_per_role, lang, self._early_squads),
-                min_values=1, max_values=1, row=3)
-            self.early_squads_select.callback = self._early_squads_selected
-            self.add_item(self.early_squads_select)
-            btn_row = 4
+            btn_row = 3
 
         skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=btn_row)
         skip_btn.callback = self._skip
@@ -3925,10 +3919,6 @@ class WizardSlotLimitsView(BaseView):
     @staticmethod
     def _value(raw):
         return None if raw == "none" else int(raw)
-
-    async def _reg_pct_selected(self, interaction):
-        self._reg_pct = self._value(self.reg_pct_select.values[0])
-        await interaction.response.defer()
 
     async def _early_pct_selected(self, interaction):
         self._early_pct = self._value(self.early_pct_select.values[0])
@@ -3943,7 +3933,6 @@ class WizardSlotLimitsView(BaseView):
         await interaction.response.defer()
 
     def _save_selections(self):
-        self.event["squad_rep_cap_percent"] = self._reg_pct
         self.event["community_rep_cap_percent"] = self._early_pct
         if not is_player_mode(self.event):
             self.event["max_squads_per_user"] = self._reg_squads

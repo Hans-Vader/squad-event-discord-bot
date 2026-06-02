@@ -1559,22 +1559,16 @@ _STRINGS: dict[str, dict[str, str]] = {
     "wizard.slot_limits_desc": {
         "de": ("So begrenzt du optional, wie viel jede Registrierungsart belegen darf. "
                "Caster zählen nie mit; Prozente beziehen sich nur auf die Spieler-Slots.\n"
-               "• Reguläre Rollen — max. % der Slots (alle regulären Rollen teilen sich diesen Anteil)\n"
                "• Vorab-Zugang-Rollen — max. % der Slots (alle Vorab-Rollen teilen sich diesen Anteil)\n"
-               "• Reguläre Rollen — max. Squads pro Nutzer (Limit je Person)\n"
                "• Vorab-Zugang-Rollen — max. Squads pro Rolle (Gesamtsumme je Rolle)\n"
+               "• Reguläre Rollen — max. Squads pro Nutzer (Limit je Person)\n"
                "Lass einen Wert auf „Kein Limit“ oder überspringe für keine Begrenzung."),
         "en": ("Optionally cap how much each registration type may take. Casters never count; "
                "percentages are of the player slots only.\n"
-               "• Regular roles — max % of slots (all regular roles share this)\n"
                "• Early-access roles — max % of slots (all early-access roles share this)\n"
-               "• Regular roles — max squads per user (limit per person)\n"
                "• Early-access roles — max squads per role (each role's total)\n"
+               "• Regular roles — max squads per user (limit per person)\n"
                "Leave any on “No limit” or skip for no restriction."),
-    },
-    "wizard.cap_regular_pct_title": {
-        "de": "Reguläre Rollen — max. % der Slots",
-        "en": "Regular roles — max % of slots",
     },
     "wizard.cap_early_pct_title": {
         "de": "Vorab-Zugang-Rollen — max. % der Slots",
@@ -1596,17 +1590,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Sollen Squads bei der Anmeldung einen Spielstil wählen?",
         "en": "Should squads pick a playstyle when registering?",
     },
-    "edit.property.regular_pct_cap": {
-        "de": "20. Slot-Limit: reguläre Anmeldung (%)",
-        "en": "20. Slot limit: regular registration (%)",
-    },
     "edit.property.early_pct_cap": {
-        "de": "21. Slot-Limit: Vorab-Zugang (%)",
-        "en": "21. Slot limit: early access (%)",
+        "de": "20. Slot-Limit: Vorab-Zugang (%)",
+        "en": "20. Slot limit: early access (%)",
     },
     "edit.property.early_squad_cap": {
-        "de": "22. Max. Squads pro Vorab-Zugang-Rolle",
-        "en": "22. Max squads per early-access role",
+        "de": "21. Max. Squads pro Vorab-Zugang-Rolle",
+        "en": "21. Max squads per early-access role",
     },
     "gate.seat_cap_reached": {
         "de": "Das Slot-Kontingent deiner Registrierungsart für dieses Event ist erschöpft.",
