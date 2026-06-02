@@ -1341,12 +1341,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Days of month: {days}",
     },
     "edit.property.duration": {
-        "de": "17. Dauer",
+        "de": "17. Eventdauer",
         "en": "17. Duration",
     },
     "edit.property.spawn_offset": {
-        "de": "18. Folgeevent-Verzögerung",
-        "en": "18. Spawn delay",
+        "de": "18. Folge-Event erstellen nach",
+        "en": "18. Recreate next event after",
     },
     "edit.property.playstyle_enabled": {
         "de": "19. Spielstil-Auswahl bei Anmeldung",
