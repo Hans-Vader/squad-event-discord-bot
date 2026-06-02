@@ -1557,14 +1557,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Slot Limits — Registration Quotas",
     },
     "wizard.slot_limits_desc": {
-        "de": ("So begrenzt du optional, wie viel jede Registrierungsart belegen darf. "
-               "Caster zählen nie mit; Prozente beziehen sich nur auf die Spieler-Slots.\n"
+        "de": ("Optional Anmeldegruppe Limitierung."
+               "Caster zählen nie mit. Prozente beziehen sich nur auf die Spieler-Slots.\n"
                "• Vorab-Zugang-Rollen — max. % der Slots (alle Vorab-Rollen teilen sich diesen Anteil)\n"
                "• Vorab-Zugang-Rollen — max. Squads pro Rolle (Gesamtsumme je Rolle)\n"
                "• Reguläre Rollen — max. Squads pro Nutzer (Limit je Person)\n"
                "Lass einen Wert auf „Kein Limit“ oder überspringe für keine Begrenzung."),
-        "en": ("Optionally cap how much each registration type may take. Casters never count; "
-               "percentages are of the player slots only.\n"
+        "en": ("Optionally registration group cap."
+               "Casters never count. Percentages are of the player slots only.\n"
                "• Early-access roles — max % of slots (all early-access roles share this)\n"
                "• Early-access roles — max squads per role (each role's total)\n"
                "• Regular roles — max squads per user (limit per person)\n"
@@ -1599,8 +1599,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "21. Max squads per early-access role",
     },
     "gate.seat_cap_reached": {
-        "de": "Das Slot-Kontingent deiner Registrierungsart für dieses Event ist erschöpft.",
-        "en": "Your registration type's slot quota for this event is full.",
+        "de": "Das Slot-Kontingent deiner Anmeldegruppe für dieses Event ist erschöpft.",
+        "en": "Your registration group's slot quota for this event is full.",
     },
     "gate.squad_role_cap_reached": {
         "de": "Das Squad-Limit deiner Vorab-Zugang-Rolle ist erreicht.",
