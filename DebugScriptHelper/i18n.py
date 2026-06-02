@@ -1557,13 +1557,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Slot Limits — Registration Quotas",
     },
     "wizard.slot_limits_desc": {
-        "de": ("Optional Anmeldegruppe Limitierung."
+        "de": ("Optional Anmeldegruppe Limitierung.\n"
                "Caster zählen nie mit. Prozente beziehen sich nur auf die Spieler-Slots.\n"
                "• Vorab-Zugang-Rollen — max. % der Slots (alle Vorab-Rollen teilen sich diesen Anteil)\n"
                "• Vorab-Zugang-Rollen — max. Squads pro Rolle (Gesamtsumme je Rolle)\n"
                "• Reguläre Rollen — max. Squads pro Nutzer (Limit je Person)\n"
                "Lass einen Wert auf „Kein Limit“ oder überspringe für keine Begrenzung."),
-        "en": ("Optionally registration group cap."
+        "en": ("Optionally registration group cap.\n"
                "Casters never count. Percentages are of the player slots only.\n"
                "• Early-access roles — max % of slots (all early-access roles share this)\n"
                "• Early-access roles — max squads per role (each role's total)\n"
