@@ -19,26 +19,27 @@ from i18n import t  # noqa: E402
 
 class TestRoleLabelUnification(unittest.TestCase):
     def test_squad_rep_title_is_function_based(self):
+        # Roles-only now (user selection was removed for these groups).
         self.assertEqual(t("wizard.squad_rep_title", "en"),
-                         "Roles/users allowed to register (optional)")
+                         "Roles allowed to register (optional)")
         self.assertEqual(t("wizard.squad_rep_title", "de"),
-                         "Rollen/Benutzer mit Anmeldeberechtigung (optional)")
+                         "Rollen mit Anmeldeberechtigung (optional)")
 
     def test_community_rep_title_is_early_access(self):
         self.assertEqual(t("wizard.community_rep_title", "en"),
-                         "Roles/users with early access (optional)")
+                         "Roles with early access (optional)")
         self.assertEqual(t("wizard.community_rep_title", "de"),
-                         "Rollen/Benutzer mit Vorab-Zugang (optional)")
+                         "Rollen mit Vorab-Zugang (optional)")
 
     def test_summary_labels_match_selects(self):
         self.assertEqual(t("wizard.summary_squad_roles", "en"),
-                         "Roles/users allowed to register")
+                         "Roles allowed to register")
         self.assertEqual(t("wizard.summary_community_roles", "en"),
-                         "Roles/users with early access")
+                         "Roles with early access")
         self.assertEqual(t("wizard.summary_squad_roles", "de"),
-                         "Rollen/Benutzer mit Anmeldeberechtigung")
+                         "Rollen mit Anmeldeberechtigung")
         self.assertEqual(t("wizard.summary_community_roles", "de"),
-                         "Rollen/Benutzer mit Vorab-Zugang")
+                         "Rollen mit Vorab-Zugang")
 
     def test_no_squad_mode_jargon_remains(self):
         for key in ("wizard.squad_rep_title", "wizard.community_rep_title",

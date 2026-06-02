@@ -1527,6 +1527,56 @@ _STRINGS: dict[str, dict[str, str]] = {
     "edit.recurrence.opt.specific_weekdays": {"de": "Bestimmte Wochentage", "en": "Specific weekdays"},
     "edit.recurrence.opt.specific_month_days": {"de": "Bestimmte Tage im Monat", "en": "Specific days of month"},
 
+    # ── Per-register-type registration limits ────────────────────────────
+    "limit.none": {
+        "de": "Kein Limit",
+        "en": "No limit",
+    },
+    "percent.value": {
+        "de": "{n}%",
+        "en": "{n}%",
+    },
+    "wizard.slot_limits_title": {
+        "de": "Slot-Limits — Registrierungskontingente",
+        "en": "Slot Limits — Registration Quotas",
+    },
+    "wizard.slot_limits_desc": {
+        "de": "Begrenze optional, wie viele Slots/Squads jede Registrierungsart belegen darf. Caster sind ausgenommen.\nÜberspringe diesen Schritt, wenn es keine Limits geben soll.",
+        "en": "Optionally limit how many slots/squads each registration type may use. Casters are exempt.\nSkip this step if there should be no limits.",
+    },
+    "wizard.cap_regular_pct_title": {
+        "de": "Reguläre Anmeldung: max. % der Slots",
+        "en": "Regular: max % of slots",
+    },
+    "wizard.cap_early_pct_title": {
+        "de": "Vorab-Zugang: max. % der Slots",
+        "en": "Early access: max % of slots",
+    },
+    "wizard.cap_early_squads_title": {
+        "de": "Vorab-Zugang: max. Squads pro Rolle",
+        "en": "Early access: max squads per role",
+    },
+    "edit.property.regular_pct_cap": {
+        "de": "20. Slot-Limit: reguläre Anmeldung (%)",
+        "en": "20. Slot limit: regular registration (%)",
+    },
+    "edit.property.early_pct_cap": {
+        "de": "21. Slot-Limit: Vorab-Zugang (%)",
+        "en": "21. Slot limit: early access (%)",
+    },
+    "edit.property.early_squad_cap": {
+        "de": "22. Max. Squads pro Vorab-Zugang-Rolle",
+        "en": "22. Max squads per early-access role",
+    },
+    "gate.seat_cap_reached": {
+        "de": "Das Slot-Kontingent deiner Registrierungsart für dieses Event ist erschöpft.",
+        "en": "Your registration type's slot quota for this event is full.",
+    },
+    "gate.squad_role_cap_reached": {
+        "de": "Das Squad-Limit deiner Vorab-Zugang-Rolle ist erreicht.",
+        "en": "Your early-access role's squad limit is reached.",
+    },
+
     "log.event_edited": {
         "de": "Event bearbeitet: {user} hat '{property}' geändert (Event: {name})",
         "en": "Event edited: {user} changed '{property}' (Event: {name})",
@@ -1578,16 +1628,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "{min} minutes before",
     },
     "wizard.squad_rep_title": {
-        "de": "Rollen/Benutzer mit Anmeldeberechtigung (optional)",
-        "en": "Roles/users allowed to register (optional)",
+        "de": "Rollen mit Anmeldeberechtigung (optional)",
+        "en": "Roles allowed to register (optional)",
     },
     "wizard.squad_rep_desc": {
         "de": "Wähle die Rolle, die Squads anmelden darf:",
         "en": "Select the role that may register squads:",
     },
     "wizard.community_rep_title": {
-        "de": "Rollen/Benutzer mit Vorab-Zugang (optional)",
-        "en": "Roles/users with early access (optional)",
+        "de": "Rollen mit Vorab-Zugang (optional)",
+        "en": "Roles with early access (optional)",
     },
     "wizard.caster_role_title": {
         "de": "Caster-Rollen (optional)",
@@ -1638,12 +1688,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Role configuration",
     },
     "wizard.summary_squad_roles": {
-        "de": "Rollen/Benutzer mit Anmeldeberechtigung",
-        "en": "Roles/users allowed to register",
+        "de": "Rollen mit Anmeldeberechtigung",
+        "en": "Roles allowed to register",
     },
     "wizard.summary_community_roles": {
-        "de": "Rollen/Benutzer mit Vorab-Zugang",
-        "en": "Roles/users with early access",
+        "de": "Rollen mit Vorab-Zugang",
+        "en": "Roles with early access",
     },
     "wizard.summary_caster_roles": {
         "de": "Caster-Rollen/Benutzer",

@@ -348,6 +348,9 @@ def build_default_event(settings: dict, name: str, date: str, time_str: str,
         "spawn_offset_minutes": overrides.get("spawn_offset_minutes", 5),
         "mode": overrides.get("mode", "rep"),
         "playstyle_enabled": overrides.get("playstyle_enabled", True),
+        "squad_rep_cap_percent": overrides.get("squad_rep_cap_percent", None),
+        "community_rep_cap_percent": overrides.get("community_rep_cap_percent", None),
+        "early_access_squads_per_role": overrides.get("early_access_squads_per_role", None),
     }
 
 
@@ -373,6 +376,8 @@ _CARRY_OVER_KEYS = (
     "duration_minutes", "spawn_offset_minutes",
     "mode",
     "playstyle_enabled",
+    "squad_rep_cap_percent", "community_rep_cap_percent",
+    "early_access_squads_per_role",
 )
 
 

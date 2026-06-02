@@ -117,6 +117,9 @@ _EDIT_PROPERTIES = [
     (17, "duration_minutes",       "edit.property.duration",        "duration",        None),
     (18, "spawn_offset_minutes",   "edit.property.spawn_offset",    "spawn_offset",    None),
     (19, "playstyle_enabled",      "edit.property.playstyle_enabled","bool",           None),
+    (20, "squad_rep_cap_percent",        "edit.property.regular_pct_cap", "percent",     None),
+    (21, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
+    (22, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
 ]
 
 
@@ -213,6 +216,8 @@ def _ensure_event_keys(event: dict):
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "mode": "rep",
         "playstyle_enabled": True,
+        "squad_rep_cap_percent": None, "community_rep_cap_percent": None,
+        "early_access_squads_per_role": None,
     }
     for key, default in defaults.items():
         if key not in event:
@@ -427,6 +432,115 @@ def check_role_gate(event, user, registration_type):
             return True, None
 
     return False, deny_key
+
+
+# ---------------------------------------------------------------------------
+# Per-register-type registration limits (seat % + early-access squads/role)
+# ---------------------------------------------------------------------------
+def _member_register_type(member, event):
+    """Classify a member by registration role group. Roles only, early-access first.
+
+    Plain role membership (NOT has_role) so admins are classified by their actual
+    roles rather than bypassing into every group.
+    """
+    if member is None:
+        return None
+    held = {r.id for r in getattr(member, "roles", [])}
+    if held & set(event.get("community_rep_role_ids", [])):
+        return "community_rep"
+    if held & set(event.get("squad_rep_role_ids", [])):
+        return "squad_rep"
+    return None
+
+
+def _seat_cap_slots(event, group):
+    """Max player slots this register-type group may consume, or None if uncapped."""
+    key = "community_rep_cap_percent" if group == "community_rep" else "squad_rep_cap_percent"
+    pct = event.get(key)
+    if pct is None:
+        return None
+    return int(pct) * int(event.get("max_player_slots", 0)) // 100
+
+
+def _squad_rep_map(user_assignments):
+    """Reverse map squad_id → rep user_id from user_assignments."""
+    rep_of = {}
+    for uid, sids in (user_assignments or {}).items():
+        for sid in sids:
+            rep_of[sid] = uid
+    return rep_of
+
+
+def _group_seats_used(event, user_assignments, guild, group):
+    """Player seats currently consumed by registrants of `group` (both modes)."""
+    if guild is None:
+        return 0
+    used = 0
+    if is_player_mode(event):
+        for squad in event.get("squads", {}).values():
+            for m in squad.get("members", []):
+                member = guild.get_member(int(m["user_id"]))
+                if member and _member_register_type(member, event) == group:
+                    used += 1
+    else:
+        rep_of = _squad_rep_map(user_assignments)
+        for sid, squad in event.get("squads", {}).items():
+            uid = rep_of.get(sid)
+            if uid is None:
+                continue
+            member = guild.get_member(int(uid))
+            if member and _member_register_type(member, event) == group:
+                used += squad.get("size", 0)
+    return used
+
+
+def _early_access_role_squad_counts(event, user_assignments, guild):
+    """Per early-access role: how many registered squads its holders have (rep mode)."""
+    counts = {rid: 0 for rid in event.get("community_rep_role_ids", [])}
+    if guild is None or not counts:
+        return counts
+    rep_of = _squad_rep_map(user_assignments)
+    for sid in event.get("squads", {}):
+        uid = rep_of.get(sid)
+        if uid is None:
+            continue
+        member = guild.get_member(int(uid))
+        if not member:
+            continue
+        held = {r.id for r in getattr(member, "roles", [])}
+        for rid in counts:
+            if rid in held:
+                counts[rid] += 1
+    return counts
+
+
+def _check_registration_limits(event, user_assignments, guild, member, added_seats, mode):
+    """Enforce per-register-type caps. Returns (allowed, message_key_or_None).
+
+    - Seat % cap: per register type (group total of player seats), both modes.
+    - Early-access squads-per-role: rep mode only; counts toward EACH early-access
+      role the member holds.
+    """
+    group = _member_register_type(member, event)
+    if group is None:
+        return True, None
+
+    cap = _seat_cap_slots(event, group)
+    if cap is not None:
+        used = _group_seats_used(event, user_assignments, guild, group)
+        if used + added_seats > cap:
+            return False, "gate.seat_cap_reached"
+
+    if mode == "rep" and group == "community_rep":
+        limit = event.get("early_access_squads_per_role")
+        if limit is not None:
+            counts = _early_access_role_squad_counts(event, user_assignments, guild)
+            held = {r.id for r in getattr(member, "roles", [])}
+            for rid in event.get("community_rep_role_ids", []):
+                if rid in held and counts.get(rid, 0) + 1 > limit:
+                    return False, "gate.squad_role_cap_reached"
+
+    return True, None
 
 
 def _resolve_reg_message(msg_key: str, lang: str) -> str:
@@ -681,6 +795,12 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
         available = event["max_player_slots"] - event["player_slots_used"]
         rep_name = interaction.user.display_name
 
+        ok_lim, lim_key = _check_registration_limits(
+            event, user_assignments, interaction.guild, interaction.user, size, "rep")
+        if not ok_lim:
+            await send_feedback(interaction, t(lim_key, lang), ephemeral=True)
+            return False
+
         wl_key = _waitlist_key(squad_type)
         if _is_squad_type_full(event, squad_type):
             event[wl_key].append((squad_name, squad_type, playstyle, size, squad_id, rep_name))
@@ -761,6 +881,12 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
 
         if not is_player_mode(event):
             await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
+            return False
+
+        ok_lim, lim_key = _check_registration_limits(
+            event, user_assignments, interaction.guild, user, 1, "player")
+        if not ok_lim:
+            await send_feedback(interaction, t(lim_key, lang), ephemeral=True)
             return False
 
         squad_name, status = _player_register(event, user_assignments, user_id, display_name, squad_type, roles)
@@ -2461,6 +2587,29 @@ _DURATION_PRESETS = [30, 60, 120, 240, 360, 480, 720, 1440]
 _DURATION_KEYS = ["30m", "1h", "2h", "4h", "6h", "8h", "12h", "24h"]
 _SPAWN_PRESETS = [1, 5, 10, 30, 60, 360, 1440, 10080]
 _SPAWN_KEYS = ["1m", "5m", "10m", "30m", "1h", "6h", "1d", "1w"]
+# Registration-limit dropdowns. `None` = "no limit". Both fit Discord's 25-option cap.
+_PERCENT_PRESETS = [None, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95]
+_COUNT_PRESETS = [None, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+
+
+def _format_percent_value(percent, lang):
+    """Render a percentage cap; None → 'No limit'."""
+    if percent is None:
+        return t("limit.none", lang)
+    try:
+        return t("percent.value", lang, n=int(percent))
+    except (TypeError, ValueError):
+        return t("limit.none", lang)
+
+
+def _format_count_value(count, lang):
+    """Render a squad-count cap; None → 'No limit'."""
+    if count is None:
+        return t("limit.none", lang)
+    try:
+        return str(int(count))
+    except (TypeError, ValueError):
+        return t("limit.none", lang)
 
 
 def _format_duration_value(minutes, lang):
@@ -2519,6 +2668,10 @@ def _format_property_value(event, key, vtype, lang):
         return _format_duration_value(val, lang)
     if vtype == "spawn_offset":
         return _format_spawn_offset_value(val, lang)
+    if vtype == "percent":
+        return _format_percent_value(val, lang)
+    if vtype == "squad_count":
+        return _format_count_value(val, lang)
     return str(val) if val is not None else not_set
 
 
@@ -3038,10 +3191,14 @@ def _scalar_placeholder(vtype):
     }.get(vtype, "")
 
 
-def _preset_label(minutes, vtype, lang):
+def _preset_label(value, vtype, lang):
     if vtype == "duration":
-        return _format_duration_value(minutes, lang)
-    return _format_spawn_offset_value(minutes, lang)
+        return _format_duration_value(value, lang)
+    if vtype == "percent":
+        return _format_percent_value(value, lang)
+    if vtype == "squad_count":
+        return _format_count_value(value, lang)
+    return _format_spawn_offset_value(value, lang)
 
 
 async def _show_property_editor(interaction, user_id, guild_id, channel_id, db_id, lang, prop):
@@ -3063,8 +3220,9 @@ async def _show_property_editor(interaction, user_id, guild_id, channel_id, db_i
     if vtype == "bool":
         view = EditBoolView(user_id, guild_id, channel_id, db_id, lang, prop, bool(event.get(key)))
         embed = _editor_embed()
-    elif vtype in ("duration", "spawn_offset"):
-        presets = _DURATION_PRESETS if vtype == "duration" else _SPAWN_PRESETS
+    elif vtype in ("duration", "spawn_offset", "percent", "squad_count"):
+        presets = {"duration": _DURATION_PRESETS, "spawn_offset": _SPAWN_PRESETS,
+                   "percent": _PERCENT_PRESETS, "squad_count": _COUNT_PRESETS}[vtype]
         view = EditPresetView(user_id, guild_id, channel_id, db_id, lang, prop, presets)
         embed = _editor_embed()
     elif vtype == "recurrence":
@@ -3239,8 +3397,11 @@ class EditPresetView(_EditDialogView):
     def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, presets):
         super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
         vtype = prop[3]
-        options = [discord.SelectOption(label=_preset_label(v, vtype, lang)[:100], value=str(v))
-                   for v in presets]
+        # `None` in a preset list means "no limit" → option value "none" → stored None.
+        options = [discord.SelectOption(
+            label=_preset_label(v, vtype, lang)[:100],
+            value="none" if v is None else str(v))
+            for v in presets]
         select = ui.Select(placeholder=t("edit.pick_value", lang), options=options,
                            min_values=1, max_values=1)
         select.callback = self._on_select
@@ -3248,7 +3409,8 @@ class EditPresetView(_EditDialogView):
         self._add_cancel()
 
     async def _on_select(self, interaction):
-        await self._apply(interaction, int(interaction.data["values"][0]))
+        raw = interaction.data["values"][0]
+        await self._apply(interaction, None if raw == "none" else int(raw))
 
 
 class EditImageView(_EditDialogView):
@@ -3575,13 +3737,13 @@ class WizardSquadRolesView(BaseView):
         self.interaction_user = interaction_user
         lang = get_guild_language(guild_id)
 
-        self.squad_rep_select = ui.MentionableSelect(
+        self.squad_rep_select = ui.RoleSelect(
             placeholder=t("wizard.squad_rep_title", lang),
             min_values=0, max_values=25, row=0)
         self.squad_rep_select.callback = self._squad_rep_selected
         self.add_item(self.squad_rep_select)
 
-        self.community_rep_select = ui.MentionableSelect(
+        self.community_rep_select = ui.RoleSelect(
             placeholder=t("wizard.community_rep_title", lang),
             min_values=0, max_values=25, row=1)
         self.community_rep_select.callback = self._community_rep_selected
@@ -3606,19 +3768,15 @@ class WizardSquadRolesView(BaseView):
         self.add_item(continue_btn)
 
         self._squad_rep_roles = []
-        self._squad_rep_users = []
         self._community_rep_roles = []
-        self._community_rep_users = []
         self._ping_on_open = False
 
     async def _squad_rep_selected(self, interaction):
-        self._squad_rep_roles = [v.id for v in self.squad_rep_select.values if isinstance(v, discord.Role)]
-        self._squad_rep_users = [str(v.id) for v in self.squad_rep_select.values if isinstance(v, (discord.Member, discord.User))]
+        self._squad_rep_roles = [r.id for r in self.squad_rep_select.values]
         await interaction.response.defer()
 
     async def _community_rep_selected(self, interaction):
-        self._community_rep_roles = [v.id for v in self.community_rep_select.values if isinstance(v, discord.Role)]
-        self._community_rep_users = [str(v.id) for v in self.community_rep_select.values if isinstance(v, (discord.Member, discord.User))]
+        self._community_rep_roles = [r.id for r in self.community_rep_select.values]
         await interaction.response.defer()
 
     async def _ping_selected(self, interaction):
@@ -3626,29 +3784,25 @@ class WizardSquadRolesView(BaseView):
         await interaction.response.defer()
 
     def _save_selections(self):
-        if self._squad_rep_roles or self._squad_rep_users:
+        if self._squad_rep_roles:
             self.event["squad_rep_role_ids"] = self._squad_rep_roles
-            self.event["squad_rep_user_ids"] = self._squad_rep_users
-        if self._community_rep_roles or self._community_rep_users:
+        if self._community_rep_roles:
             self.event["community_rep_role_ids"] = self._community_rep_roles
-            self.event["community_rep_user_ids"] = self._community_rep_users
         self.event["ping_on_open"] = self._ping_on_open
 
     async def _advance_after_squad_roles(self, interaction):
-        lang = get_guild_language(self.guild_id)
-        if is_player_mode(self.event):
-            # Player mode skips caster roles — go straight to timing.
-            next_view = WizardTimingView(self.guild_id, self.channel_id, self.event, self.user_assignments,
-                                         self.settings, self.interaction_user)
+        # When a role gate is configured, offer the optional per-type slot limits;
+        # otherwise jump straight to the next wizard step.
+        if _gate_configured(self.event):
+            lang = get_guild_language(self.guild_id)
+            next_view = WizardSlotLimitsView(self.guild_id, self.channel_id, self.event,
+                                             self.user_assignments, self.settings, self.interaction_user)
             await interaction.response.edit_message(
-                content=f"**{t('wizard.timing_title', lang)}**\n{t('wizard.timing_desc', lang)}",
+                content=f"**{t('wizard.slot_limits_title', lang)}**\n{t('wizard.slot_limits_desc', lang)}",
                 view=next_view)
             return
-        next_view = WizardCasterRolesView(self.guild_id, self.channel_id, self.event, self.user_assignments,
-                                          self.settings, self.interaction_user)
-        await interaction.response.edit_message(
-            content=f"**{t('wizard.caster_roles_title', lang)}**\n{t('wizard.caster_roles_desc', lang)}",
-            view=next_view)
+        await _advance_to_post_roles(interaction, self.guild_id, self.channel_id, self.event,
+                                     self.user_assignments, self.settings, self.interaction_user)
 
     async def _continue(self, interaction):
         self._save_selections()
@@ -3656,6 +3810,124 @@ class WizardSquadRolesView(BaseView):
 
     async def _skip(self, interaction):
         await self._advance_after_squad_roles(interaction)
+
+
+def _gate_configured(event) -> bool:
+    """True when at least one register-type role is set (caps are meaningful then)."""
+    return bool(event.get("squad_rep_role_ids") or event.get("community_rep_role_ids"))
+
+
+async def _advance_to_post_roles(interaction, guild_id, channel_id, event,
+                                 user_assignments, settings, interaction_user):
+    """Transition from the role/slot-limit steps to caster roles (rep) or timing (player)."""
+    lang = get_guild_language(guild_id)
+    if is_player_mode(event):
+        next_view = WizardTimingView(guild_id, channel_id, event, user_assignments,
+                                     settings, interaction_user)
+        await interaction.response.edit_message(
+            content=f"**{t('wizard.timing_title', lang)}**\n{t('wizard.timing_desc', lang)}",
+            view=next_view)
+        return
+    next_view = WizardCasterRolesView(guild_id, channel_id, event, user_assignments,
+                                      settings, interaction_user)
+    await interaction.response.edit_message(
+        content=f"**{t('wizard.caster_roles_title', lang)}**\n{t('wizard.caster_roles_desc', lang)}",
+        view=next_view)
+
+
+class WizardSlotLimitsView(BaseView):
+    """Optional per-register-type limits: seat % per type + early-access squads/role.
+
+    Shown only when a role gate is configured. Regular per-user squad count stays
+    in WizardSquadLimitView (#12). Squad-count cap is rep mode only.
+    """
+
+    def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
+        super().__init__(timeout=300, title="Wizard Slot Limits")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.event = event
+        self.user_assignments = user_assignments
+        self.settings = settings
+        self.interaction_user = interaction_user
+        lang = get_guild_language(guild_id)
+
+        self._reg_pct = event.get("squad_rep_cap_percent")
+        self._early_pct = event.get("community_rep_cap_percent")
+        self._early_squads = event.get("early_access_squads_per_role")
+
+        self.reg_pct_select = ui.Select(
+            placeholder=t("wizard.cap_regular_pct_title", lang),
+            options=_limit_select_options(_PERCENT_PRESETS, "percent", lang, self._reg_pct),
+            min_values=1, max_values=1, row=0)
+        self.reg_pct_select.callback = self._reg_pct_selected
+        self.add_item(self.reg_pct_select)
+
+        self.early_pct_select = ui.Select(
+            placeholder=t("wizard.cap_early_pct_title", lang),
+            options=_limit_select_options(_PERCENT_PRESETS, "percent", lang, self._early_pct),
+            min_values=1, max_values=1, row=1)
+        self.early_pct_select.callback = self._early_pct_selected
+        self.add_item(self.early_pct_select)
+
+        btn_row = 2
+        if not is_player_mode(event):
+            self.early_squads_select = ui.Select(
+                placeholder=t("wizard.cap_early_squads_title", lang),
+                options=_limit_select_options(_COUNT_PRESETS, "squad_count", lang, self._early_squads),
+                min_values=1, max_values=1, row=2)
+            self.early_squads_select.callback = self._early_squads_selected
+            self.add_item(self.early_squads_select)
+            btn_row = 3
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=btn_row)
+        skip_btn.callback = self._skip
+        self.add_item(skip_btn)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=btn_row)
+        continue_btn.callback = self._continue
+        self.add_item(continue_btn)
+
+    @staticmethod
+    def _value(raw):
+        return None if raw == "none" else int(raw)
+
+    async def _reg_pct_selected(self, interaction):
+        self._reg_pct = self._value(self.reg_pct_select.values[0])
+        await interaction.response.defer()
+
+    async def _early_pct_selected(self, interaction):
+        self._early_pct = self._value(self.early_pct_select.values[0])
+        await interaction.response.defer()
+
+    async def _early_squads_selected(self, interaction):
+        self._early_squads = self._value(self.early_squads_select.values[0])
+        await interaction.response.defer()
+
+    def _save_selections(self):
+        self.event["squad_rep_cap_percent"] = self._reg_pct
+        self.event["community_rep_cap_percent"] = self._early_pct
+        if not is_player_mode(self.event):
+            self.event["early_access_squads_per_role"] = self._early_squads
+
+    async def _continue(self, interaction):
+        self._save_selections()
+        await _advance_to_post_roles(interaction, self.guild_id, self.channel_id, self.event,
+                                     self.user_assignments, self.settings, self.interaction_user)
+
+    async def _skip(self, interaction):
+        await _advance_to_post_roles(interaction, self.guild_id, self.channel_id, self.event,
+                                     self.user_assignments, self.settings, self.interaction_user)
+
+
+def _limit_select_options(presets, vtype, lang, current):
+    """Build SelectOptions for a limit dropdown; None preset → value 'none'."""
+    opts = []
+    for v in presets:
+        opts.append(discord.SelectOption(
+            label=_preset_label(v, vtype, lang)[:100],
+            value="none" if v is None else str(v),
+            default=(v == current)))
+    return opts
 
 
 class WizardCasterRolesView(BaseView):
