@@ -1741,6 +1741,30 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Keine",
         "en": "None",
     },
+    "wizard.summary_recurrence": {
+        "de": "Wiederholung",
+        "en": "Recurrence",
+    },
+    "wizard.summary_duration": {
+        "de": "Eventdauer",
+        "en": "Duration",
+    },
+    "wizard.summary_spawn_offset": {
+        "de": "Folge-Event erstellen nach",
+        "en": "Recreate next event after",
+    },
+    "wizard.summary_slot_limits": {
+        "de": "Slot-Limits",
+        "en": "Slot limits",
+    },
+    "wizard.summary_early_pct_cap": {
+        "de": "Vorab-Zugang (% der Slots)",
+        "en": "Early access (% of slots)",
+    },
+    "wizard.summary_early_squad_cap": {
+        "de": "Max. Squads pro Vorab-Zugang-Rolle",
+        "en": "Max squads per early-access role",
+    },
     "wizard.reminder_title": {
         "de": "Event-Erinnerung",
         "en": "Event Reminder",

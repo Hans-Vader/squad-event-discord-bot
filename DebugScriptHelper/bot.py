@@ -4304,6 +4304,15 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
             countdown_val = t("wizard.countdown_none", lang)
         embed.add_field(name=t("wizard.summary_countdown", lang), value=countdown_val, inline=True)
 
+    # Recurrence / duration / (recreate-after, only for recurring events)
+    embed.add_field(name=t("wizard.summary_recurrence", lang),
+                    value=_format_recurrence(event.get("recurrence"), lang, event=event), inline=True)
+    embed.add_field(name=t("wizard.summary_duration", lang),
+                    value=_format_duration_value(event.get("duration_minutes"), lang), inline=True)
+    if (event.get("recurrence") or {}).get("type", "never") != "never":
+        embed.add_field(name=t("wizard.summary_spawn_offset", lang),
+                        value=_format_spawn_offset_value(event.get("spawn_offset_minutes"), lang), inline=True)
+
     # Calculate unused slots for confirmation summary
     _cap = event.get("server_max_players", 100)
     _max_casters = event.get("max_caster_slots", 2)
@@ -4349,6 +4358,19 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
         f"{_fmt(event.get('caster_community_role_ids', []), event.get('caster_community_user_ids', []))}"
     )
     embed.add_field(name=t("wizard.summary_roles", lang), value=roles_info, inline=False)
+
+    # Slot limits — only relevant once early-access roles are configured.
+    if event.get("community_rep_role_ids"):
+        limit_lines = [
+            f"**{t('wizard.summary_early_pct_cap', lang)}:** "
+            f"{_format_percent_value(event.get('community_rep_cap_percent'), lang)}"
+        ]
+        if event.get("mode", "rep") != "player":
+            limit_lines.append(
+                f"**{t('wizard.summary_early_squad_cap', lang)}:** "
+                f"{_format_count_value(event.get('early_access_squads_per_role'), lang)}")
+        embed.add_field(name=t("wizard.summary_slot_limits", lang),
+                        value="\n".join(limit_lines), inline=False)
 
     return embed
 
