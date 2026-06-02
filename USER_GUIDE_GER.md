@@ -114,9 +114,9 @@ Mit `/settings` wird die aktuelle Serverkonfiguration angezeigt.
 
 ### Event erstellen
 
-Verwende `/create_event`, um ein Event zu erstellen. Der Command hat einen **optionalen Choice-Parameter**:
+Verwende `/create_event`, um ein Event zu erstellen. Der Command hat einen **erforderlichen Choice-Parameter** — du musst einen Modus wählen:
 
-- `mode: Register as representative (squad rep)` — Standard; durchläuft den vollen Wizard unten.
+- `mode: Register as representative (squad rep)` — durchläuft den vollen Wizard unten.
 - `mode: Register as player (individual)` — überspringt den Caster-Rollen-Schritt und den Max-Squads-pro-User-Schritt, setzt `max_caster_slots = 0` zwangsweise und beschriftet „Server Max Spieler" als „Plätze gesamt".
 
 Nach dem Command führt dich ein mehrstufiger Wizard durch:
@@ -129,24 +129,36 @@ Nach dem Command führt dich ein mehrstufiger Wizard durch:
 - Server Max Spieler (Vertreter-Modus) bzw. Plätze gesamt (Spieler-Modus), Max Caster (0 = Caster deaktiviert; im Spieler-Modus fest auf 0 gesetzt und ausgeblendet), Squad-Größen (Inf / Fahr / Heli), Max Fahrzeug-Squads, Max Heli-Squads
 - Alle Werte vorausgefüllt aus den Server-Standardwerten (`/set_defaults`)
 
-**Schritt 3 — Squad-Rollen:**
-- Squad-Rep Rollen/User — Wer Squads anmelden darf / beitreten kann (Rollen-Gate)
-- Community-Rep Rollen/User — Wer **vor** Anmeldungsstart anmelden darf (Early Access)
-- Ping bei Öffnung — Ob diese Rollen bei Anmeldungsstart gepingt werden sollen
+**Schritt 3 — Anmelde-Rollen:**
+- Rollen mit Anmeldeberechtigung — Rollen, deren Mitglieder Squads anmelden dürfen / beitreten können (Rollen-Gate)
+- Rollen mit Vorab-Zugang — Rollen, deren Mitglieder **vor** Anmeldungsstart anmelden dürfen
+- Benachrichtigung bei Öffnung — Ob diese Rollen bei Anmeldungsstart per @-Erwähnung benachrichtigt werden (wird nur gefragt, wenn die Anmeldung nicht sofort öffnet)
 
-**Schritt 4 — Caster-Rollen (nur Vertreter-Modus — im Spieler-Modus übersprungen):**
+> Diese beiden sind **nur Rollen** — einzelne User können hier nicht ausgewählt werden (Caster in Schritt 5 erlauben weiterhin User).
+
+**Schritt 4 — Slot-Limits (nur sichtbar, wenn eine Anmelde-Rolle konfiguriert ist):**
+
+Begrenze optional, wie viel jede Anmeldegruppe belegen darf. Caster zählen nie mit, und Prozente beziehen sich nur auf die Spieler-Slots. Mitglieder, die das Limit ihrer Gruppe überschreiten, werden mit einer Meldung abgelehnt.
+- Rollen mit Vorab-Zugang — max. **% der Spieler-Slots** (alle Vorab-Rollen teilen sich dieses Kontingent)
+- Rollen mit Vorab-Zugang — max. **Squads pro Rolle** (nur Vertreter-Modus)
+- Reguläre Rollen — max. **Squads pro Nutzer** (nur Vertreter-Modus — das Per-User-Squad-Limit; im Spieler-Modus immer 1)
+
+Im Spieler-Modus wird nur das %-Limit für Vorab-Zugang angezeigt.
+
+**Schritt 5 — Caster-Rollen (nur Vertreter-Modus — im Spieler-Modus übersprungen):**
 - Caster Rollen/User — Wer sich als Caster anmelden darf (Rollen-Gate)
 - Caster-Early-Access Rollen/User — Wer sich als Caster **vor** Anmeldungsstart anmelden darf
 - Ping bei Öffnung
 
-**Schritt 5 — Timing:**
+**Schritt 6 — Timing:**
 - Event-Erinnerung — Benachrichtigung X Minuten vor Event-Start (0 = deaktiviert)
 - Countdown — Nachricht X Sekunden vor Anmeldungsstart (wird bei Öffnung automatisch gelöscht)
 
-**Schritt 6 — Squad-Limit (nur Vertreter-Modus — im Spieler-Modus übersprungen, immer 1):**
-- Max. Squads pro Spieler (1–20)
+**Schritt 7 — Spielstil & Squad-Limit (nur Vertreter-Modus — im Spieler-Modus übersprungen):**
+- Spielstil-Auswahl — ob Squads bei der Anmeldung einen Spielstil wählen
+- Max. Squads pro Spieler (1–20) — wird hier nur gefragt, wenn **keine** Anmelde-Rolle gesetzt ist; mit Rollen-Gate wird dies in Schritt 4 (Slot-Limits) festgelegt
 
-**Schritt 7 — Bestätigung:**
+**Schritt 8 — Bestätigung:**
 - Zusammenfassungs-Embed mit allen Einstellungen inkl. ungenutzter Slots — Bestätigen oder Abbrechen
 
 Jeder Schritt kann übersprungen werden — ohne Auswahl werden die Server-Standardwerte verwendet. Rollen können auch nachträglich mit `/set_event_roles` konfiguriert werden.
@@ -163,7 +175,7 @@ Server: 100 Slots
 
 ### Event per DM bearbeiten
 
-Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Panel auf **Event bearbeiten**. Der Bot sendet eine gruppierte Eigenschaftenliste:
+Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Panel auf **Event bearbeiten**. Der Bot sendet dir eine einzelne DM mit einer Übersicht aller Eigenschaften und ihrer aktuellen Werte, einem **Dropdown** zur Auswahl der zu ändernden Eigenschaft und einem **Fertig**-Button. Wähle eine Eigenschaft → ein kleiner Editor erscheint (Texteingabe, Ja/Nein-Schalter oder Wert-Dropdown) → deine Änderung wird **sofort gespeichert** und die Übersicht aktualisiert sich. Drücke **Fertig**, wenn du fertig bist. Die Event-Anzeige im Kanal wird nach jeder Änderung automatisch aktualisiert.
 
 **Allgemein:**
 1. Event-Name
@@ -186,16 +198,19 @@ Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Pan
 14. Anmeldezeitpunkt
 15. Event-Bild (Bild hochladen oder HTTPS-URL einfügen)
 16. Wiederholung (wie das Event zyklisch wiederkehrt — siehe unten)
-17. Dauer (Länge des Events; Standard 2 Std.)
-18. Folgeevent-Verzögerung (bei Wiederholung: Zeit nach dem Ende, bis das nächste Event erstellt wird)
+17. Eventdauer (Länge des Events; Standard 2 Std.)
+18. Folge-Event erstellen nach (bei Wiederholung: Verzögerung nach dem Ende, bis das nächste Event erstellt wird)
+19. Spielstil-Auswahl bei Anmeldung (an/aus)
+20. Slot-Limit: Vorab-Zugang (% der Spieler-Slots)
+21. Max. Squads pro Vorab-Zugang-Rolle
 
-Jede Änderung zeigt den alten → neuen Wert mit einem Bestätigungsschritt. Die Event-Anzeige im Kanal wird nach jeder Änderung automatisch aktualisiert.
+Es gibt keinen separaten Bestätigungsschritt — jede Änderung greift sofort.
 
-Änderungen an Datum/Uhrzeit, Wiederholung, Dauer oder Folgeevent-Verzögerung werden validiert — falls die nächste Wiederholung noch während des aktuellen Events (bis `Start + Dauer + Verzögerung`) fallen würde, wird die Änderung mit einer Erklärung abgelehnt. Verkürze das Event, reduziere die Verzögerung oder wähle einen längeren Wiederholungsrhythmus.
+Änderungen an Datum/Uhrzeit, Wiederholung, Eventdauer oder „Folge-Event erstellen nach" werden validiert — falls die nächste Wiederholung noch während des aktuellen Events (bis `Start + Dauer + Verzögerung`) fallen würde, wird die Änderung mit einer Erklärung abgelehnt. Verkürze das Event, reduziere die Verzögerung oder wähle einen längeren Wiederholungsrhythmus.
 
 ### Wiederkehrende Events
 
-Du kannst festlegen, dass ein Event automatisch ein Folgeevent erstellt. Konfiguriert wird das per DM-Bearbeitung über die Eigenschaften 16 (Wiederholung), 17 (Dauer) und 18 (Folgeevent-Verzögerung).
+Du kannst festlegen, dass ein Event automatisch ein Folgeevent erstellt. Konfiguriert wird das per DM-Bearbeitung über die Eigenschaften 16 (Wiederholung), 17 (Eventdauer) und 18 (Folge-Event erstellen nach).
 
 **Wiederholungs-Optionen (12):**
 
@@ -214,7 +229,7 @@ Du kannst festlegen, dass ein Event automatisch ein Folgeevent erstellt. Konfigu
 
 **Dauer-Presets:** 30 Min, 1 Std, 2 Std (Standard), 4 Std, 6 Std, 8 Std, 12 Std, 24 Std.
 
-**Verzögerungs-Presets:** 1 Min, 5 Min (Standard), 10 Min, 30 Min, 1 Std, 6 Std, 1 Tag, 1 Woche.
+**„Folge-Event erstellen nach"-Presets:** 1 Min, 5 Min (Standard), 10 Min, 30 Min, 1 Std, 6 Std, 1 Tag, 1 Woche.
 
 **Ablauf:**
 
@@ -352,19 +367,19 @@ A: Admin → Spieler hinzufügen. Die Auswahl erlaubt Mehrfachauswahl von Discor
 A: Die drei Squad-Typen haben unterschiedliche Größen und separate Slot-Kontingente. Infanterie-Squads sind typischerweise am größten (z.B. 6 Spieler), Fahrzeug-Squads kleiner (z.B. 2) und Heli-Squads am kleinsten (z.B. 1).
 
 **F: Was bedeutet „Early Access"?**
-A: Spieler mit Community-Rep- oder Caster-Early-Access-Rolle können sich bereits **vor** dem offiziellen Anmeldungsstart registrieren.
+A: Mitglieder einer Rolle mit Vorab-Zugang (oder einer Caster-Early-Access-Rolle) können sich bereits **vor** dem offiziellen Anmeldungsstart registrieren.
 
 **F: Ich kann mich nicht anmelden — was tun?**
-A: Prüfe, ob du die nötige Rolle hast (z.B. Squad-Rep für Squad-Anmeldung) und ob die Anmeldung bereits geöffnet ist. Ohne konfigurierte Rollen kann sich jeder anmelden.
+A: Prüfe, ob du eine nötige Rolle hast (wenn „Rollen mit Anmeldeberechtigung" konfiguriert sind) und ob die Anmeldung bereits geöffnet ist. Eventuell hast du auch das Slot-Limit deiner Anmeldegruppe erreicht. Ohne konfigurierte Rollen kann sich jeder anmelden.
 
 **F: Wie bearbeite ich ein laufendes Event?**
-A: Klicke auf **Admin** → **Event bearbeiten**. Der Bot sendet dir eine DM mit einer nummerierten Liste aller 18 Eigenschaften. Antworte mit der Nummer der Eigenschaft, die du ändern möchtest.
+A: Klicke auf **Admin** → **Event bearbeiten**. Der Bot sendet dir eine DM mit einer Übersicht und einem Dropdown — wähle die zu ändernde Eigenschaft (insgesamt 21), bearbeite sie (die Änderung wird sofort gespeichert) und drücke **Fertig**, wenn du fertig bist.
 
 **F: Wie lasse ich ein Event automatisch wiederkehren?**
 A: Bearbeite das Event per DM und öffne Eigenschaft 16 (Wiederholung). Wähle einen der 12 Typen — z.B. „Alle X Wochen" für einen wöchentlichen Zyklus oder „Am letzten Sonntag des nächsten Monats" für ein monatliches Muster, das dem Wochentag deines Events folgt. Das Folgeevent wird automatisch erstellt, sobald das aktuelle endet.
 
 **F: Wie lange bleibt das alte Event sichtbar, nachdem es zu Ende ist?**
-A: Bei nicht wiederkehrenden Events wird es direkt bei `Ende` archiviert. Bei wiederkehrenden Events bleibt es bis zum Erstellen des Folgeevents sichtbar (gesteuert über Eigenschaft 18, Folgeevent-Verzögerung — Standard 5 Minuten).
+A: Bei nicht wiederkehrenden Events wird es direkt bei `Ende` archiviert. Bei wiederkehrenden Events bleibt es bis zum Erstellen des Folgeevents sichtbar (gesteuert über Eigenschaft 18, „Folge-Event erstellen nach" — Standard 5 Minuten).
 
 **F: Warum wurde meine Wiederholungs-Änderung abgelehnt?**
 A: Die nächste Wiederholung würde noch während des aktuellen Events (oder während der Verzögerungs-Phase) anstehen. Verkürze das Event, reduziere die Verzögerung oder wähle einen längeren Wiederholungsrhythmus.

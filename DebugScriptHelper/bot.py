@@ -4601,8 +4601,7 @@ class EventServerConfigModal(ui.Modal):
         wizard_view = WizardSquadRolesView(
             self.guild_id, self.channel_id, event, {},
             self.settings, self.author)
-        step = "" if is_player_mode(event) else t("wizard.squad_roles_step", lang)
-        wizard_msg = f"**{t('wizard.squad_roles_title', lang, step=step)}**\n{t('wizard.squad_roles_desc', lang)}"
+        wizard_msg = f"**{t('wizard.squad_roles_title', lang)}**\n{t('wizard.squad_roles_desc', lang)}"
         await interaction.response.send_message(wizard_msg, view=wizard_view, ephemeral=True)
 
 

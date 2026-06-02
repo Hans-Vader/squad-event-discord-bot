@@ -53,29 +53,21 @@ class TestRoleLabelUnification(unittest.TestCase):
                 self.assertNotIn("Squad-Rep", value)
                 self.assertNotIn("Community-Rep", value)
 
-    def test_title_step_counter_rep_mode(self):
-        # Rep mode injects the step fragment.
-        en = t("wizard.squad_roles_title", "en", step=t("wizard.squad_roles_step", "en"))
-        self.assertIn("Step 1/2", en)
-        self.assertIn("Registration Access", en)
-        de = t("wizard.squad_roles_title", "de", step=t("wizard.squad_roles_step", "de"))
-        self.assertIn("Schritt 1/2", de)
-        self.assertIn("Anmeldeberechtigung", de)
-
     def test_squad_denied_message_is_mode_neutral(self):
         for lang in ("en", "de"):
             value = t("gate.squad_denied", lang)
             self.assertNotIn("squad", value.lower())
 
-    def test_title_no_counter_player_mode(self):
-        # Player mode passes an empty step fragment: no counter, no "Squad".
-        en = t("wizard.squad_roles_title", "en", step="")
-        self.assertNotIn("Step", en)
-        self.assertNotIn("Squad", en)
-        self.assertEqual(en, "Role Configuration: Registration Access")
-        de = t("wizard.squad_roles_title", "de", step="")
-        self.assertNotIn("Schritt", de)
-        self.assertEqual(de, "Rollen-Konfiguration: Anmeldeberechtigung")
+    def test_wizard_titles_have_no_step_counter(self):
+        # Step counters like "1/2" / "Schritt 1/2" were removed from all wizard titles.
+        self.assertEqual(t("wizard.squad_roles_title", "en"), "Role Configuration: Registration Access")
+        self.assertEqual(t("wizard.squad_roles_title", "de"), "Rollen-Konfiguration: Anmeldeberechtigung")
+        for key in ("wizard.squad_roles_title", "wizard.caster_roles_title", "squad.step_1_title"):
+            for lang in ("en", "de"):
+                value = t(key, lang)
+                self.assertNotRegex(value, r"\d+\s*/\s*\d+")
+                self.assertNotIn("Step ", value)
+                self.assertNotIn("Schritt ", value)
 
 
 if __name__ == "__main__":

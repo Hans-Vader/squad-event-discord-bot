@@ -419,8 +419,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Register squad",
     },
     "squad.step_1_title": {
-        "de": "Squad anmelden - Schritt 1/2",
-        "en": "Register squad - Step 1/2",
+        "de": "Squad anmelden",
+        "en": "Register squad",
     },
     "squad.step_1_desc": {
         "de": "Wähle den Squad-Typ und Spielstil:",
@@ -2180,20 +2180,16 @@ _STRINGS: dict[str, dict[str, str]] = {
 
     # ── Post-creation wizard ─────────────────────────────────────────────
     "wizard.squad_roles_title": {
-        "de": "Rollen-Konfiguration{step}: Anmeldeberechtigung",
-        "en": "Role Configuration{step}: Registration Access",
-    },
-    "wizard.squad_roles_step": {
-        "de": " — Schritt 1/2",
-        "en": " — Step 1/2",
+        "de": "Rollen-Konfiguration: Anmeldeberechtigung",
+        "en": "Role Configuration: Registration Access",
     },
     "wizard.squad_roles_desc": {
         "de": "Wähle optional, wer sich anmelden darf und wer Vorab-Zugang vor der Öffnung erhält.\nÜberspringe diesen Schritt, wenn jeder sich anmelden darf.",
         "en": "Optionally choose who may register, and who gets early access before registration opens.\nSkip this step if anyone may register.",
     },
     "wizard.caster_roles_title": {
-        "de": "Rollen-Konfiguration — Schritt 2/2: Caster-Rollen",
-        "en": "Role Configuration — Step 2/2: Caster Roles",
+        "de": "Rollen-Konfiguration: Caster-Rollen",
+        "en": "Role Configuration: Caster Roles",
     },
     "wizard.caster_roles_desc": {
         "de": "Wähle optional Rollen/Benutzer, die sich als Caster anmelden dürfen und Vorab-Zugang erhalten.\nÜberspringe diesen Schritt, wenn jeder sich als Caster anmelden darf.",

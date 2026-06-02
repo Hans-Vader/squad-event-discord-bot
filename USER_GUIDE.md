@@ -114,9 +114,9 @@ Use `/settings` to view the current server configuration.
 
 ### Creating an Event
 
-Use `/create_event` to start event creation. The command takes one **optional choice** parameter:
+Use `/create_event` to start event creation. The command takes one **required choice** parameter — you must pick a mode:
 
-- `mode: Register as representative (squad rep)` — the default; runs the full wizard below.
+- `mode: Register as representative (squad rep)` — runs the full wizard below.
 - `mode: Register as player (individual)` — skips the caster-roles step and the max-squads-per-user step, forces `max_caster_slots = 0`, and relabels "Server max players" to "Total seats".
 
 After the command, a multi-step wizard guides you through:
@@ -129,24 +129,36 @@ After the command, a multi-step wizard guides you through:
 - Server max players (rep mode) or Total seats (player mode), max caster slots (0 = casters disabled, and forced to 0 in player mode — the field is hidden), squad sizes (Infantry / Vehicle / Heli), max vehicle squads, max heli squads
 - All pre-filled from server defaults (`/set_defaults`)
 
-**Step 3 — Squad Roles:**
-- Squad-Rep roles/users — Who can register squads / join (role gate, enforced during registration)
-- Community-Rep roles/users — Who can register **before** registration opens (early access)
-- Ping on open — Whether to ping these roles when registration opens
+**Step 3 — Registration Roles:**
+- Roles allowed to register — roles whose members may register squads / join (role gate, enforced during registration)
+- Roles with early access — roles whose members may register **before** registration opens
+- Notify on open — whether to @-mention these roles when registration opens (only asked when registration isn't opening immediately)
 
-**Step 4 — Caster Roles (rep mode only — skipped in player mode):**
+> These two are **roles only** — individual users can't be selected here (casters, in Step 5, still allow users).
+
+**Step 4 — Slot Limits (only shown when a registration role is configured):**
+
+Optionally cap how much each registration group may take. Casters never count, and percentages are of the player slots only. Members who exceed their group's cap are rejected with a message.
+- Early-access roles — max **% of player slots** (all early-access roles share this quota)
+- Early-access roles — max **squads per role** (rep mode only)
+- Regular roles — max **squads per user** (rep mode only — this is the per-user squad limit; in player mode it's always 1)
+
+Player mode shows only the early-access % cap.
+
+**Step 5 — Caster Roles (rep mode only — skipped in player mode):**
 - Caster roles/users — Who can register as caster (role gate)
 - Caster early-access roles/users — Who can register as caster **before** registration opens
 - Ping on open toggle
 
-**Step 5 — Timing:**
+**Step 6 — Timing:**
 - Event reminder — Notification X minutes before event start (0 = disabled)
 - Registration countdown — Message sent X seconds before registration opens (auto-deleted when registration starts)
 
-**Step 6 — Squad Limit (rep mode only — skipped in player mode, always 1):**
-- Max squads per user (1–20)
+**Step 7 — Playstyle & Squad Limit (rep mode only — skipped in player mode):**
+- Playstyle selection — whether squads pick a playstyle when registering
+- Max squads per user (1–20) — only asked here when **no** registration-role gate is set; when a gate is configured, this is set in Step 4 (Slot Limits) instead
 
-**Step 7 — Confirmation:**
+**Step 8 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel
 
 Each step can be skipped — if skipped, server defaults are used. Roles can also be configured later with `/set_event_roles`.
@@ -163,7 +175,7 @@ Server: 100 slots
 
 ### Editing an Event via DM
 
-Organizers can edit a running event via DM: Click **Edit Event** in the admin panel. The bot sends a grouped property list:
+Organizers can edit a running event via DM: Click **Edit Event** in the admin panel. The bot sends you a single DM with an overview of all properties and their current values, a **dropdown** to pick the property to change, and a **Fertig / Done** button. Pick a property → a small editor appears (a text input, a Yes/No toggle, or a value dropdown) → your change is **saved immediately** and the overview refreshes. Press **Done** when you're finished. The event display in the channel updates automatically after each change.
 
 **General:**
 1. Event name
@@ -187,15 +199,18 @@ Organizers can edit a running event via DM: Click **Edit Event** in the admin pa
 15. Event image (upload an image or paste an HTTPS URL)
 16. Recurrence (how the event repeats — see below)
 17. Duration (event length; defaults to 2h)
-18. Spawn delay (for recurring events: time after the current event ends before the follow-up is created)
+18. Recreate next event after (for recurring events: delay after the current event ends before the follow-up is created)
+19. Playstyle selection at registration (on/off)
+20. Slot limit: early access (% of player slots)
+21. Max squads per early-access role
 
-Each edit shows the old → new value with a confirmation step. The event display in the channel updates automatically after each change.
+There's no separate confirm step — each edit applies as soon as you make it.
 
 If your change would cause the next recurrence to fire during the current event (before `start + duration + spawn delay`), the edit is rejected with an explanation — shorten the event, increase the spawn delay, or pick a longer recurrence interval.
 
 ### Recurring Events
 
-You can configure an event to automatically spawn a follow-up. Set this up via DM edit properties 16 (Recurrence), 17 (Duration), and 18 (Spawn delay).
+You can configure an event to automatically spawn a follow-up. Set this up via DM edit properties 16 (Recurrence), 17 (Duration), and 18 (Recreate next event after).
 
 **Recurrence options (12):**
 
@@ -214,7 +229,7 @@ You can configure an event to automatically spawn a follow-up. Set this up via D
 
 **Duration presets:** 30min, 1h, 2h (default), 4h, 6h, 8h, 12h, 24h.
 
-**Spawn delay presets:** 1min, 5min (default), 10min, 30min, 1h, 6h, 1d, 1w.
+**Recreate-next-event-after presets:** 1min, 5min (default), 10min, 30min, 1h, 6h, 1d, 1w.
 
 **How the lifecycle works:**
 
@@ -352,19 +367,19 @@ A: Admin → Add Player. The picker lets you select multiple Discord users at on
 A: The three squad types have different sizes and separate slot pools. Infantry squads are typically the largest (e.g. 6 players), vehicle squads smaller (e.g. 2), and heli squads the smallest (e.g. 1).
 
 **Q: What does "early access" mean?**
-A: Players with a Community-Rep or Caster early-access role can register **before** the official registration start time.
+A: Members of an early-access role (or a caster early-access role) can register **before** the official registration start time.
 
 **Q: I can't register — what should I do?**
-A: Check whether you have the required role (e.g. Squad-Rep for squad registration) and whether registration is already open. If no roles are configured, anyone can register.
+A: Check whether you have a required role (when "roles allowed to register" are configured) and whether registration is already open. You may also have hit a slot cap for your role group. If no roles are configured, anyone can register.
 
 **Q: How do I edit a running event?**
-A: Click **Admin** → **Edit Event**. The bot sends you a DM with a numbered list of all 18 properties. Reply with the number of the property you want to change.
+A: Click **Admin** → **Edit Event**. The bot DMs you an overview with a dropdown — pick the property you want to change (21 in total), edit it (the change saves immediately), and press **Done** when finished.
 
 **Q: How do I make an event repeat?**
 A: Edit the event via DM and open property 16 (Recurrence). Pick one of 12 types — for example "Every X weeks" for a weekly cycle, or "Last Sunday of next month" for a monthly pattern that follows your event's weekday. The follow-up event is created automatically when the current one ends.
 
 **Q: How long does the old event stay visible after it ends?**
-A: For non-recurring events, it's archived immediately at `end`. For recurring events, it stays until the follow-up is due (controlled by property 18, Spawn delay — default 5 minutes).
+A: For non-recurring events, it's archived immediately at `end`. For recurring events, it stays until the follow-up is due (controlled by property 18, Recreate next event after — default 5 minutes).
 
 **Q: Why was my recurrence edit rejected?**
 A: The next occurrence would fire during the current event (or during the spawn delay window). Shorten the event duration, shorten the spawn delay, or pick a longer recurrence interval.
