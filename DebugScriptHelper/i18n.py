@@ -711,8 +711,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Register squad",
     },
     "button.join": {
-        "de": "Beitreten",
-        "en": "Join",
+        "de": "Anmelden",
+        "en": "Register",
     },
     "button.register_caster": {
         "de": "Als Caster anmelden",

@@ -85,9 +85,12 @@ def has_organizer_role(user, organizer_role_id: int) -> bool:
 
 
 def has_role(user, role_id: int) -> bool:
-    """Check if user has a specific role by ID."""
-    if hasattr(user, "id") and str(user.id) in ADMIN_IDS:
-        return True
+    """Check if user has a specific role by ID.
+
+    Literal role membership — bot-level admins (ADMIN_IDS) are NOT bypassed here,
+    so they're subject to the registration role gate like everyone else. Admin
+    powers come from has_organizer_role / is_guild_admin instead.
+    """
     if not hasattr(user, "roles"):
         return False
     return any(role.id == role_id for role in user.roles)
