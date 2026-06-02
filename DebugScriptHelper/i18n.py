@@ -1691,16 +1691,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Countdown",
     },
     "wizard.ping_select_title": {
-        "de": "Rollen/Benutzer bei Öffnung pingen?",
-        "en": "Ping roles/users on open?",
+        "de": "Ausgewählte Rollen/Benutzer bei Anmeldestart benachrichtigen?",
+        "en": "Notify the selected roles/users when registration opens?",
     },
     "wizard.ping_yes": {
-        "de": "Ja — Rollen/Benutzer benachrichtigen",
-        "en": "Yes — Notify roles/users",
+        "de": "Ja — bei Anmeldestart per @-Erwähnung pingen",
+        "en": "Yes — @mention them when registration opens",
     },
     "wizard.ping_no": {
-        "de": "Nein — Keine Benachrichtigung",
-        "en": "No — No notification",
+        "de": "Nein — ohne Benachrichtigung öffnen",
+        "en": "No — open silently, no notification",
     },
     "wizard.summary_ping": {
         "de": "Ping bei Öffnung",
