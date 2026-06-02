@@ -14,7 +14,9 @@ import discord
 from discord import app_commands, ui
 from discord.ext import commands
 import asyncio
+import time
 from datetime import datetime, timedelta
+from typing import Optional
 import logging
 import sys
 import csv
@@ -85,8 +87,12 @@ bot = EventBot()
 # ---------------------------------------------------------------------------
 # Locks per guild to protect concurrent state mutations
 _guild_locks: dict[int, asyncio.Lock] = {}
-# Track active DM edit sessions: user_id -> {guild_id, channel_id}
+# Track active DM edit sessions: user_id ->
+# {guild_id, channel_id, db_id, lang, dm_message, active_view, last_activity}
 _active_edit_sessions: dict[int, dict] = {}
+# A session whose view's on_timeout never fired is considered stuck after this
+# many seconds, so a new /edit can reclaim it instead of being blocked forever.
+SESSION_STALE_AFTER_SECONDS = 660
 # Debounced display update tasks per (guild_id, channel_id)
 _display_update_tasks: dict[tuple[int, int], asyncio.Task] = {}
 
@@ -1635,11 +1641,6 @@ class AdminActionView(BaseView):
     async def _edit(self, interaction):
         lang = get_guild_language(self.guild_id)
 
-        if interaction.user.id in _active_edit_sessions:
-            await interaction.response.send_message(
-                t("edit.active_session", lang), ephemeral=True)
-            return
-
         event, user_assignments, db_id = _get_channel_event(self.guild_id, self.channel_id)
         if not event:
             await interaction.response.send_message(
@@ -1647,21 +1648,7 @@ class AdminActionView(BaseView):
             return
 
         await interaction.response.defer(ephemeral=True)
-
-        try:
-            await interaction.user.create_dm()
-        except discord.Forbidden:
-            await interaction.followup.send(
-                t("edit.dm_blocked", lang), ephemeral=True)
-            return
-
-        _active_edit_sessions[interaction.user.id] = {
-            "guild_id": self.guild_id,
-            "channel_id": self.channel_id,
-        }
-        await interaction.followup.send(t("edit.dm_sent", lang), ephemeral=True)
-        bot.loop.create_task(
-            _run_dm_edit_session(interaction.user, self.guild_id, self.channel_id, db_id))
+        await start_dm_edit_session(interaction, self.guild_id, self.channel_id, db_id, lang)
 
     async def _delete(self, interaction):
         lang = get_guild_language(self.guild_id)
@@ -2623,221 +2610,12 @@ def _validate_edit_value(message, key, vtype, lang):
     return text, None
 
 
-def _format_display_value(value, vtype, lang, event=None):
-    """Format a parsed value for the confirmation embed."""
-    if vtype == "recurrence":
-        return _format_recurrence(value, lang, event=event)
-    if vtype == "duration":
-        return _format_duration_value(value, lang)
-    if vtype == "spawn_offset":
-        return _format_spawn_offset_value(value, lang)
-    if vtype == "bool":
-        return t("edit.bool.enabled", lang) if value else t("edit.bool.disabled", lang)
-    if value is None:
-        return t("edit.not_set", lang)
-    if value == "__immediate__":
-        return t("wizard.summary_reg_immediate", lang)
-    if isinstance(value, datetime):
-        return value.strftime("%d.%m.%Y %H:%M")
-    return str(value)
-
-
 def _parse_int_list(text):
     """Parse comma/whitespace-separated integers. Returns None on any parse error."""
     try:
         return [int(p) for p in re.split(r"[,\s]+", text.strip()) if p]
     except ValueError:
         return None
-
-
-async def _prompt_int_min_one(user, dm_check, lang, is_cancel, prompt_key):
-    """Small helper: prompt for a positive integer. Returns (val, cancelled, timed_out)."""
-    await user.send(t(prompt_key, lang) + "\n" + t("edit.cancel_hint", lang))
-    while True:
-        try:
-            reply = await bot.wait_for("message", check=dm_check, timeout=300)
-        except asyncio.TimeoutError:
-            return None, False, True
-        if is_cancel(reply):
-            return None, True, False
-        try:
-            val = int(reply.content.strip())
-        except ValueError:
-            await user.send(t("edit.invalid_integer", lang))
-            continue
-        if val < 1:
-            await user.send(t("edit.invalid_integer", lang))
-            continue
-        return val, False, False
-
-
-async def _prompt_preset(user, dm_check, lang, is_cancel, prompt_key, values):
-    """Prompt with a preset list; returns (selected_value, cancelled, timed_out)."""
-    await user.send(t(prompt_key, lang) + "\n" + t("edit.cancel_hint", lang))
-    while True:
-        try:
-            reply = await bot.wait_for("message", check=dm_check, timeout=300)
-        except asyncio.TimeoutError:
-            return None, False, True
-        if is_cancel(reply):
-            return None, True, False
-        try:
-            choice = int(reply.content.strip())
-        except ValueError:
-            await user.send(t("edit.recurrence.invalid", lang))
-            continue
-        if 1 <= choice <= len(values):
-            return values[choice - 1], False, False
-        await user.send(t("edit.recurrence.invalid", lang))
-
-
-async def _prompt_recurrence(user, dm_check, lang, is_cancel, event):
-    """Multi-step DM flow to build a recurrence dict (flat 12-option menu).
-
-    Returns (value, cancelled, timed_out). If cancelled, value is None and the
-    caller should return to the overview. If timed_out, caller should break.
-    """
-    day_name = _event_weekday_name(event, lang)
-    event_time = event.get("time")
-    await user.send(
-        t("edit.recurrence.prompt", lang, day=day_name) + "\n" + t("edit.cancel_hint", lang))
-
-    simple = {
-        1: {"type": "never"},
-        6: {"type": "every_month"},
-        7: {"type": "first_weekday"},
-        8: {"type": "fourth_weekday"},
-        9: {"type": "last_weekday"},
-    }
-
-    while True:
-        try:
-            reply = await bot.wait_for("message", check=dm_check, timeout=300)
-        except asyncio.TimeoutError:
-            return None, False, True
-        if is_cancel(reply):
-            return None, True, False
-        try:
-            choice = int(reply.content.strip())
-        except ValueError:
-            await user.send(t("edit.recurrence.invalid", lang))
-            continue
-
-        if choice in simple:
-            return simple[choice], False, False
-
-        interval_map = {
-            2: ("every_minutes", "edit.recurrence.minutes.prompt"),
-            3: ("every_hours",   "edit.recurrence.hours.prompt"),
-            4: ("every_days",    "edit.recurrence.days.prompt"),
-            5: ("every_weeks",   "edit.recurrence.weeks.prompt"),
-        }
-        if choice in interval_map:
-            rtype, pkey = interval_map[choice]
-            n, cancelled, timed_out = await _prompt_int_min_one(user, dm_check, lang, is_cancel, pkey)
-            if timed_out:
-                return None, False, True
-            if cancelled:
-                return None, True, False
-            return {"type": rtype, "interval": n}, False, False
-
-        if choice == 10:  # specific_date
-            await user.send(t("edit.recurrence.specific_date.prompt", lang) + "\n" + t("edit.cancel_hint", lang))
-            while True:
-                try:
-                    reply = await bot.wait_for("message", check=dm_check, timeout=300)
-                except asyncio.TimeoutError:
-                    return None, False, True
-                if is_cancel(reply):
-                    return None, True, False
-                text = reply.content.strip()
-                parts = text.split(maxsplit=1)
-                date_str = parts[0]
-                time_str = parts[1] if len(parts) > 1 else (event_time or "20:00")
-                # Validate
-                try:
-                    datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
-                except ValueError:
-                    await user.send(t("edit.recurrence.invalid_specific_date", lang))
-                    continue
-                return {"type": "specific_date", "date": date_str, "time": time_str}, False, False
-
-        if choice == 11:  # specific_weekdays
-            await user.send(t("edit.recurrence.weekdays.prompt", lang) + "\n" + t("edit.cancel_hint", lang))
-            while True:
-                try:
-                    reply = await bot.wait_for("message", check=dm_check, timeout=300)
-                except asyncio.TimeoutError:
-                    return None, False, True
-                if is_cancel(reply):
-                    return None, True, False
-                nums = _parse_int_list(reply.content.strip())
-                if not nums or not all(1 <= n <= 7 for n in nums):
-                    await user.send(t("edit.recurrence.invalid_weekdays", lang))
-                    continue
-                weekdays = sorted({n - 1 for n in nums})
-                return {"type": "specific_weekdays", "weekdays": weekdays}, False, False
-
-        if choice == 12:  # specific_month_days
-            await user.send(t("edit.recurrence.month_days.prompt", lang) + "\n" + t("edit.cancel_hint", lang))
-            while True:
-                try:
-                    reply = await bot.wait_for("message", check=dm_check, timeout=300)
-                except asyncio.TimeoutError:
-                    return None, False, True
-                if is_cancel(reply):
-                    return None, True, False
-                nums = _parse_int_list(reply.content.strip())
-                if not nums or not all(1 <= n <= 31 for n in nums):
-                    await user.send(t("edit.recurrence.invalid_month_days", lang))
-                    continue
-                return {"type": "specific_month_days", "month_days": sorted(set(nums))}, False, False
-
-        await user.send(t("edit.recurrence.invalid", lang))
-
-
-class _EditConfirmView(ui.View):
-    def __init__(self, lang):
-        super().__init__(timeout=300)
-        self.result = None
-        btn_yes = ui.Button(label=t("general.confirm", lang), style=discord.ButtonStyle.success)
-        btn_yes.callback = self._confirm
-        self.add_item(btn_yes)
-        btn_no = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
-        btn_no.callback = self._cancel
-        self.add_item(btn_no)
-
-    async def _confirm(self, interaction):
-        self.result = "confirm"
-        await interaction.response.defer()
-        self.stop()
-
-    async def _cancel(self, interaction):
-        self.result = "cancel"
-        await interaction.response.defer()
-        self.stop()
-
-
-class _EditMoreView(ui.View):
-    def __init__(self, lang):
-        super().__init__(timeout=300)
-        self.result = None
-        btn_more = ui.Button(label=t("edit.yes_more", lang), style=discord.ButtonStyle.primary)
-        btn_more.callback = self._more
-        self.add_item(btn_more)
-        btn_done = ui.Button(label=t("edit.no_done", lang), style=discord.ButtonStyle.secondary)
-        btn_done.callback = self._done
-        self.add_item(btn_done)
-
-    async def _more(self, interaction):
-        self.result = "more"
-        await interaction.response.defer()
-        self.stop()
-
-    async def _done(self, interaction):
-        self.result = "done"
-        await interaction.response.defer()
-        self.stop()
 
 
 def _visible_edit_properties(event):
@@ -2850,265 +2628,851 @@ def _visible_edit_properties(event):
     return list(_EDIT_PROPERTIES)
 
 
-async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
-    """Run the full DM-based event editing conversation."""
-    try:
-        lang = get_guild_language(guild_id)
-        cancel_word = t("edit.cancel_word", lang)
+# ═══════════════════════════════════════════════════════════════════════════
+# View-based DM event editor
+#
+# A persistent DM message shows a property dropdown + a "Fertig/Done" button.
+# Picking a property swaps in a small sub-editor (modal for text/numbers,
+# buttons for the bool, a dropdown for presets, a dropdown + modals for
+# recurrence, a hybrid listen step for the image). Each edit saves immediately
+# and returns to the overview; Done closes the session. Session state lives in
+# _active_edit_sessions; every view's on_timeout tears the session down.
+# ═══════════════════════════════════════════════════════════════════════════
 
-        def dm_check(m):
-            return m.author.id == user.id and isinstance(m.channel, discord.DMChannel)
+def _find_edit_property(key):
+    """Return the _EDIT_PROPERTIES tuple for a property key, or None."""
+    return next((p for p in _EDIT_PROPERTIES if p[1] == key), None)
 
-        def _is_cancel(msg):
-            return msg.content.strip().lower() == cancel_word
 
-        while True:
-            # Re-load event fresh each iteration
-            event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
-            if not event:
-                await user.send(t("general.no_active_event", lang))
-                break
+def _prop_short_label(label_key, lang):
+    """Property label without the leading 'NN. ' numbering used in the embed."""
+    return t(label_key, lang).split(". ", 1)[-1]
 
-            # Build grouped embed property list (mode-filtered)
-            visible_props = _visible_edit_properties(event)
-            groups = [
-                ("edit.group.general", visible_props[0:4]),
-                ("edit.group.squad_config", visible_props[4:12]),
-                ("edit.group.extras", visible_props[12:]),
-            ]
-            edit_embed = discord.Embed(
-                title=t("edit.title", lang),
-                description=t("edit.select_property", lang),
-                color=discord.Color.blue(),
-            )
-            for group_key, props in groups:
-                field_lines = []
-                for num, key, label_key, vtype, special in props:
-                    current = _format_property_value(event, key, vtype, lang)
-                    field_lines.append(f"`{num:>2}.` {t(label_key, lang).split('. ', 1)[-1]}:  `{current}`")
-                edit_embed.add_field(
-                    name=t(group_key, lang),
-                    value="\n".join(field_lines),
-                    inline=False,
-                )
-            edit_embed.set_footer(text=t("edit.footer_hint", lang))
 
-            await user.send(embed=edit_embed)
+def _validate_edit_text(text, vtype, lang):
+    """Parse/validate typed modal input for a scalar vtype.
 
-            # Wait for property number
-            try:
-                reply = await bot.wait_for("message", check=dm_check, timeout=300)
-            except asyncio.TimeoutError:
-                await user.send(t("edit.timeout", lang))
-                break
+    Returns (value, error_key_or_None). Mirrors the text branches of
+    _validate_edit_value (which still handles the image attachment case).
+    """
+    text = (text or "").strip()
+    clear_words = {"leer", "empty", "none", ""}
 
-            if _is_cancel(reply):
-                continue  # back to overview
-
-            try:
-                choice = int(reply.content.strip())
-            except ValueError:
-                await user.send(t("edit.invalid_number", lang, max=len(visible_props)))
-                continue
-
-            if choice < 1 or choice > len(visible_props):
-                await user.send(t("edit.invalid_number", lang, max=len(visible_props)))
-                continue
-
-            num, key, label_key, vtype, special = visible_props[choice - 1]
-
-            # Show current value and prompt for new one
-            current_display = _format_property_value(event, key, vtype, lang)
-
-            if vtype == "recurrence":
-                await user.send(t("edit.current_value", lang, value=current_display))
-                new_value, cancelled, timed_out = await _prompt_recurrence(
-                    user, dm_check, lang, _is_cancel, event)
-                if timed_out:
-                    await user.send(t("edit.timeout", lang))
-                    break
-                if cancelled:
-                    continue
-            elif vtype == "duration":
-                await user.send(t("edit.current_value", lang, value=current_display))
-                new_value, cancelled, timed_out = await _prompt_preset(
-                    user, dm_check, lang, _is_cancel,
-                    "edit.duration.prompt", _DURATION_PRESETS)
-                if timed_out:
-                    await user.send(t("edit.timeout", lang))
-                    break
-                if cancelled:
-                    continue
-            elif vtype == "spawn_offset":
-                await user.send(t("edit.current_value", lang, value=current_display))
-                new_value, cancelled, timed_out = await _prompt_preset(
-                    user, dm_check, lang, _is_cancel,
-                    "edit.spawn_offset.prompt", _SPAWN_PRESETS)
-                if timed_out:
-                    await user.send(t("edit.timeout", lang))
-                    break
-                if cancelled:
-                    continue
-            else:
-                prompt = t("edit.current_value", lang, value=current_display) + "\n"
-
-                if vtype == "image":
-                    prompt += t("edit.image_hint", lang)
-                elif vtype == "reg_start":
-                    prompt += t("edit.reg_start_hint", lang)
-                elif vtype == "string_nullable":
-                    prompt += t("edit.description_hint", lang)
-                elif vtype == "bool":
-                    prompt += t("edit.bool_hint", lang)
-                else:
-                    prompt += t("edit.enter_new_value", lang)
-
-                prompt += "\n" + t("edit.cancel_hint", lang)
-                await user.send(prompt)
-
-                # Wait for new value
-                try:
-                    value_msg = await bot.wait_for("message", check=dm_check, timeout=300)
-                except asyncio.TimeoutError:
-                    await user.send(t("edit.timeout", lang))
-                    break
-
-                if _is_cancel(value_msg):
-                    continue  # back to overview
-
-                # Validate
-                new_value, error_key = _validate_edit_value(value_msg, key, vtype, lang)
-                if error_key:
-                    await user.send(t(error_key, lang))
-                    continue
-
-            # Confirmation embed with buttons
-            new_display = _format_display_value(new_value, vtype, lang, event=event)
-            confirm_embed = discord.Embed(
-                title=t("edit.confirm_change", lang),
-                color=discord.Color.orange(),
-            )
-            confirm_embed.add_field(
-                name=t("edit.old_value", lang), value=f"`{current_display}`", inline=True)
-            confirm_embed.add_field(
-                name=t("edit.new_value", lang), value=f"`{new_display}`", inline=True)
-
-            confirm_view = _EditConfirmView(lang)
-            await user.send(embed=confirm_embed, view=confirm_view)
-
-            timed_out = await confirm_view.wait()
-            if timed_out:
-                await user.send(t("edit.timeout", lang))
-                break
-            if confirm_view.result != "confirm":
-                continue  # back to overview
-
-            # Apply change under guild lock
-            lock = _get_guild_lock(guild_id)
-            invalid_reason = None
-            async with lock:
-                event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
-                if not event:
-                    await user.send(t("general.no_active_event", lang))
-                    break
-
-                if key in ("max_vehicle_squads", "max_heli_squads") and new_value == 0:
-                    type_key = "vehicle" if key == "max_vehicle_squads" else "heli"
-                    has_squads = any(s.get("type") == type_key for s in event.get("squads", {}).values())
-                    has_wl = bool(event.get(f"{type_key}_waitlist", []))
-                    if has_squads or has_wl:
-                        await user.send(t("edit.cannot_disable_type_with_entries", lang,
-                                          type=t(f"embed.type_{type_key}", lang)))
-                        continue
-
-                # Handle registration start special case
-                if key == "registration_start_time":
-                    if new_value == "__immediate__":
-                        event["registration_open"] = True
-                        event["registration_start_time"] = None
-                    elif new_value is None:
-                        event["registration_start_time"] = None
-                    elif isinstance(new_value, datetime) and new_value <= datetime.now():
-                        event["registration_open"] = True
-                        event["registration_start_time"] = None
-                    elif isinstance(new_value, datetime):
-                        event_dt = parse_date(event["date"])
-                        if event_dt and event.get("time"):
-                            h, m = map(int, event["time"].split(":"))
-                            event_dt = event_dt.replace(hour=h, minute=m)
-                        if event_dt and new_value >= event_dt:
-                            await dm_channel.send(t("event.reg_after_event", lang))
-                            break
-                        event["registration_start_time"] = new_value
-                        event["registration_open"] = False
-                    else:
-                        event["registration_start_time"] = new_value
-                        event["registration_open"] = False
-                else:
-                    event[key] = new_value
-
-                # Side effects
-                if special == "recalc_slots":
-                    event["max_player_slots"] = event["server_max_players"] - event["max_caster_slots"]
-
-                # Invariant: the next occurrence must still fire after end + spawn_offset
-                if key in ("date", "time", "recurrence", "duration_minutes", "spawn_offset_minutes"):
-                    start_dt = compute_event_start(event)
-                    end_dt = compute_event_end(event)
-                    if start_dt and end_dt:
-                        ok, reason_key = validate_recurrence_fits(
-                            start_dt, end_dt,
-                            event.get("recurrence"),
-                            event.get("spawn_offset_minutes", 5),
-                        )
-                        if not ok:
-                            invalid_reason = reason_key
-
-                if invalid_reason is None:
-                    save_event(db_id, event, user_assignments)
-
-            if invalid_reason:
-                await user.send(t(invalid_reason, lang))
-                continue
-
-            # Update channel display
-            await update_event_displays(guild_id, channel_id)
-
-            # Log the edit
-            if special == "recalc_slots":
-                await user.send(t("edit.recalculated", lang, slots=event["max_player_slots"]))
-
-            guild = bot.get_guild(guild_id)
-            if guild:
-                await send_to_log_channel(
-                    t("log.event_edited", lang,
-                      user=user.name,
-                      property=t(label_key, lang),
-                      name=event["name"]),
-                    guild=guild)
-
-            # Combined "updated + edit more?" with event link and buttons
-            link = _build_event_message_link(event, channel_id, guild_id) or ""
-            more_msg = t("edit.updated", lang, link=link)
-            more_msg += "\n" + t("edit.edit_more_question", lang)
-            more_view = _EditMoreView(lang)
-            await user.send(more_msg, view=more_view)
-
-            timed_out = await more_view.wait()
-            if timed_out or more_view.result != "more":
-                await user.send(t("edit.finished", lang))
-                break
-
-    except discord.Forbidden:
-        logger.warning(f"DM edit session: user {user.id} has DMs disabled mid-session")
-    except Exception as e:
-        logger.error(f"Error in DM edit session for user {user.id}: {e}", exc_info=True)
+    if vtype == "string":
+        if not text:
+            return None, "edit.required"
+        return text, None
+    if vtype == "string_nullable":
+        if text.lower() in clear_words:
+            return None, None
+        return text, None
+    if vtype == "date":
+        if not parse_date(text):
+            return None, "edit.invalid_date"
+        return text, None
+    if vtype == "time":
+        m = re.match(r"^(\d{1,2}):(\d{2})$", text)
+        if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+            return None, "edit.invalid_time"
+        return f"{int(m.group(1)):02d}:{int(m.group(2)):02d}", None
+    if vtype == "int":
         try:
-            await user.send(t("general.error", get_guild_language(guild_id), error=str(e)))
-        except Exception:
+            val = int(text)
+        except ValueError:
+            return None, "edit.invalid_integer"
+        return (val, None) if val >= 1 else (None, "edit.invalid_integer")
+    if vtype == "int_zero":
+        try:
+            val = int(text)
+        except ValueError:
+            return None, "edit.invalid_integer"
+        return (val, None) if val >= 0 else (None, "edit.invalid_integer")
+    if vtype == "int_nullable":
+        try:
+            val = int(text)
+        except ValueError:
+            return None, "edit.invalid_integer"
+        if val < 0:
+            return None, "edit.invalid_integer"
+        return (val if val > 0 else None), None
+    if vtype == "reg_start":
+        if text.lower() in clear_words:
+            return None, None
+        if text.lower() in {"sofort", "now", "jetzt", "immediately"}:
+            return "__immediate__", None
+        parsed = parse_registration_start(text)
+        if parsed is None:
+            return None, "edit.invalid_date"
+        return parsed, None
+    return text, None
+
+
+def _apply_property_change(event, key, vtype, special, new_value, lang):
+    """Mutate `event` in place for a confirmed edit. Returns (ok, error_text).
+
+    When ok is False the caller must NOT save — error_text is a ready-to-send,
+    localized message. Carries over every invariant from the old edit loop
+    (vehicle/heli disable guard, registration-start special cases, slot
+    recalculation, recurrence-fits check) and fixes the crash where the old
+    code referenced an undefined `dm_channel`.
+    """
+    if key in ("max_vehicle_squads", "max_heli_squads") and new_value == 0:
+        type_key = "vehicle" if key == "max_vehicle_squads" else "heli"
+        has_squads = any(s.get("type") == type_key for s in event.get("squads", {}).values())
+        has_wl = bool(event.get(f"{type_key}_waitlist", []))
+        if has_squads or has_wl:
+            return False, t("edit.cannot_disable_type_with_entries", lang,
+                            type=t(f"embed.type_{type_key}", lang))
+
+    if key == "registration_start_time":
+        if new_value == "__immediate__":
+            event["registration_open"] = True
+            event["registration_start_time"] = None
+        elif new_value is None:
+            event["registration_start_time"] = None
+        elif isinstance(new_value, datetime) and new_value <= datetime.now():
+            event["registration_open"] = True
+            event["registration_start_time"] = None
+        elif isinstance(new_value, datetime):
+            event_dt = parse_date(event.get("date", ""))
+            if event_dt and event.get("time"):
+                h, m = map(int, event["time"].split(":"))
+                event_dt = event_dt.replace(hour=h, minute=m)
+            if event_dt and new_value >= event_dt:
+                return False, t("event.reg_after_event", lang)
+            event["registration_start_time"] = new_value
+            event["registration_open"] = False
+        else:
+            event["registration_start_time"] = new_value
+            event["registration_open"] = False
+    else:
+        event[key] = new_value
+
+    if special == "recalc_slots":
+        event["max_player_slots"] = event["server_max_players"] - event["max_caster_slots"]
+
+    if key in ("date", "time", "recurrence", "duration_minutes", "spawn_offset_minutes"):
+        start_dt = compute_event_start(event)
+        end_dt = compute_event_end(event)
+        if start_dt and end_dt:
+            ok, reason_key = validate_recurrence_fits(
+                start_dt, end_dt, event.get("recurrence"),
+                event.get("spawn_offset_minutes", 5))
+            if not ok:
+                # validate_recurrence_fits returns bare keys ("recurrence.error.*");
+                # the localized strings live under the "edit." namespace.
+                return False, t(f"edit.{reason_key}", lang)
+    return True, None
+
+
+# Recurrence dropdown options: value_id -> a ready dict (apply immediately) or a
+# string naming the follow-up modal flow.
+_RECURRENCE_OPTIONS = [
+    ("never", {"type": "never"}),
+    ("every_minutes", "interval"),
+    ("every_hours", "interval"),
+    ("every_days", "interval"),
+    ("every_weeks", "interval"),
+    ("every_month", {"type": "every_month"}),
+    ("first_weekday", {"type": "first_weekday"}),
+    ("fourth_weekday", {"type": "fourth_weekday"}),
+    ("last_weekday", {"type": "last_weekday"}),
+    ("specific_date", "specific_date"),
+    ("specific_weekdays", "weekdays"),
+    ("specific_month_days", "month_days"),
+]
+_RECURRENCE_SPEC = dict(_RECURRENCE_OPTIONS)
+
+
+# ── Session lifecycle ──────────────────────────────────────────────────────
+
+def _close_session(user_id):
+    _active_edit_sessions.pop(user_id, None)
+
+
+def _set_active_view(user_id, view):
+    """Mark `view` as the live dialog for this session and bump activity."""
+    session = _active_edit_sessions.get(user_id)
+    if session is not None:
+        session["active_view"] = view
+        session["last_activity"] = time.monotonic()
+
+
+async def _force_close_stale_session(user_id):
+    """Tear down a stuck session and disable its old DM dialog (best-effort)."""
+    session = _active_edit_sessions.pop(user_id, None)
+    if not session:
+        return
+    dm_msg = session.get("dm_message")
+    if dm_msg is not None:
+        try:
+            await dm_msg.edit(view=None)
+        except discord.HTTPException:
             pass
-    finally:
+
+
+async def _handle_edit_timeout(view, user_id):
+    """Shared on_timeout handler for every edit view.
+
+    No-op if the session was already closed (Done pressed) or `view` is a stale
+    view the user navigated away from — each navigation supersedes the previous
+    view's timer.
+    """
+    session = _active_edit_sessions.get(user_id)
+    if not session or session.get("active_view") is not view:
+        return
+    _active_edit_sessions.pop(user_id, None)
+    lang = session.get("lang", "de")
+    dm_msg = session.get("dm_message")
+    if dm_msg is None:
+        return
+    try:
+        await dm_msg.edit(view=None)
+    except discord.HTTPException:
+        pass
+    try:
+        await dm_msg.channel.send(t("edit.timeout", lang))
+    except discord.HTTPException:
+        pass
+
+
+async def _notify_event_gone(interaction, user_id, lang, via_modal=False):
+    """Close the session and tell the user the event no longer exists."""
+    _close_session(user_id)
+    if via_modal:
+        try:
+            await interaction.response.send_message(
+                t("general.no_active_event", lang), ephemeral=True)
+        except discord.InteractionResponded:
+            pass
+    else:
+        try:
+            await interaction.response.edit_message(
+                embed=discord.Embed(description=t("general.no_active_event", lang),
+                                    color=discord.Color.red()),
+                view=None)
+        except discord.HTTPException:
+            pass
+
+
+# ── Overview embed + refresh ───────────────────────────────────────────────
+
+def _build_edit_main_embed(event, lang, updated_note=None):
+    """Property overview embed shown at the top of the editor."""
+    visible = _visible_edit_properties(event)
+    groups = [
+        ("edit.group.general", visible[0:4]),
+        ("edit.group.squad_config", visible[4:12]),
+        ("edit.group.extras", visible[12:]),
+    ]
+    embed = discord.Embed(
+        title=t("edit.title", lang),
+        description=t("edit.select_property_v2", lang),
+        color=discord.Color.blue(),
+    )
+    for group_key, props in groups:
+        if not props:
+            continue
+        lines = []
+        for num, key, label_key, vtype, special in props:
+            current = _format_property_value(event, key, vtype, lang)
+            lines.append(f"`{num:>2}.` {_prop_short_label(label_key, lang)}:  `{current}`")
+        embed.add_field(name=t(group_key, lang), value="\n".join(lines), inline=False)
+    if updated_note:
+        embed.add_field(name="​", value=f"✅ {updated_note}", inline=False)
+    embed.set_footer(text=t("edit.footer_hint_v2", lang))
+    return embed
+
+
+async def _refresh_main_view(interaction, user_id, guild_id, channel_id, db_id, lang,
+                             updated_note=None, via_modal=False):
+    """Re-render the overview (after an edit or cancel) on the session message."""
+    event, _ua, _db = _get_channel_event(guild_id, channel_id)
+    if not event:
+        await _notify_event_gone(interaction, user_id, lang, via_modal=via_modal)
+        return
+    embed = _build_edit_main_embed(event, lang, updated_note=updated_note)
+    view = EditMainView(user_id, guild_id, channel_id, db_id, lang)
+    _set_active_view(user_id, view)
+    if via_modal:
+        try:
+            await interaction.response.defer()
+        except discord.InteractionResponded:
+            pass
+        session = _active_edit_sessions.get(user_id)
+        dm_msg = session.get("dm_message") if session else None
+        if dm_msg is not None:
+            try:
+                await dm_msg.edit(embed=embed, view=view)
+            except discord.HTTPException:
+                pass
+    else:
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+async def _reshow_overview_dm(user_id, guild_id, channel_id, db_id, lang, note=None):
+    """Edit the stored session DM message back to the overview (no interaction)."""
+    session = _active_edit_sessions.get(user_id)
+    dm_msg = session.get("dm_message") if session else None
+    event, _ua, _db = _get_channel_event(guild_id, channel_id)
+    if not event or dm_msg is None:
+        return
+    view = EditMainView(user_id, guild_id, channel_id, db_id, lang)
+    _set_active_view(user_id, view)
+    try:
+        await dm_msg.edit(embed=_build_edit_main_embed(event, lang, updated_note=note),
+                          view=view)
+    except discord.HTTPException:
+        pass
+
+
+# ── Persist + apply ────────────────────────────────────────────────────────
+
+async def _persist_event_edit(guild_id, channel_id, prop, new_value, lang, editor_name):
+    """Validate + save one property edit under the guild lock.
+
+    Returns ("ok", recalc_slots_or_None) | ("gone", None) | ("error", text).
+    On success also refreshes the public event display and writes a log line.
+    """
+    num, key, label_key, vtype, special = prop
+    lock = _get_guild_lock(guild_id)
+    recalc_value = None
+    event_name = None
+    async with lock:
+        event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
+        if not event:
+            return "gone", None
+        ok, err_text = _apply_property_change(event, key, vtype, special, new_value, lang)
+        if not ok:
+            return "error", err_text
+        save_event(db_id, event, user_assignments)
+        if special == "recalc_slots":
+            recalc_value = event.get("max_player_slots")
+        event_name = event.get("name")
+    await update_event_displays(guild_id, channel_id)
+    guild = bot.get_guild(guild_id)
+    if guild:
+        await send_to_log_channel(
+            t("log.event_edited", lang, user=editor_name,
+              property=t(label_key, lang), name=event_name),
+            guild=guild)
+    return "ok", recalc_value
+
+
+def _edit_success_note(prop, lang, recalc_value):
+    num, key, label_key, vtype, special = prop
+    note = t("edit.updated_inline", lang, prop=_prop_short_label(label_key, lang))
+    if special == "recalc_slots" and recalc_value is not None:
+        note = f"{note} · {t('edit.recalculated', lang, slots=recalc_value)}"
+    return note
+
+
+async def _apply_edit(interaction, user_id, guild_id, channel_id, db_id, lang,
+                      prop, new_value, via_modal=False):
+    """Persist an edit from a live interaction, then refresh or surface an error."""
+    status, payload = await _persist_event_edit(
+        guild_id, channel_id, prop, new_value, lang, interaction.user.name)
+    if status == "gone":
+        await _notify_event_gone(interaction, user_id, lang, via_modal=via_modal)
+        return
+    if status == "error":
+        try:
+            await interaction.response.send_message(payload, ephemeral=True)
+        except discord.InteractionResponded:
+            try:
+                await interaction.followup.send(payload, ephemeral=True)
+            except discord.HTTPException:
+                pass
+        return
+    await _refresh_main_view(interaction, user_id, guild_id, channel_id, db_id, lang,
+                             updated_note=_edit_success_note(prop, lang, payload),
+                             via_modal=via_modal)
+
+
+async def _apply_edit_dm(user_id, guild_id, channel_id, db_id, lang, prop,
+                         new_value, editor_name):
+    """Persist an edit without a live interaction (image hybrid path)."""
+    status, payload = await _persist_event_edit(
+        guild_id, channel_id, prop, new_value, lang, editor_name)
+    if status == "gone":
+        session = _active_edit_sessions.get(user_id)
+        dm_msg = session.get("dm_message") if session else None
+        _close_session(user_id)
+        if dm_msg is not None:
+            try:
+                await dm_msg.edit(embed=discord.Embed(
+                    description=t("general.no_active_event", lang),
+                    color=discord.Color.red()), view=None)
+            except discord.HTTPException:
+                pass
+        return
+    note = None
+    if status == "error":
+        session = _active_edit_sessions.get(user_id)
+        dm_msg = session.get("dm_message") if session else None
+        if dm_msg is not None:
+            try:
+                await dm_msg.channel.send(payload)
+            except discord.HTTPException:
+                pass
+    else:
+        note = _edit_success_note(prop, lang, payload)
+    await _reshow_overview_dm(user_id, guild_id, channel_id, db_id, lang, note=note)
+
+
+# ── Editor display helpers ─────────────────────────────────────────────────
+
+def _scalar_hint(vtype, lang):
+    if vtype == "reg_start":
+        return t("edit.reg_start_hint", lang)
+    if vtype == "string_nullable":
+        return t("edit.description_hint", lang)
+    return ""
+
+
+def _scalar_placeholder(vtype):
+    return {
+        "date": "TT.MM.JJJJ",
+        "time": "HH:MM",
+        "reg_start": "TT.MM.JJJJ HH:MM / now / empty",
+    }.get(vtype, "")
+
+
+def _preset_label(minutes, vtype, lang):
+    if vtype == "duration":
+        return _format_duration_value(minutes, lang)
+    return _format_spawn_offset_value(minutes, lang)
+
+
+async def _show_property_editor(interaction, user_id, guild_id, channel_id, db_id, lang, prop):
+    """Swap the overview for the editor of a specific property."""
+    num, key, label_key, vtype, special = prop
+    event, _ua, _db = _get_channel_event(guild_id, channel_id)
+    if not event:
+        await _notify_event_gone(interaction, user_id, lang)
+        return
+    label = _prop_short_label(label_key, lang)
+    current_display = _format_property_value(event, key, vtype, lang)
+
+    def _editor_embed(extra=None):
+        desc = t("edit.current_value", lang, value=current_display)
+        if extra:
+            desc = f"{desc}\n{extra}"
+        return discord.Embed(title=label, description=desc, color=discord.Color.blurple())
+
+    if vtype == "bool":
+        view = EditBoolView(user_id, guild_id, channel_id, db_id, lang, prop, bool(event.get(key)))
+        embed = _editor_embed()
+    elif vtype in ("duration", "spawn_offset"):
+        presets = _DURATION_PRESETS if vtype == "duration" else _SPAWN_PRESETS
+        view = EditPresetView(user_id, guild_id, channel_id, db_id, lang, prop, presets)
+        embed = _editor_embed()
+    elif vtype == "recurrence":
+        view = EditRecurrenceView(user_id, guild_id, channel_id, db_id, lang, prop, event)
+        embed = _editor_embed()
+    elif vtype == "image":
+        view = EditImageView(user_id, guild_id, channel_id, db_id, lang, prop)
+        embed = _editor_embed(t("edit.image_hint", lang))
+    else:
+        view = EditScalarView(user_id, guild_id, channel_id, db_id, lang, prop)
+        embed = _editor_embed(_scalar_hint(vtype, lang) or None)
+    _set_active_view(user_id, view)
+    await interaction.response.edit_message(embed=embed, view=view)
+
+
+# ── Views ──────────────────────────────────────────────────────────────────
+
+class EditMainView(ui.View):
+    """Persistent overview: property dropdown + Done button."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang):
+        super().__init__(timeout=600)
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.db_id = db_id
+        self.lang = lang
+        event, _ua, _db = _get_channel_event(guild_id, channel_id)
+        visible = _visible_edit_properties(event) if event else list(_EDIT_PROPERTIES)
+        options = [discord.SelectOption(label=_prop_short_label(p[2], lang)[:100], value=p[1])
+                   for p in visible]
+        select = ui.Select(placeholder=t("edit.pick_property", lang), options=options,
+                           min_values=1, max_values=1)
+        select.callback = self._on_select
+        self.add_item(select)
+        done = ui.Button(label=t("general.done", lang),
+                         style=discord.ButtonStyle.secondary, emoji="🛑")
+        done.callback = self._on_done
+        self.add_item(done)
+
+    async def _on_select(self, interaction):
+        prop = _find_edit_property(interaction.data["values"][0])
+        if not prop:
+            return
+        await _show_property_editor(interaction, self.user_id, self.guild_id,
+                                    self.channel_id, self.db_id, self.lang, prop)
+
+    async def _on_done(self, interaction):
+        _close_session(self.user_id)
+        try:
+            await interaction.response.edit_message(view=None)
+        except discord.HTTPException:
+            pass
+        text = t("edit.finished", self.lang)
+        event, _ua, _db = _get_channel_event(self.guild_id, self.channel_id)
+        link = _build_event_message_link(event, self.channel_id, self.guild_id) if event else None
+        if link:
+            text = f"{text} [{t('edit.event_link', self.lang)}]({link})"
+        try:
+            await interaction.channel.send(text)
+        except discord.HTTPException:
+            pass
+
+    async def on_timeout(self):
+        await _handle_edit_timeout(self, self.user_id)
+
+
+class _EditDialogView(ui.View):
+    """Shared state + Cancel/timeout wiring for the per-property sub-editors."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(timeout=600)
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.db_id = db_id
+        self.lang = lang
+        self.prop = prop
+
+    def _add_cancel(self):
+        cancel = ui.Button(label=t("general.cancel", self.lang),
+                           style=discord.ButtonStyle.secondary, emoji="↩️")
+        cancel.callback = self._on_cancel
+        self.add_item(cancel)
+
+    async def _on_cancel(self, interaction):
+        await _refresh_main_view(interaction, self.user_id, self.guild_id,
+                                 self.channel_id, self.db_id, self.lang)
+
+    async def _apply(self, interaction, value, via_modal=False):
+        await _apply_edit(interaction, self.user_id, self.guild_id, self.channel_id,
+                          self.db_id, self.lang, self.prop, value, via_modal=via_modal)
+
+    async def on_timeout(self):
+        await _handle_edit_timeout(self, self.user_id)
+
+
+class EditScalarView(_EditDialogView):
+    """Opens a modal for text/number properties (string/date/time/int/reg_start)."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        btn = ui.Button(label=t("edit.open_input", lang),
+                        style=discord.ButtonStyle.primary, emoji="⌨️")
+        btn.callback = self._on_edit
+        self.add_item(btn)
+        self._add_cancel()
+
+    async def _on_edit(self, interaction):
+        await interaction.response.send_modal(EditScalarModal(
+            self.user_id, self.guild_id, self.channel_id, self.db_id, self.lang, self.prop))
+
+
+class EditScalarModal(ui.Modal):
+    """Single-field text modal; validates via _validate_edit_text on submit."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        num, key, label_key, vtype, special = prop
+        super().__init__(title=_prop_short_label(label_key, lang)[:45])
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.db_id = db_id
+        self.lang = lang
+        self.prop = prop
+        self.value_input = ui.TextInput(
+            label=t("edit.input_label", lang)[:45],
+            placeholder=_scalar_placeholder(vtype),
+            required=vtype not in ("string_nullable", "reg_start"),
+            max_length=200,
+        )
+        self.add_item(self.value_input)
+
+    async def on_submit(self, interaction):
+        vtype = self.prop[3]
+        value, err = _validate_edit_text(self.value_input.value, vtype, self.lang)
+        if err:
+            await interaction.response.send_message(t(err, self.lang), ephemeral=True)
+            return
+        await _apply_edit(interaction, self.user_id, self.guild_id, self.channel_id,
+                          self.db_id, self.lang, self.prop, value, via_modal=True)
+
+
+class EditBoolView(_EditDialogView):
+    """Enable/Disable/Cancel buttons for a bool property."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, current):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        enable = ui.Button(
+            label=t("edit.bool.enabled", lang), emoji="✅",
+            style=discord.ButtonStyle.success if current else discord.ButtonStyle.secondary)
+        enable.callback = self._make(True)
+        self.add_item(enable)
+        disable = ui.Button(
+            label=t("edit.bool.disabled", lang), emoji="❌",
+            style=discord.ButtonStyle.danger if not current else discord.ButtonStyle.secondary)
+        disable.callback = self._make(False)
+        self.add_item(disable)
+        self._add_cancel()
+
+    def _make(self, value):
+        async def cb(interaction):
+            await self._apply(interaction, value)
+        return cb
+
+
+class EditPresetView(_EditDialogView):
+    """Dropdown of preset values for duration / spawn_offset (minutes)."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, presets):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        vtype = prop[3]
+        options = [discord.SelectOption(label=_preset_label(v, vtype, lang)[:100], value=str(v))
+                   for v in presets]
+        select = ui.Select(placeholder=t("edit.pick_value", lang), options=options,
+                           min_values=1, max_values=1)
+        select.callback = self._on_select
+        self.add_item(select)
+        self._add_cancel()
+
+    async def _on_select(self, interaction):
+        await self._apply(interaction, int(interaction.data["values"][0]))
+
+
+class EditImageView(_EditDialogView):
+    """Image editor: keeps file-upload support via a short hybrid listen step."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        send = ui.Button(label=t("edit.image_send", lang),
+                         style=discord.ButtonStyle.primary, emoji="🖼️")
+        send.callback = self._on_send
+        self.add_item(send)
+        clear = ui.Button(label=t("edit.image_clear", lang),
+                          style=discord.ButtonStyle.secondary, emoji="🗑️")
+        clear.callback = self._on_clear
+        self.add_item(clear)
+        self._add_cancel()
+
+    async def _on_clear(self, interaction):
+        await self._apply(interaction, None)
+
+    async def _on_send(self, interaction):
+        # Consume the interaction, then listen for the next DM so file uploads
+        # (which modals can't accept) still work.
+        await interaction.response.edit_message(
+            embed=discord.Embed(description=t("edit.image_waiting", self.lang),
+                                color=discord.Color.blurple()),
+            view=None)
+
+        def check(m):
+            return m.author.id == self.user_id and isinstance(m.channel, discord.DMChannel)
+
+        try:
+            msg = await bot.wait_for("message", check=check, timeout=300)
+        except asyncio.TimeoutError:
+            await _handle_edit_timeout(self, self.user_id)
+            return
+        value, err = _validate_edit_value(msg, self.prop[1], "image", self.lang)
+        if err:
+            try:
+                await msg.channel.send(t(err, self.lang))
+            except discord.HTTPException:
+                pass
+            await _reshow_overview_dm(self.user_id, self.guild_id, self.channel_id,
+                                      self.db_id, self.lang)
+            return
+        await _apply_edit_dm(self.user_id, self.guild_id, self.channel_id, self.db_id,
+                             self.lang, self.prop, value, msg.author.name)
+
+
+class EditRecurrenceView(_EditDialogView):
+    """Dropdown of the 12 recurrence types; complex ones chain a modal."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, event):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        day = _event_weekday_name(event, lang)
+        options = [discord.SelectOption(
+            label=t(f"edit.recurrence.opt.{vid}", lang, day=day)[:100], value=vid)
+            for vid, _spec in _RECURRENCE_OPTIONS]
+        select = ui.Select(placeholder=t("edit.pick_value", lang), options=options,
+                           min_values=1, max_values=1)
+        select.callback = self._on_select
+        self.add_item(select)
+        self._add_cancel()
+
+    async def _on_select(self, interaction):
+        vid = interaction.data["values"][0]
+        spec = _RECURRENCE_SPEC.get(vid)
+        if isinstance(spec, dict):
+            await self._apply(interaction, dict(spec))
+            return
+        modal_cls = {
+            "interval": None,  # handled below (needs rtype)
+            "specific_date": RecurrenceDateModal,
+            "weekdays": RecurrenceWeekdaysModal,
+            "month_days": RecurrenceMonthDaysModal,
+        }.get(spec)
+        if spec == "interval":
+            await interaction.response.send_modal(RecurrenceIntervalModal(
+                self.user_id, self.guild_id, self.channel_id, self.db_id, self.lang,
+                self.prop, vid))
+        elif modal_cls is not None:
+            await interaction.response.send_modal(modal_cls(
+                self.user_id, self.guild_id, self.channel_id, self.db_id, self.lang, self.prop))
+
+
+class _RecurrenceModal(ui.Modal):
+    """Base for recurrence follow-up modals (one text field, apply on submit)."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop,
+                 title, field_label, placeholder=""):
+        super().__init__(title=title[:45])
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.db_id = db_id
+        self.lang = lang
+        self.prop = prop
+        self.value_input = ui.TextInput(label=field_label[:45], placeholder=placeholder[:100],
+                                        required=True, max_length=40)
+        self.add_item(self.value_input)
+
+    async def _apply(self, interaction, value):
+        await _apply_edit(interaction, self.user_id, self.guild_id, self.channel_id,
+                          self.db_id, self.lang, self.prop, value, via_modal=True)
+
+    async def _error(self, interaction, key):
+        await interaction.response.send_message(t(key, self.lang), ephemeral=True)
+
+
+class RecurrenceIntervalModal(_RecurrenceModal):
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, rtype):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop,
+                         title=t(f"edit.recurrence.opt.{rtype}", lang),
+                         field_label=t("edit.recurrence.field.interval", lang),
+                         placeholder="1")
+        self.rtype = rtype
+
+    async def on_submit(self, interaction):
+        try:
+            n = int(self.value_input.value.strip())
+        except ValueError:
+            n = 0
+        if n < 1:
+            await self._error(interaction, "edit.invalid_integer")
+            return
+        await self._apply(interaction, {"type": self.rtype, "interval": n})
+
+
+class RecurrenceDateModal(_RecurrenceModal):
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop,
+                         title=t("edit.recurrence.opt.specific_date", lang),
+                         field_label=t("edit.recurrence.field.date", lang),
+                         placeholder="TT.MM.JJJJ HH:MM")
+
+    async def on_submit(self, interaction):
+        event, _ua, _db = _get_channel_event(self.guild_id, self.channel_id)
+        event_time = (event.get("time") if event else None) or "20:00"
+        parts = self.value_input.value.strip().split(maxsplit=1)
+        if not parts or not parts[0]:
+            await self._error(interaction, "edit.recurrence.invalid_specific_date")
+            return
+        date_str = parts[0]
+        time_str = parts[1] if len(parts) > 1 else event_time
+        try:
+            datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
+        except ValueError:
+            await self._error(interaction, "edit.recurrence.invalid_specific_date")
+            return
+        await self._apply(interaction, {"type": "specific_date", "date": date_str, "time": time_str})
+
+
+class RecurrenceWeekdaysModal(_RecurrenceModal):
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop,
+                         title=t("edit.recurrence.opt.specific_weekdays", lang),
+                         field_label=t("edit.recurrence.field.weekdays", lang),
+                         placeholder="1,3,5")
+
+    async def on_submit(self, interaction):
+        nums = _parse_int_list(self.value_input.value.strip())
+        if not nums or not all(1 <= n <= 7 for n in nums):
+            await self._error(interaction, "edit.recurrence.invalid_weekdays")
+            return
+        weekdays = sorted({n - 1 for n in nums})
+        await self._apply(interaction, {"type": "specific_weekdays", "weekdays": weekdays})
+
+
+class RecurrenceMonthDaysModal(_RecurrenceModal):
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop,
+                         title=t("edit.recurrence.opt.specific_month_days", lang),
+                         field_label=t("edit.recurrence.field.month_days", lang),
+                         placeholder="1,15")
+
+    async def on_submit(self, interaction):
+        nums = _parse_int_list(self.value_input.value.strip())
+        if not nums or not all(1 <= n <= 31 for n in nums):
+            await self._error(interaction, "edit.recurrence.invalid_month_days")
+            return
+        await self._apply(interaction, {"type": "specific_month_days", "month_days": sorted(set(nums))})
+
+
+async def start_dm_edit_session(interaction, guild_id, channel_id, db_id, lang):
+    """Open (or reclaim) a view-based DM edit session for this event.
+
+    The caller must have already deferred the interaction ephemerally; this
+    replies via followup.
+    """
+    user = interaction.user
+    existing = _active_edit_sessions.get(user.id)
+    if existing is not None:
+        if time.monotonic() - existing.get("last_activity", 0) < SESSION_STALE_AFTER_SECONDS:
+            await interaction.followup.send(t("edit.active_session", lang), ephemeral=True)
+            return
+        await _force_close_stale_session(user.id)
+
+    try:
+        dm = await user.create_dm()
+    except discord.Forbidden:
+        await interaction.followup.send(t("edit.dm_blocked", lang), ephemeral=True)
+        return
+
+    session = {
+        "guild_id": guild_id, "channel_id": channel_id, "db_id": db_id,
+        "lang": lang, "dm_message": None, "active_view": None,
+        "last_activity": time.monotonic(),
+    }
+    _active_edit_sessions[user.id] = session
+
+    event, _ua, _db = _get_channel_event(guild_id, channel_id)
+    if not event:
         _active_edit_sessions.pop(user.id, None)
+        await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
+        return
+
+    view = EditMainView(user.id, guild_id, channel_id, db_id, lang)
+    try:
+        dm_msg = await dm.send(embed=_build_edit_main_embed(event, lang), view=view)
+    except discord.Forbidden:
+        _active_edit_sessions.pop(user.id, None)
+        await interaction.followup.send(t("edit.dm_blocked", lang), ephemeral=True)
+        return
+    session["dm_message"] = dm_msg
+    session["active_view"] = view
+    await interaction.followup.send(t("edit.dm_sent", lang), ephemeral=True)
 
 
 # ---------------------------------------------------------------------------

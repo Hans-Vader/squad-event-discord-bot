@@ -1448,6 +1448,85 @@ _STRINGS: dict[str, dict[str, str]] = {
     "edit.recurrence.weekday_full.4": {"de": "Freitag", "en": "Friday"},
     "edit.recurrence.weekday_full.5": {"de": "Samstag", "en": "Saturday"},
     "edit.recurrence.weekday_full.6": {"de": "Sonntag", "en": "Sunday"},
+
+    # ── View-based DM editor (dropdown + Fertig/Done) ─────────────────────
+    "edit.select_property_v2": {
+        "de": "Wähle unten eine Eigenschaft aus, um sie zu ändern.",
+        "en": "Choose a property from the dropdown below to change it.",
+    },
+    "edit.footer_hint_v2": {
+        "de": "Eigenschaft wählen · „Fertig“ zum Beenden",
+        "en": "Pick a property · “Done” to finish",
+    },
+    "edit.pick_property": {
+        "de": "Eigenschaft auswählen…",
+        "en": "Select a property…",
+    },
+    "edit.pick_value": {
+        "de": "Wert auswählen…",
+        "en": "Select a value…",
+    },
+    "edit.open_input": {
+        "de": "Wert eingeben",
+        "en": "Enter value",
+    },
+    "edit.input_label": {
+        "de": "Neuer Wert",
+        "en": "New value",
+    },
+    "edit.event_link": {
+        "de": "Zum Event",
+        "en": "Go to event",
+    },
+    "edit.updated_inline": {
+        "de": "{prop} aktualisiert.",
+        "en": "{prop} updated.",
+    },
+    "edit.required": {
+        "de": "Dieses Feld darf nicht leer sein.",
+        "en": "This field cannot be empty.",
+    },
+    "edit.image_send": {
+        "de": "Bild senden / URL",
+        "en": "Send image / URL",
+    },
+    "edit.image_clear": {
+        "de": "Bild entfernen",
+        "en": "Remove image",
+    },
+    "edit.image_waiting": {
+        "de": "Sende jetzt ein Bild (Datei) oder füge eine HTTPS-URL ein. Du hast 5 Minuten Zeit.",
+        "en": "Now send an image (file) or paste an HTTPS URL. You have 5 minutes.",
+    },
+    "edit.recurrence.field.interval": {
+        "de": "Intervall (ganze Zahl ≥ 1)",
+        "en": "Interval (integer ≥ 1)",
+    },
+    "edit.recurrence.field.date": {
+        "de": "Datum: TT.MM.JJJJ HH:MM",
+        "en": "Date: DD.MM.YYYY HH:MM",
+    },
+    "edit.recurrence.field.weekdays": {
+        "de": "Wochentage, z.B. 1,3,5",
+        "en": "Weekdays, e.g. 1,3,5",
+    },
+    "edit.recurrence.field.month_days": {
+        "de": "Tage im Monat, z.B. 1,15",
+        "en": "Days of month, e.g. 1,15",
+    },
+    "edit.recurrence.opt.never": {"de": "Nie", "en": "Never"},
+    "edit.recurrence.opt.every_minutes": {"de": "Alle X Minuten", "en": "Every X minutes"},
+    "edit.recurrence.opt.every_hours": {"de": "Alle X Stunden", "en": "Every X hours"},
+    "edit.recurrence.opt.every_days": {"de": "Alle X Tage", "en": "Every X days"},
+    "edit.recurrence.opt.every_weeks": {"de": "Alle X Wochen", "en": "Every X weeks"},
+    "edit.recurrence.opt.every_month": {"de": "Jeden Monat", "en": "Every month"},
+    "edit.recurrence.opt.first_weekday": {"de": "Erster {day} des nächsten Monats", "en": "First {day} of next month"},
+    "edit.recurrence.opt.fourth_weekday": {"de": "Vierter {day} des nächsten Monats", "en": "Fourth {day} of next month"},
+    "edit.recurrence.opt.last_weekday": {"de": "Letzter {day} des nächsten Monats", "en": "Last {day} of next month"},
+    "edit.recurrence.opt.specific_date": {"de": "Bestimmtes Datum (einmalig)", "en": "Specific date (one-shot)"},
+    "edit.recurrence.opt.specific_weekdays": {"de": "Bestimmte Wochentage", "en": "Specific weekdays"},
+    "edit.recurrence.opt.specific_month_days": {"de": "Bestimmte Tage im Monat", "en": "Specific days of month"},
+
     "log.event_edited": {
         "de": "Event bearbeitet: {user} hat '{property}' geändert (Event: {name})",
         "en": "Event edited: {user} changed '{property}' (Event: {name})",
