@@ -143,6 +143,8 @@ Optionally cap how much each registration group may take. Casters never count, a
 - Early-access roles — max **squads per role** (rep mode only)
 - Regular roles — max **squads per user** (rep mode only — this is the per-user squad limit; in player mode it's always 1)
 
+The two early-access caps (% and squads per role) apply **only until registration opens** — once registration is open to everyone, early-access members register without them. The per-user squad limit always applies.
+
 Player mode shows only the early-access % cap.
 
 **Step 5 — Caster Roles (rep mode only — skipped in player mode):**

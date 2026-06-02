@@ -523,7 +523,13 @@ def _check_registration_limits(event, user_assignments, guild, member, added_sea
     - Seat % cap: per register type (group total of player seats), both modes.
     - Early-access squads-per-role: rep mode only; counts toward EACH early-access
       role the member holds.
+
+    Both limits are early-access-only and apply only during the early-access window;
+    once registration is open to everyone, they're lifted.
     """
+    if event.get("registration_open"):
+        return True, None
+
     group = _member_register_type(member, event)
     if group is None:
         return True, None

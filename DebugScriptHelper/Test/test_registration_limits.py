@@ -137,6 +137,18 @@ class TestCheckRegistrationLimits(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIsNone(key)
 
+    def test_early_access_limits_lifted_once_registration_open(self):
+        # Both caps are exceeded, but registration is open → limits lifted.
+        ev = _event(registration_open=True,
+                    community_rep_cap_percent=5,        # cap = 4 seats
+                    early_access_squads_per_role=1,
+                    squads={"s1": {"size": 6}})
+        ua = {"10": ["s1"]}
+        guild = _Guild({10: _Member([EARLY])})
+        ok, key = bot._check_registration_limits(ev, ua, guild, _Member([EARLY]), 6, "rep")
+        self.assertTrue(ok)
+        self.assertIsNone(key)
+
 
 class TestFormattingAndPresets(unittest.TestCase):
     def test_percent_and_count_format(self):
