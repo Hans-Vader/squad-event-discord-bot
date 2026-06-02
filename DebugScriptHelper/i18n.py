@@ -1499,16 +1499,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "{min} minutes before",
     },
     "wizard.squad_rep_title": {
-        "de": "Squad-Rep Rolle (optional)",
-        "en": "Squad rep role (optional)",
+        "de": "Rollen/Benutzer mit Anmeldeberechtigung (optional)",
+        "en": "Roles/users allowed to register (optional)",
     },
     "wizard.squad_rep_desc": {
         "de": "Wähle die Rolle, die Squads anmelden darf:",
         "en": "Select the role that may register squads:",
     },
     "wizard.community_rep_title": {
-        "de": "Community-Rep (optional)",
-        "en": "Community rep (optional)",
+        "de": "Rollen/Benutzer mit Vorab-Zugang (optional)",
+        "en": "Roles/users with early access (optional)",
     },
     "wizard.caster_role_title": {
         "de": "Caster-Rollen (optional)",
@@ -1559,12 +1559,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Role configuration",
     },
     "wizard.summary_squad_roles": {
-        "de": "Squad-Rep Rollen/Benutzer",
-        "en": "Squad rep roles/users",
+        "de": "Rollen/Benutzer mit Anmeldeberechtigung",
+        "en": "Roles/users allowed to register",
     },
     "wizard.summary_community_roles": {
-        "de": "Community-Rep Rollen/Benutzer",
-        "en": "Community rep roles/users",
+        "de": "Rollen/Benutzer mit Vorab-Zugang",
+        "en": "Roles/users with early access",
     },
     "wizard.summary_caster_roles": {
         "de": "Caster-Rollen/Benutzer",
@@ -2011,8 +2011,8 @@ _STRINGS: dict[str, dict[str, str]] = {
 
     # ── Role gating ──────────────────────────────────────────────────────
     "gate.squad_denied": {
-        "de": "Du hast nicht die erforderliche Rolle oder Berechtigung, um Squads anzumelden.",
-        "en": "You do not have the required role or permission to register squads.",
+        "de": "Du hast nicht die erforderliche Rolle oder Berechtigung, um dich anzumelden.",
+        "en": "You do not have the required role or permission to register.",
     },
     "gate.caster_denied": {
         "de": "Du hast nicht die erforderliche Rolle oder Berechtigung, um dich als Caster anzumelden.",
@@ -2021,12 +2021,16 @@ _STRINGS: dict[str, dict[str, str]] = {
 
     # ── Post-creation wizard ─────────────────────────────────────────────
     "wizard.squad_roles_title": {
-        "de": "Rollen-Konfiguration — Schritt 1/2: Squad-Rollen",
-        "en": "Role Configuration — Step 1/2: Squad Roles",
+        "de": "Rollen-Konfiguration{step}: Anmeldeberechtigung",
+        "en": "Role Configuration{step}: Registration Access",
+    },
+    "wizard.squad_roles_step": {
+        "de": " — Schritt 1/2",
+        "en": " — Step 1/2",
     },
     "wizard.squad_roles_desc": {
-        "de": "Wähle optional Rollen/Benutzer, die Squads anmelden dürfen und Vorab-Zugang erhalten.\nÜberspringe diesen Schritt, wenn jeder Squads anmelden darf.",
-        "en": "Optionally select roles/users who can register squads and get early access.\nSkip this step if anyone should be allowed to register squads.",
+        "de": "Wähle optional, wer sich anmelden darf und wer Vorab-Zugang vor der Öffnung erhält.\nÜberspringe diesen Schritt, wenn jeder sich anmelden darf.",
+        "en": "Optionally choose who may register, and who gets early access before registration opens.\nSkip this step if anyone may register.",
     },
     "wizard.caster_roles_title": {
         "de": "Rollen-Konfiguration — Schritt 2/2: Caster-Rollen",

@@ -3921,7 +3921,8 @@ class EventServerConfigModal(ui.Modal):
         wizard_view = WizardSquadRolesView(
             self.guild_id, self.channel_id, event, {},
             self.settings, self.author)
-        wizard_msg = f"**{t('wizard.squad_roles_title', lang)}**\n{t('wizard.squad_roles_desc', lang)}"
+        step = "" if is_player_mode(event) else t("wizard.squad_roles_step", lang)
+        wizard_msg = f"**{t('wizard.squad_roles_title', lang, step=step)}**\n{t('wizard.squad_roles_desc', lang)}"
         await interaction.response.send_message(wizard_msg, view=wizard_view, ephemeral=True)
 
 
@@ -4725,8 +4726,8 @@ _ROLE_KEYS = [
 @app_commands.choices(role_type=[
     app_commands.Choice(name="All roles", value="all"),
     app_commands.Choice(name="Ping roles", value="ping_role_ids"),
-    app_commands.Choice(name="Squad rep roles", value="squad_rep_role_ids"),
-    app_commands.Choice(name="Community rep roles (early access)", value="community_rep_role_ids"),
+    app_commands.Choice(name="Roles allowed to register", value="squad_rep_role_ids"),
+    app_commands.Choice(name="Roles with early access", value="community_rep_role_ids"),
     app_commands.Choice(name="Caster roles", value="caster_role_ids"),
     app_commands.Choice(name="Caster community roles (early access)", value="caster_community_role_ids"),
 ])
