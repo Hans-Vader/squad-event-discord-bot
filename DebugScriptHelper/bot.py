@@ -3094,7 +3094,9 @@ class EditMainView(ui.View):
         self.lang = lang
         event, _ua, _db = _get_channel_event(guild_id, channel_id)
         visible = _visible_edit_properties(event) if event else list(_EDIT_PROPERTIES)
-        options = [discord.SelectOption(label=_prop_short_label(p[2], lang)[:100], value=p[1])
+        # Keep the leading "NN. " numbering so dropdown entries line up with the
+        # numbered overview list above.
+        options = [discord.SelectOption(label=t(p[2], lang)[:100], value=p[1])
                    for p in visible]
         select = ui.Select(placeholder=t("edit.pick_property", lang), options=options,
                            min_values=1, max_values=1)
