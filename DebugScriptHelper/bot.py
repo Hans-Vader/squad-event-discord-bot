@@ -814,10 +814,13 @@ async def send_event_details(channel, event, db_id, lang="de", caster_enabled=Tr
     """Send or edit event embed in channel."""
     try:
         embed = format_event_details(event, lang, caster_enabled)
+        start_dt = compute_event_start(event)
+        event_started = start_dt is not None and datetime.now() >= start_dt
         view = EventActionView(
             lang,
             mode=event.get("mode", "rep"),
             is_closed=event.get("is_closed", False),
+            event_started=event_started,
         )
 
         if not isinstance(embed, discord.Embed):
@@ -1352,30 +1355,33 @@ class BaseConfirmationView(BaseView):
 
 class EventActionView(ui.View):
     """Persistent view with event action buttons."""
-    def __init__(self, lang="de", mode: str = "rep", is_closed: bool = False):
+    def __init__(self, lang="de", mode: str = "rep", is_closed: bool = False, event_started: bool = False):
         super().__init__(timeout=None)
 
+        reg_disabled = is_closed or event_started
         if mode == "player":
             self.add_item(ui.Button(
                 label=t("button.join", lang), style=discord.ButtonStyle.success,
                 custom_id="event_register_squad", emoji="🪖",
-                disabled=is_closed,
+                disabled=reg_disabled,
             ))
         else:
             self.add_item(ui.Button(
                 label=t("button.register_squad", lang), style=discord.ButtonStyle.success,
                 custom_id="event_register_squad", emoji="🪖",
-                disabled=is_closed,
+                disabled=reg_disabled,
             ))
             self.add_item(ui.Button(
                 label=t("button.register_caster", lang), style=discord.ButtonStyle.primary,
                 custom_id="event_register_caster", emoji="🎙️",
-                disabled=is_closed,
+                disabled=reg_disabled,
             ))
+        # Unregister stays enabled when merely closed, so members who registered while open can
+        # always withdraw — but it's disabled once the event itself has started.
         self.add_item(ui.Button(
             label=t("button.unregister", lang), style=discord.ButtonStyle.danger,
             custom_id="event_unregister", emoji="❌",
-            disabled=is_closed,
+            disabled=event_started,
         ))
         self.add_item(ui.Button(
             label=t("button.ics", lang), style=discord.ButtonStyle.secondary,
@@ -1991,8 +1997,18 @@ class AdminActionView(BaseView):
             if not event:
                 await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
                 return
-            event["is_closed"] = True
-            event["registration_open"] = False
+            if is_player_mode(event):
+                # Player mode has no early-access gate; the disabled buttons are the only thing
+                # stopping joins, so a real close must lock it (unregister stays allowed).
+                event["is_closed"] = True
+                event["registration_open"] = False
+            else:
+                # Rep/caster mode: revert to the early-access / not-yet-open state instead of
+                # hard-locking. Early-access roles keep registering (with their caps) and the
+                # buttons stay enabled. Clear the scheduled open time so the loop doesn't
+                # immediately auto-reopen; a *future* time set later via Edit Event still opens.
+                event["registration_open"] = False
+                event["registration_start_time"] = None
             save_event(db_id, event, user_assignments)
 
         await send_feedback(interaction, t("reg.manually_closed", lang, name=event["name"]), ephemeral=True)
