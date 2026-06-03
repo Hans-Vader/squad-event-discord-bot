@@ -14,7 +14,7 @@ from contextlib import ExitStack
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bot"))
 
 import discord  # noqa: E402
 import bot  # noqa: E402

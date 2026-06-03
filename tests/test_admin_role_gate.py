@@ -11,7 +11,7 @@ import sys
 import types
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bot"))
 
 
 class _AttrStub(types.ModuleType):

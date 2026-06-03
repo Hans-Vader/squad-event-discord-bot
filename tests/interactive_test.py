@@ -23,7 +23,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("Test/interactive_test.log"),
+        logging.FileHandler("tests/interactive_test.log"),
         logging.StreamHandler(sys.stdout)
     ]
 )

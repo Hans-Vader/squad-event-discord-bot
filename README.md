@@ -225,7 +225,7 @@ The bot does **not** need: Manage Roles, Manage Channels, Manage Server, Kick/Ba
 2. Create `.env` and start the bot:
    ```bash
    cp .env.dist .env
-   cd DebugScriptHelper
+   cd bot
    python bot.py
    ```
 

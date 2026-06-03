@@ -26,10 +26,10 @@ Diese Testsuite wurde entwickelt, um die Hauptfunktionen des Discord-Event-Regis
 Die Testsuite kann einfach ausgeführt werden mit:
 
 ```bash
-python3 Test/test.py
+python3 tests/test.py
 ```
 
-Die Testergebnisse werden in der Datei `Test/test.log` gespeichert und auf der Konsole ausgegeben.
+Die Testergebnisse werden in der Datei `tests/test.log` gespeichert und auf der Konsole ausgegeben.
 
 ## Wichtige Funktionen
 

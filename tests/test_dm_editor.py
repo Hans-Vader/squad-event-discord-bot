@@ -14,7 +14,7 @@ import sys
 import unittest
 from datetime import datetime, timedelta
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bot"))
 
 import bot  # noqa: E402
 from i18n import t, _STRINGS  # noqa: E402
