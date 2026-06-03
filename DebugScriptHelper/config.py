@@ -49,3 +49,9 @@ DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 EVENT_DEFAULT_DATE = os.getenv("EVENT_DEFAULT_DATE", "last_sunday")
 EVENT_DEFAULT_TIME = os.getenv("EVENT_DEFAULT_TIME", "20:00")
 EVENT_DEFAULT_REG_START = os.getenv("EVENT_DEFAULT_REG_START", "")
+
+# ── Timezone for ICS calendar export (should match the bot's local time) ──
+# Event times are stored/compared as naive host-local datetimes (the container
+# sets TZ=Europe/Berlin). ICS exports must use the same zone, so prefer an explicit
+# EVENT_TIMEZONE, fall back to the container's TZ, then a safe default.
+EVENT_TIMEZONE = os.getenv("EVENT_TIMEZONE") or os.getenv("TZ") or "Europe/Berlin"

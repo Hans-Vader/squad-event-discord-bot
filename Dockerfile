@@ -1,3 +1,5 @@
+# Production runtime: Python 3.14 (Alpine) is the supported target. Local dev may
+# use 3.12+, but run the test suite on 3.14 too so dev and prod stay in parity.
 FROM python:3.14-alpine
 
 # Set environment variables to optimize Python for Docker

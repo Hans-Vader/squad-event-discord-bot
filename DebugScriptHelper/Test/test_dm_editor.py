@@ -159,6 +159,18 @@ class TestApplyPropertyChange(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(ev["recurrence"], {"type": "every_days", "interval": 7})
 
+    def test_rejected_recurrence_does_not_mutate_event(self):
+        # A rejected change must validate before mutating: the invalid value
+        # must not be written to the event (the caller relies on this).
+        ev = _event()
+        original = ev["recurrence"]
+        ok, err = bot._apply_property_change(
+            ev, "recurrence", "recurrence", None,
+            {"type": "every_minutes", "interval": 1}, "en")
+        self.assertFalse(ok)
+        self.assertTrue(err)
+        self.assertEqual(ev["recurrence"], original)
+
 
 class TestNewI18nKeys(unittest.TestCase):
     NEW_KEYS = [

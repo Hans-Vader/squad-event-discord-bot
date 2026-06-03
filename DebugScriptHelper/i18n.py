@@ -534,10 +534,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Alle {type}-Plätze sind belegt! Squad **{name}** ({type}, {size} Spieler) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
         "en": "All {type} slots are taken! Squad **{name}** ({type}, {size} players) has been waitlisted (position {pos}). {info}",
     },
-    "squad.duplicate_name": {
-        "de": "Ein Squad mit dem Namen '{name}' existiert bereits.",
-        "en": "A squad with the name '{name}' already exists.",
-    },
     "squad.max_reached": {
         "de": "Du hast bereits {current}/{max} Squads angemeldet.",
         "en": "You already have {current}/{max} squads registered.",
@@ -2210,10 +2206,6 @@ _STRINGS: dict[str, dict[str, str]] = {
     "admin.user_not_assigned": {
         "de": "Dieser Benutzer hat keine aktive Zuweisung.",
         "en": "This user has no active assignment.",
-    },
-    "admin.duplicate_squad": {
-        "de": "Ein Squad mit dem Namen '{name}' existiert bereits.",
-        "en": "A squad with the name '{name}' already exists.",
     },
     "admin.invalid_size": {
         "de": "Ungültige Größe. Muss mindestens 1 sein.",

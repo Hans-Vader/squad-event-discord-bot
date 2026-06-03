@@ -32,6 +32,10 @@ except ImportError:
     dotenv_stub.load_dotenv = lambda *a, **kw: None
     sys.modules["dotenv"] = dotenv_stub
 
+# Pin the ICS timezone so the CEST/CET offset assertions are deterministic
+# regardless of the test host's TZ (config reads EVENT_TIMEZONE at import).
+os.environ.setdefault("EVENT_TIMEZONE", "Europe/Berlin")
+
 from utils import (  # noqa: E402
     _ics_dt,
     _ics_escape,

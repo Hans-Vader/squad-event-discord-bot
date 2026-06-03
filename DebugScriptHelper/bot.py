@@ -936,10 +936,7 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
             result = "waitlisted"
             wl_pos = len(event[wl_key])
 
-    type_labels = {"infantry": "Infanterie" if lang == "de" else "Infantry",
-                   "vehicle": "Fahrzeug" if lang == "de" else "Vehicle",
-                   "heli": "Heli"}
-    type_label = type_labels.get(squad_type, squad_type)
+    type_label = t(f"squad.label_{squad_type}", lang) if squad_type in SQUAD_TYPES else squad_type
     if is_ea_exempt:
         # Early-access member: show their early-access cap usage (post-registration),
         # not the per-user #12 count they're exempt from.
@@ -2506,9 +2503,7 @@ class _AdminSquadNameModal(ui.Modal):
             add_user_assignment(user_assignments, rep_uid, squad_id)
             save_event(db_id, event, user_assignments)
 
-        type_labels = {"infantry": "Infanterie" if lang == "de" else "Infantry",
-                       "vehicle": "Fahrzeug" if lang == "de" else "Vehicle", "heli": "Heli"}
-        type_label = type_labels.get(self.squad_type, self.squad_type)
+        type_label = t(f"squad.label_{self.squad_type}", lang) if self.squad_type in SQUAD_TYPES else self.squad_type
         msg_key = "admin.squad_added" if event.get("playstyle_enabled", True) else "admin.squad_added_no_playstyle"
         await interaction.followup.send(
             t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=self.playstyle, status=status),
@@ -2641,6 +2636,8 @@ class _ConfirmRemoveView(BaseView):
         self.add_item(cancel_btn)
 
     async def _confirm(self, interaction):
+        if self.check_response(interaction):
+            return
         await interaction.response.defer(ephemeral=True)
         lang = get_guild_language(self.guild_id)
 
@@ -2686,6 +2683,8 @@ class _ConfirmRemoveView(BaseView):
             await update_event_displays(gid, cid)
 
     async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
         lang = get_guild_language(self.guild_id)
         await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
 
@@ -3076,22 +3075,25 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
             event["registration_start_time"] = new_value
             event["registration_open"] = False
     else:
+        if key in ("date", "time", "recurrence", "duration_minutes", "spawn_offset_minutes"):
+            # Validate on a probe copy before mutating, so a rejected change
+            # never leaks into `event` (the caller relies on this on failure).
+            probe = {**event, key: new_value}
+            start_dt = compute_event_start(probe)
+            end_dt = compute_event_end(probe)
+            if start_dt and end_dt:
+                ok, reason_key = validate_recurrence_fits(
+                    start_dt, end_dt, probe.get("recurrence"),
+                    probe.get("spawn_offset_minutes", 5))
+                if not ok:
+                    # validate_recurrence_fits returns bare keys ("recurrence.error.*");
+                    # the localized strings live under the "edit." namespace.
+                    return False, t(f"edit.{reason_key}", lang)
         event[key] = new_value
 
     if special == "recalc_slots":
         event["max_player_slots"] = event["server_max_players"] - event["max_caster_slots"]
 
-    if key in ("date", "time", "recurrence", "duration_minutes", "spawn_offset_minutes"):
-        start_dt = compute_event_start(event)
-        end_dt = compute_event_end(event)
-        if start_dt and end_dt:
-            ok, reason_key = validate_recurrence_fits(
-                start_dt, end_dt, event.get("recurrence"),
-                event.get("spawn_offset_minutes", 5))
-            if not ok:
-                # validate_recurrence_fits returns bare keys ("recurrence.error.*");
-                # the localized strings live under the "edit." namespace.
-                return False, t(f"edit.{reason_key}", lang)
     return True, None
 
 
@@ -3864,41 +3866,7 @@ class DeleteConfirmationView(BaseConfirmationView):
 
         # 2. Delete the event embed message and ping messages from channel
         channel = bot.get_channel(self.channel_id) or await bot.fetch_channel(self.channel_id)
-        msg_id = event.get("event_message_id")
-        if msg_id:
-            try:
-                msg = await channel.fetch_message(msg_id)
-                await msg.delete()
-            except Exception as e:
-                logger.warning(f"Could not delete event embed: {e}")
-
-        for ping_msg_id in event.get("ping_message_ids", []):
-            try:
-                ping_msg = await channel.fetch_message(ping_msg_id)
-                await ping_msg.delete()
-            except Exception:
-                pass
-        countdown_msg_id = event.get("countdown_message_id")
-        if countdown_msg_id:
-            try:
-                cd_msg = await channel.fetch_message(countdown_msg_id)
-                await cd_msg.delete()
-            except Exception:
-                pass
-        ea_msg_id = event.get("early_access_message_id")
-        if ea_msg_id:
-            try:
-                ea_msg = await channel.fetch_message(ea_msg_id)
-                await ea_msg.delete()
-            except Exception:
-                pass
-        ann_msg_id = event.get("announcement_message_id")
-        if ann_msg_id:
-            try:
-                ann_msg = await channel.fetch_message(ann_msg_id)
-                await ann_msg.delete()
-            except Exception:
-                pass
+        await _delete_event_messages(channel, event)
 
         # 3. Soft-delete in DB
         delete_event(db_id)
@@ -5043,6 +5011,32 @@ async def _get_or_fetch_channel(channel_id: int):
     return ch
 
 
+async def _delete_event_messages(channel, event):
+    """Best-effort delete of every bot message tied to an event: the embed, the
+    ping messages, and the (legacy + current) announcement/countdown/early-access
+    messages. Safe when the channel or messages are already gone."""
+    if channel is None:
+        return
+    msg_id = event.get("event_message_id")
+    if msg_id:
+        try:
+            await (await channel.fetch_message(msg_id)).delete()
+        except Exception as e:
+            logger.warning(f"Could not delete event embed: {e}")
+    for mid in (event.get("ping_message_ids", []) or []):
+        try:
+            await (await channel.fetch_message(mid)).delete()
+        except Exception:
+            pass
+    for field in ("countdown_message_id", "early_access_message_id", "announcement_message_id"):
+        mid = event.get(field)
+        if mid:
+            try:
+                await (await channel.fetch_message(mid)).delete()
+            except Exception:
+                pass
+
+
 async def _archive_event(event: dict, guild_id: int, channel_id: int, lang: str):
     """Log the event summary to the guild log channel and delete the embed + related messages."""
     event_name = event.get("name", "?")
@@ -5061,40 +5055,7 @@ async def _archive_event(event: dict, guild_id: int, channel_id: int, lang: str)
     if ch is None:
         return
 
-    msg_id = event.get("event_message_id")
-    if msg_id:
-        try:
-            msg = await ch.fetch_message(msg_id)
-            await msg.delete()
-        except Exception as e:
-            logger.warning(f"Could not delete expired event embed: {e}")
-    for ping_msg_id in event.get("ping_message_ids", []):
-        try:
-            ping_msg = await ch.fetch_message(ping_msg_id)
-            await ping_msg.delete()
-        except Exception:
-            pass
-    countdown_msg_id = event.get("countdown_message_id")
-    if countdown_msg_id:
-        try:
-            cd_msg = await ch.fetch_message(countdown_msg_id)
-            await cd_msg.delete()
-        except Exception:
-            pass
-    ea_msg_id = event.get("early_access_message_id")
-    if ea_msg_id:
-        try:
-            ea_msg = await ch.fetch_message(ea_msg_id)
-            await ea_msg.delete()
-        except Exception:
-            pass
-    ann_msg_id = event.get("announcement_message_id")
-    if ann_msg_id:
-        try:
-            ann_msg = await ch.fetch_message(ann_msg_id)
-            await ann_msg.delete()
-        except Exception:
-            pass
+    await _delete_event_messages(ch, event)
 
 
 async def _set_channel_announcement(ch, event, db_id, user_assignments,

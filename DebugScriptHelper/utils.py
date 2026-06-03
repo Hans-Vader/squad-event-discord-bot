@@ -21,7 +21,7 @@ import discord
 from discord import Embed
 
 from i18n import t
-from config import ADMIN_IDS
+from config import ADMIN_IDS, EVENT_TIMEZONE
 
 logger = logging.getLogger("event_bot")
 
@@ -115,20 +115,6 @@ def parse_date(date_str: str) -> Optional[datetime]:
         return datetime.strptime(date_str, "%d.%m.%Y")
     except ValueError:
         return None
-
-
-def compute_expiry_date(date_str: str, time_str: str = None) -> Optional[datetime]:
-    """Compute event expiry: 24 hours after event start."""
-    event_dt = parse_date(date_str)
-    if not event_dt:
-        return None
-    if time_str:
-        try:
-            hours, minutes = map(int, time_str.split(":"))
-            event_dt = event_dt.replace(hour=hours, minute=minutes)
-        except (ValueError, AttributeError):
-            pass
-    return event_dt + timedelta(days=1)
 
 
 # ---------------------------------------------------------------------------
@@ -1070,7 +1056,11 @@ def clear_log_file() -> bool:
 # ICS (iCalendar) export
 # ---------------------------------------------------------------------------
 
-_ICS_TZ = ZoneInfo("Europe/Berlin")
+try:
+    _ICS_TZ = ZoneInfo(EVENT_TIMEZONE)
+except Exception:
+    logger.warning("Invalid EVENT_TIMEZONE %r; falling back to Europe/Berlin", EVENT_TIMEZONE)
+    _ICS_TZ = ZoneInfo("Europe/Berlin")
 _ICS_DATE_FMT = "%d.%m.%Y %H:%M"
 
 
@@ -1131,7 +1121,7 @@ def build_event_ics(
     """Build the ICS file for an event.
 
     Returns UTF-8 encoded bytes with CRLF line endings. Times are converted
-    from the bot's local timezone (Europe/Berlin) to UTC.
+    from the configured timezone (EVENT_TIMEZONE, default Europe/Berlin) to UTC.
     """
     date_str = event.get("date", "")
     time_str = event.get("time", "20:00")

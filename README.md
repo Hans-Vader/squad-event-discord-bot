@@ -159,7 +159,7 @@ See [USER_GUIDE.md](USER_GUIDE.md#recurring-events) for the 12 recurrence types,
 ### Prerequisites
 
 - Docker & Docker Compose (recommended)
-- Or: Python 3.12+
+- Or: Python 3.12+ for local development. The production Docker image runs **Python 3.14** — the supported target, so run the test suite on 3.14 too.
 - Discord Bot Token ([Developer Portal](https://discord.com/developers/applications))
 
 ### Discord Bot Permissions
@@ -243,6 +243,7 @@ The bot does **not** need: Manage Roles, Manage Channels, Manage Server, Kick/Ba
 | `EVENT_DEFAULT_DATE` | Pre-filled date in event creation modal | `last_sunday` |
 | `EVENT_DEFAULT_TIME` | Pre-filled time in event creation modal | `20:00` |
 | `EVENT_DEFAULT_REG_START` | Pre-filled registration start in event creation modal | (empty) |
+| `EVENT_TIMEZONE` | Timezone for ICS calendar export (must match the bot's local time); falls back to `TZ` | `Europe/Berlin` |
 | `PUID` / `PGID` | Host user/group ID for Docker file permissions | `1000` |
 
 ### Per-Guild Settings (via `/setup` and `/set_defaults`)
