@@ -1517,12 +1517,7 @@ class EventActionView(ui.View):
             view = CasterUnregisterConfirmView(gid, cid)
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         elif len(assignments) == 1:
-            display_name = _resolve_squad_name(event, assignments[0]) if event else assignments[0]
-            embed = discord.Embed(
-                title=t("squad.unregister_title", lang),
-                description=t("squad.unregister_confirm", lang, name=display_name),
-                color=discord.Color.red())
-            view = SquadUnregisterConfirmView(gid, cid, assignments[0])
+            embed, view = _build_squad_unregister_confirm(event, gid, cid, assignments[0], lang)
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         else:
             options = []
@@ -1796,6 +1791,18 @@ class SquadUnregisterConfirmView(BaseConfirmationView):
         await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
 
 
+def _build_squad_unregister_confirm(event, guild_id, channel_id, squad_id, lang):
+    """Build the red 'are you sure?' embed and Confirm/Cancel view shown before a
+    squad is unregistered. Shared by the single-squad path and the multi-squad
+    dropdown so both ask for confirmation identically."""
+    display_name = _resolve_squad_name(event, squad_id) if event else squad_id
+    embed = discord.Embed(
+        title=t("squad.unregister_title", lang),
+        description=t("squad.unregister_confirm", lang, name=display_name),
+        color=discord.Color.red())
+    return embed, SquadUnregisterConfirmView(guild_id, channel_id, squad_id)
+
+
 class PlayerUnregisterConfirmView(BaseConfirmationView):
     """Confirmation dialog for a user unregistering themselves in player mode."""
     def __init__(self, guild_id, channel_id, squad_name):
@@ -1863,8 +1870,13 @@ class UserSquadUnregisterSelector(BaseView):
 
     async def _selected(self, interaction):
         selected = interaction.data["values"][0]
-        await interaction.response.defer(ephemeral=True)
-        await unregister_squad(interaction, self.guild_id, self.channel_id, selected)
+        lang = get_guild_language(self.guild_id)
+        event, _, _ = _get_channel_event(self.guild_id, self.channel_id)
+        embed, view = _build_squad_unregister_confirm(
+            event, self.guild_id, self.channel_id, selected, lang)
+        # Replace the dropdown in place with the Confirm/Cancel prompt; the actual
+        # removal still happens only in SquadUnregisterConfirmView._confirm.
+        await interaction.response.edit_message(content=None, embed=embed, view=view)
 
 
 # ---------------------------------------------------------------------------
