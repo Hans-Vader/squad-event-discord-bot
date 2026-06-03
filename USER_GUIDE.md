@@ -242,7 +242,7 @@ You can configure an event to automatically spawn a follow-up. Set this up via D
 
 ### Admin Panel — Representative Mode
 
-Click the **Admin** (⚙️) button on the event embed to open the admin panel. In rep mode it contains 6 buttons in 3 rows:
+Click the **Admin** (⚙️) button on the event embed to open the admin panel. In rep mode it contains 8 buttons in 4 rows:
 
 | Row | Button | Description |
 |---|---|---|
@@ -250,6 +250,8 @@ Click the **Admin** (⚙️) button on the event embed to open the admin panel. 
 | Squad | **Remove Squad** | Select a squad to remove (includes waitlisted squads) |
 | Caster | **Add Caster** | Select a Discord user to add as caster |
 | Caster | **Remove Caster** | Select a caster to remove (includes waitlisted casters) |
+| Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
+| Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt. For rep/caster events this reverts the event to its early-access state (only early-access roles can register) |
 | Event | **Edit Event** | Opens DM-based editing session (see above) |
 | Event | **Delete Event** | Delete the event with confirmation |
 
@@ -257,12 +259,14 @@ When adding a squad as admin, the selected representative user counts toward the
 
 ### Admin Panel — Player Mode
 
-In player mode the admin panel has 4 buttons — the Squad and Caster rows are replaced with a single Player row:
+In player mode the admin panel has 6 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
 
 | Row | Button | Description |
 |---|---|---|
 | Player | **Add Player** | Pick one or more Discord users (multi-select), a squad type, and (optionally) one or more in-squad roles applied to all picked users; then confirm. All picked users are registered in a single submit. If capacity is hit mid-batch, remaining users go to the waitlist. The chosen roles (or **I don't care** if none selected) are stored for each user and shown next to their name in the event embed. |
 | Player | **Remove Player** | Pick one or more players (multi-select) — from current squad members **and** from any waitlist (waitlist entries are prefixed `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`). The action is gated behind a red "Unregister" confirm button. |
+| Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
+| Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt |
 | Event | **Edit Event** | Opens DM-based editing session |
 | Event | **Delete Event** | Delete the event with confirmation |
 

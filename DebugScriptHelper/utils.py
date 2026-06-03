@@ -414,6 +414,39 @@ def _player_unregister(event: dict, user_assignments: dict, user_id) -> tuple:
     return True, squad_name, promoted
 
 
+def _player_waitlist_type(event: dict, user_id) -> Optional[str]:
+    """Return the squad_type a user is currently waitlisted under, or None.
+
+    Non-destructive lookup mirroring _player_remove_from_waitlist's matching —
+    used to decide whether a waitlisted player may open the self-unregister
+    confirmation dialog.
+    """
+    uid = str(user_id)
+    for st in _SQUAD_TYPES:
+        for entry in event.get(_waitlist_key(st), []):
+            if isinstance(entry, (tuple, list)) and len(entry) > 4 and str(entry[4]) == uid:
+                return st
+    return None
+
+
+def _player_self_unregister(event: dict, user_assignments: dict, user_id) -> tuple:
+    """Self-service player removal: drop from a squad if seated, otherwise from
+    the waitlist.
+
+    Returns (status, name_or_type, promoted):
+      - ("squad", squad_name, promoted_list) when removed from a squad,
+      - ("waitlist", squad_type, []) when removed from a waitlist,
+      - (None, None, []) when the user was neither seated nor waitlisted.
+    """
+    ok, squad_name, promoted = _player_unregister(event, user_assignments, user_id)
+    if ok:
+        return "squad", squad_name, promoted
+    wl_type = _player_remove_from_waitlist(event, user_id)
+    if wl_type is not None:
+        return "waitlist", wl_type, []
+    return None, None, []
+
+
 def compute_event_start(event: dict) -> Optional[datetime]:
     """Parse an event dict's date + time into a naive datetime, or None."""
     date_str = event.get("date")

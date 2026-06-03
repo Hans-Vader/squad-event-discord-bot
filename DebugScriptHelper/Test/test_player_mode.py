@@ -16,9 +16,17 @@ class _AttrStub(types.ModuleType):
         return placeholder
 
 
-if "discord" not in sys.modules:
+# Prefer the real libraries when installed (dev/CI always has discord.py as a
+# hard dependency). Only fall back to a lightweight stub when they are absent, so
+# this module never replaces a real `discord` in sys.modules and thereby breaks a
+# sibling test that does `import bot` (which needs the real discord.ext.commands).
+try:
+    import discord  # noqa: F401
+except ImportError:
     sys.modules["discord"] = _AttrStub("discord")
-if "dotenv" not in sys.modules:
+try:
+    import dotenv  # noqa: F401
+except ImportError:
     dotenv_stub = types.ModuleType("dotenv")
     dotenv_stub.load_dotenv = lambda *a, **kw: None
     sys.modules["dotenv"] = dotenv_stub
@@ -259,6 +267,66 @@ class UnregisterAndCompactTest(unittest.TestCase):
         self.assertEqual(len(event["infantry_waitlist"]), 0)
         self.assertIn("u12", ua)
         self.assertEqual(len(event["squads"]["Infantry 2"]["members"]), 6)
+
+
+class SelfUnregisterTest(unittest.TestCase):
+    """Self-service player removal must work for waitlisted players too, not
+    only for players holding a squad seat (admin-only fallback was the bug)."""
+
+    def test_self_unregister_removes_squad_member(self):
+        event = _make_event()
+        ua = {}
+        utils._player_register(event, ua, "u1", "Alice", "infantry")
+        status, name, promoted = utils._player_self_unregister(event, ua, "u1")
+        self.assertEqual(status, "squad")
+        self.assertEqual(name, "Infantry 1")
+        self.assertEqual(promoted, [])
+        self.assertNotIn("Infantry 1", event["squads"])
+        self.assertEqual(ua, {})
+
+    def test_self_unregister_removes_waitlisted_player(self):
+        event = _make_event()
+        ua = {}
+        for i in range(13):  # 12 seated + u12 waitlisted
+            utils._player_register(event, ua, f"u{i}", f"Player{i}", "infantry")
+        self.assertEqual(len(event["infantry_waitlist"]), 1)
+
+        status, wl_type, promoted = utils._player_self_unregister(event, ua, "u12")
+
+        self.assertEqual(status, "waitlist")
+        self.assertEqual(wl_type, "infantry")
+        self.assertEqual(promoted, [])
+        self.assertEqual(event["infantry_waitlist"], [])
+
+    def test_self_unregister_squad_member_promotes_from_waitlist(self):
+        event = _make_event()
+        ua = {}
+        for i in range(13):  # 12 seated + u12 waitlisted
+            utils._player_register(event, ua, f"u{i}", f"Player{i}", "infantry")
+        status, name, promoted = utils._player_self_unregister(event, ua, "u0")
+        self.assertEqual(status, "squad")
+        self.assertEqual(len(event["infantry_waitlist"]), 0)
+        self.assertEqual([p[0] for p in promoted], ["u12"])
+
+    def test_self_unregister_unknown_user_returns_none(self):
+        event = _make_event()
+        status, name, promoted = utils._player_self_unregister(event, {}, "ghost")
+        self.assertIsNone(status)
+        self.assertIsNone(name)
+        self.assertEqual(promoted, [])
+
+    def test_waitlist_type_lookup_is_non_destructive(self):
+        event = _make_event()
+        ua = {}
+        for i in range(13):  # u12 waitlisted on infantry
+            utils._player_register(event, ua, f"u{i}", f"Player{i}", "infantry")
+
+        self.assertEqual(utils._player_waitlist_type(event, "u12"), "infantry")
+        # Lookup must NOT remove the entry.
+        self.assertEqual(len(event["infantry_waitlist"]), 1)
+        # A seated player is not "waitlisted".
+        self.assertIsNone(utils._player_waitlist_type(event, "u0"))
+        self.assertIsNone(utils._player_waitlist_type(event, "ghost"))
 
 
 class AutoNamingTest(unittest.TestCase):

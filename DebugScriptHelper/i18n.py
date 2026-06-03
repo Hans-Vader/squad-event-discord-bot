@@ -806,6 +806,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Möchtest du dich wirklich aus **{squad}** abmelden? Du verlierst deinen Platz.",
         "en": "Do you really want to unregister from **{squad}**? You will lose your spot.",
     },
+    "player.unregister_waitlist_confirm": {
+        "de": "Möchtest du dich wirklich von der **{type}**-Warteliste abmelden? Du verlierst deinen Wartelistenplatz.",
+        "en": "Do you really want to remove yourself from the **{type}** waitlist? You will lose your waitlist spot.",
+    },
+    "player.waitlist_unregistered": {
+        "de": "✅ Du wurdest von der **{type}**-Warteliste entfernt.",
+        "en": "✅ You have been removed from the **{type}** waitlist.",
+    },
     "player.not_player_mode": {
         "de": "Dieses Event ist nicht im Player-Modus.",
         "en": "This event is not in player mode.",

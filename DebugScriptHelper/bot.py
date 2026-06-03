@@ -42,6 +42,7 @@ from utils import (
     export_log_file, clear_log_file, logger,
     resolve_event_defaults, role_label,
     _player_register, _player_unregister, _player_remove_from_waitlist,
+    _player_waitlist_type, _player_self_unregister,
     build_event_ics, _ics_slug,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
@@ -145,19 +146,34 @@ async def _dispatch_player_register(interaction, guild_id: int, channel_id: int,
 async def _dispatch_player_unregister(interaction, guild_id: int, channel_id: int,
                                       lang: str, user_assignments: dict):
     """Show a confirmation dialog for player-mode self-unregister. Entry point
-    for the Unregister button."""
+    for the Unregister button. Works for seated players and for players who
+    only hold a waitlist spot."""
     user_id = str(interaction.user.id)
-    if user_id not in (user_assignments or {}):
-        await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
+    if user_id in (user_assignments or {}):
+        squad_names = user_assignments.get(user_id, [])
+        squad_name = squad_names[0] if squad_names else "?"
+        embed = discord.Embed(
+            title=t("player.unregister_confirm_title", lang),
+            description=t("player.unregister_confirm", lang, squad=squad_name),
+            color=discord.Color.red())
+        view = PlayerUnregisterConfirmView(guild_id, channel_id, squad_name)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         return
-    squad_names = user_assignments.get(user_id, [])
-    squad_name = squad_names[0] if squad_names else "?"
-    embed = discord.Embed(
-        title=t("player.unregister_confirm_title", lang),
-        description=t("player.unregister_confirm", lang, squad=squad_name),
-        color=discord.Color.red())
-    view = PlayerUnregisterConfirmView(guild_id, channel_id, squad_name)
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    # Not seated — a waitlisted player can still unregister themselves.
+    event, _, _ = _get_channel_event(guild_id, channel_id)
+    wl_type = _player_waitlist_type(event, user_id) if event else None
+    if wl_type is not None:
+        type_label = t(f"embed.type_{wl_type}", lang) if wl_type in SQUAD_TYPES else wl_type
+        embed = discord.Embed(
+            title=t("player.unregister_confirm_title", lang),
+            description=t("player.unregister_waitlist_confirm", lang, type=type_label),
+            color=discord.Color.red())
+        view = PlayerUnregisterConfirmView(guild_id, channel_id, None)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        return
+
+    await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1028,7 +1044,8 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
 
 
 async def player_unregister(interaction, guild_id, channel_id, target_user=None):
-    """Unregister a single player (player mode)."""
+    """Unregister a single player (player mode) — from their squad or, if they
+    only hold a waitlist spot, from the waitlist."""
     lock = _get_guild_lock(guild_id)
     lang = get_guild_language(guild_id)
     user = target_user or interaction.user
@@ -1044,13 +1061,23 @@ async def player_unregister(interaction, guild_id, channel_id, target_user=None)
             await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
             return False
 
-        ok, squad_name, promoted = _player_unregister(event, user_assignments, user_id)
+        status, name_or_type, promoted = _player_self_unregister(event, user_assignments, user_id)
         save_event(db_id, event, user_assignments)
 
-    if not ok:
+    if status is None:
         await send_feedback(interaction, t("player.not_registered", lang), ephemeral=True)
         return False
 
+    if status == "waitlist":
+        type_label = t(f"embed.type_{name_or_type}", lang) if name_or_type in SQUAD_TYPES else name_or_type
+        await send_feedback(interaction, t("player.waitlist_unregistered", lang, type=type_label), ephemeral=True)
+        await send_to_log_channel(
+            t("log.player_waitlist_removed", lang, user=user.name, type=type_label),
+            guild=interaction.guild)
+        await update_event_displays(guild_id, channel_id)
+        return True
+
+    squad_name = name_or_type
     await send_feedback(interaction, t("player.unregistered", lang, squad=squad_name or "?"), ephemeral=True)
     await send_to_log_channel(
         t("log.player_unregistered", lang, user=user.name, squad=squad_name or "?"),

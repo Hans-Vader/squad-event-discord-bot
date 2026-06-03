@@ -242,7 +242,7 @@ Du kannst festlegen, dass ein Event automatisch ein Folgeevent erstellt. Konfigu
 
 ### Admin-Panel — Vertreter-Modus
 
-Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu öffnen. Im Vertreter-Modus enthält es 6 Buttons in 3 Reihen:
+Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu öffnen. Im Vertreter-Modus enthält es 8 Buttons in 4 Reihen:
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
@@ -250,6 +250,8 @@ Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu �
 | Squad | **Squad entfernen** | Squad zum Entfernen auswählen (inkl. Warteliste) |
 | Caster | **Caster hinzufügen** | Discord-User als Caster hinzufügen |
 | Caster | **Caster entfernen** | Caster zum Entfernen auswählen (inkl. Warteliste) |
+| Anmeldung | **Anmeldung öffnen** | Anmeldung manuell öffnen — hinter einer Bestätigungsabfrage abgesichert (beim Öffnen kann ein Ping an die konfigurierten Rollen gesendet werden) |
+| Anmeldung | **Anmeldung schließen** | Anmeldung manuell schließen — hinter einer Bestätigungsabfrage abgesichert. Bei Vertreter-/Caster-Events wird das Event in den Early-Access-Zustand zurückgesetzt (nur Early-Access-Rollen können sich anmelden) |
 | Event | **Event bearbeiten** | Öffnet DM-basierte Bearbeitungssitzung (siehe oben) |
 | Event | **Event löschen** | Event mit Bestätigung löschen |
 
@@ -257,12 +259,14 @@ Beim Hinzufügen eines Squads als Admin wird der ausgewählte Vertreter für das
 
 ### Admin-Panel — Spieler-Modus
 
-Im Spieler-Modus hat das Admin-Panel 4 Buttons — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
+Im Spieler-Modus hat das Admin-Panel 6 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
 | Spieler | **Spieler hinzufügen** | Mehrere Discord-User (Mehrfachauswahl), einen Squad-Typ und (optional) eine oder mehrere Rollen im Squad wählen, die für alle ausgewählten User gelten; dann bestätigen. Alle User werden in einem Submit angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, werden die restlichen auf die Warteliste gesetzt. Die gewählten Rollen (oder **Egal**, falls keine ausgewählt) werden für jeden User gespeichert und neben seinem Namen im Event-Embed angezeigt. |
 | Spieler | **Spieler entfernen** | Einen oder mehrere Spieler auswählen (Mehrfachauswahl) — aus aktuellen Squad-Mitgliedern **und** aus jeder Warteliste (Wartelisten-Einträge sind mit `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]` markiert). Die Aktion ist hinter einem roten „Abmelden"-Bestätigungsbutton abgesichert. |
+| Anmeldung | **Anmeldung öffnen** | Anmeldung manuell öffnen — hinter einer Bestätigungsabfrage abgesichert (beim Öffnen kann ein Ping an die konfigurierten Rollen gesendet werden) |
+| Anmeldung | **Anmeldung schließen** | Anmeldung manuell schließen — hinter einer Bestätigungsabfrage abgesichert |
 | Event | **Event bearbeiten** | Öffnet DM-basierte Bearbeitungssitzung |
 | Event | **Event löschen** | Event mit Bestätigung löschen |
 
