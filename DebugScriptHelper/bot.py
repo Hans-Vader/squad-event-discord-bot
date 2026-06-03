@@ -277,6 +277,23 @@ def _resolve_squad_name(event, squad_id):
     return squad_id
 
 
+def _resolve_squad_meta(event, squad_id):
+    """Resolve a squad_id to its ``(name, type, size)`` for display.
+
+    Looks in the active squads first, then the per-type waitlists (whose entries
+    are ``(name, type, playstyle, size, squad_id, rep_name)`` tuples). Falls back
+    to the raw id with ``None`` type/size when the squad can't be found.
+    """
+    data = event.get("squads", {}).get(squad_id)
+    if data:
+        return data.get("name", squad_id), data.get("type"), data.get("size")
+    for st in ("infantry", "vehicle", "heli"):
+        for entry in event.get(f"{st}_waitlist", []):
+            if len(entry) > 4 and entry[4] == squad_id:
+                return entry[0], entry[1], entry[3]
+    return squad_id, None, None
+
+
 # ---------------------------------------------------------------------------
 # Helper: permission checks
 # ---------------------------------------------------------------------------
@@ -1508,7 +1525,17 @@ class EventActionView(ui.View):
             view = SquadUnregisterConfirmView(gid, cid, assignments[0])
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         else:
-            options = [discord.SelectOption(label=_resolve_squad_name(event, sn) if event else sn, value=sn) for sn in assignments if sn != "__caster__"]
+            options = []
+            for sn in assignments:
+                if sn == "__caster__":
+                    continue
+                if event:
+                    name, stype, size = _resolve_squad_meta(event, sn)
+                else:
+                    name, stype, size = sn, None, None
+                # Secondary line in the dropdown, e.g. "⚔️ Infantry (6 players)".
+                desc = t(f"squad.type_{stype}", lang, size=size) if stype in SQUAD_TYPES else None
+                options.append(discord.SelectOption(label=name, description=desc, value=sn))
             view = UserSquadUnregisterSelector(gid, cid, options)
             await interaction.response.send_message(t("squad.pick_to_unregister", lang), view=view, ephemeral=True)
 
