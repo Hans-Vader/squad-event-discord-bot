@@ -143,7 +143,7 @@ Begrenze optional, wie viel jede Anmeldegruppe belegen darf. Caster zählen nie 
 - Rollen mit Vorab-Zugang — max. **Squads pro Rolle** (nur Vertreter-Modus)
 - Reguläre Rollen — max. **Squads pro Nutzer** (nur Vertreter-Modus — das Per-User-Squad-Limit; im Spieler-Modus immer 1)
 
-Die beiden Vorab-Zugang-Limits (% und Squads pro Rolle) gelten **nur bis zur Öffnung der Anmeldung** — sobald die Anmeldung für alle offen ist, melden sich Vorab-Zugang-Mitglieder ohne diese Limits an. Das Per-User-Squad-Limit gilt immer.
+Die beiden Vorab-Zugang-Limits (% und Squads pro Rolle) gelten **nur bis zur Öffnung der Anmeldung** — sobald die Anmeldung für alle offen ist, melden sich Vorab-Zugang-Mitglieder ohne diese Limits an. Solange die Anmeldung geschlossen ist, gilt für Vorab-Zugang-Mitglieder das Squad-Limit pro Rolle und **nicht** das Per-User-Squad-Limit; sobald die Anmeldung öffnet, gilt auch für sie das Per-User-Limit. Reguläre Anmeldungen unterliegen immer dem Per-User-Squad-Limit.
 
 Im Spieler-Modus wird nur das %-Limit für Vorab-Zugang angezeigt.
 

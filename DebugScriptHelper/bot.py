@@ -452,6 +452,18 @@ def _member_register_type(member, event):
     return None
 
 
+def _exempt_from_user_squad_limit(event, member) -> bool:
+    """Whether a member skips the per-user squad limit (max_squads_per_user, #12).
+
+    During the early-access window, early-access members are governed by the
+    per-role squad cap instead of the per-user limit. Once registration opens the
+    per-role cap lifts and #12 applies to them like everyone else.
+    """
+    if event.get("registration_open"):
+        return False
+    return _member_register_type(member, event) == "community_rep"
+
+
 def _seat_cap_slots(event, group):
     """Max player slots a register-type group may consume, or None if uncapped.
 
@@ -789,14 +801,15 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
             return False
 
         user_id = str(interaction.user.id)
-        max_squads = event.get("max_squads_per_user", 1)
-        current_squads = get_user_squad_ids(user_assignments, user_id)
-        if len(current_squads) >= max_squads:
-            if max_squads == 1 and current_squads:
-                await send_feedback(interaction, t("squad.already_assigned", lang, name=_resolve_squad_name(event, current_squads[0])), ephemeral=True)
-            else:
-                await send_feedback(interaction, t("squad.max_reached", lang, current=len(current_squads), max=max_squads), ephemeral=True)
-            return False
+        if not _exempt_from_user_squad_limit(event, interaction.user):
+            max_squads = event.get("max_squads_per_user", 1)
+            current_squads = get_user_squad_ids(user_assignments, user_id)
+            if len(current_squads) >= max_squads:
+                if max_squads == 1 and current_squads:
+                    await send_feedback(interaction, t("squad.already_assigned", lang, name=_resolve_squad_name(event, current_squads[0])), ephemeral=True)
+                else:
+                    await send_feedback(interaction, t("squad.max_reached", lang, current=len(current_squads), max=max_squads), ephemeral=True)
+                return False
 
         sizes = _get_squad_sizes(event)
         size = sizes.get(squad_type, sizes["infantry"])
@@ -1331,14 +1344,15 @@ class EventActionView(ui.View):
             return
 
         user_id = str(interaction.user.id)
-        max_squads = event.get("max_squads_per_user", 1)
-        current = get_user_squad_ids(user_assignments, user_id)
-        if len(current) >= max_squads:
-            if max_squads == 1 and current:
-                await interaction.response.send_message(t("squad.already_assigned", lang, name=_resolve_squad_name(event, current[0])), ephemeral=True)
-            else:
-                await interaction.response.send_message(t("squad.max_reached", lang, current=len(current), max=max_squads), ephemeral=True)
-            return
+        if not _exempt_from_user_squad_limit(event, interaction.user):
+            max_squads = event.get("max_squads_per_user", 1)
+            current = get_user_squad_ids(user_assignments, user_id)
+            if len(current) >= max_squads:
+                if max_squads == 1 and current:
+                    await interaction.response.send_message(t("squad.already_assigned", lang, name=_resolve_squad_name(event, current[0])), ephemeral=True)
+                else:
+                    await interaction.response.send_message(t("squad.max_reached", lang, current=len(current), max=max_squads), ephemeral=True)
+                return
 
         settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
         view = SquadRegistrationView(gid, cid, event)

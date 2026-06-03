@@ -137,6 +137,15 @@ class TestCheckRegistrationLimits(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIsNone(key)
 
+    def test_user_squad_limit_exemption(self):
+        # Early-access member skips the per-user squad limit only while closed.
+        self.assertTrue(bot._exempt_from_user_squad_limit(_event(), _Member([EARLY])))
+        self.assertFalse(
+            bot._exempt_from_user_squad_limit(_event(registration_open=True), _Member([EARLY])))
+        # Regular and ungrouped members are never exempt.
+        self.assertFalse(bot._exempt_from_user_squad_limit(_event(), _Member([REG])))
+        self.assertFalse(bot._exempt_from_user_squad_limit(_event(), _Member([999])))
+
     def test_early_access_limits_lifted_once_registration_open(self):
         # Both caps are exceeded, but registration is open → limits lifted.
         ev = _event(registration_open=True,
