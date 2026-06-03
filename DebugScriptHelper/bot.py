@@ -1956,68 +1956,35 @@ class AdminActionView(BaseView):
         cid = self.channel_id
         lang = get_guild_language(gid)
 
-        lock = _get_guild_lock(gid)
-        async with lock:
-            event, user_assignments, db_id = _get_channel_event(gid, cid)
-            if not event:
-                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-                return
-            if event.get("registration_open", False):
-                await send_feedback(interaction, t("reg.already_open", lang), ephemeral=True)
-                return
-            event["registration_open"] = True
-            event["is_closed"] = False
-            save_event(db_id, event, user_assignments)
+        event, _, _ = _get_channel_event(gid, cid)
+        if not event:
+            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+            return
+        if event.get("registration_open", False):
+            await send_feedback(interaction, t("reg.already_open", lang), ephemeral=True)
+            return
 
-        await send_feedback(interaction, t("reg.manually_opened", lang, name=event["name"]), ephemeral=True)
-
-        # Replace the below-embed announcement: post the "now open" ping (if enabled),
-        # which also deletes the now-stale early-access / countdown announcement.
-        ch = bot.get_channel(cid)
-        content = None
-        if event.get("ping_on_open", False):
-            ping_text = _build_ping_text(event)
-            if ping_text:
-                content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
-        await _set_channel_announcement(
-            ch, event, db_id, user_assignments, content=content,
-            mentions=discord.AllowedMentions(roles=True, users=True))
-
-        await update_event_displays(gid, cid)
-        await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild=interaction.guild)
+        # Confirm first — opening may send a ping to configured roles.
+        embed = _build_open_confirm_embed(event, lang)
+        view = OpenConfirmationView(gid, cid)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _close(self, interaction):
         gid = self.guild_id
         cid = self.channel_id
         lang = get_guild_language(gid)
 
-        lock = _get_guild_lock(gid)
-        async with lock:
-            event, user_assignments, db_id = _get_channel_event(gid, cid)
-            if not event:
-                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-                return
-            if is_player_mode(event):
-                # Player mode has no early-access gate; the disabled buttons are the only thing
-                # stopping joins, so a real close must lock it (unregister stays allowed).
-                event["is_closed"] = True
-                event["registration_open"] = False
-            else:
-                # Rep/caster mode: revert to the early-access / not-yet-open state instead of
-                # hard-locking. Early-access roles keep registering (with their caps) and the
-                # buttons stay enabled. Clear the scheduled open time so the loop doesn't
-                # immediately auto-reopen; a *future* time set later via Edit Event still opens.
-                event["registration_open"] = False
-                event["registration_start_time"] = None
-            save_event(db_id, event, user_assignments)
+        event, _, _ = _get_channel_event(gid, cid)
+        if not event:
+            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+            return
 
-        await send_feedback(interaction, t("reg.manually_closed", lang, name=event["name"]), ephemeral=True)
-        await send_to_log_channel(t("log.reg_closed", lang, user=interaction.user.name, name=event["name"]), guild=interaction.guild)
-        await update_event_displays(gid, cid)
-
-        # Delete the now-stale announcement below the embed; the embed already shows the status.
-        ch = bot.get_channel(cid)
-        await _set_channel_announcement(ch, event, db_id, user_assignments, content=None)
+        embed = discord.Embed(
+            title=t("reg.close_confirm_title", lang),
+            description=t("reg.close_confirm", lang, name=event["name"]),
+            color=discord.Color.orange())
+        view = CloseConfirmationView(gid, cid)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _add_squad(self, interaction):
         lang = get_guild_language(self.guild_id)
@@ -3916,6 +3883,137 @@ class DeleteConfirmationView(BaseConfirmationView):
             return
         lang = get_guild_language(self.guild_id)
         await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
+
+
+def _build_open_confirm_embed(event, lang):
+    """Confirmation embed shown before manually opening registration. When a ping will
+    be sent (ping_on_open + targets configured), it lists the target roles/users — these
+    render as mentions in the embed, which does NOT trigger an actual notification."""
+    desc = t("reg.open_confirm", lang, name=event["name"])
+    if event.get("ping_on_open", False):
+        targets = _build_ping_text(event).strip()
+        if targets:
+            desc += "\n\n" + t("reg.open_confirm_ping", lang, targets=targets)
+    return discord.Embed(
+        title=t("reg.open_confirm_title", lang),
+        description=desc,
+        color=discord.Color.green())
+
+
+class OpenConfirmationView(BaseConfirmationView):
+    """Confirm/Cancel before manually opening registration (which may ping roles)."""
+    def __init__(self, guild_id, channel_id):
+        super().__init__(title="Open Registration")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        lang = get_guild_language(guild_id)
+
+        confirm_btn = ui.Button(label=t("reg.open_button", lang), style=discord.ButtonStyle.success)
+        confirm_btn.callback = self._confirm
+        self.add_item(confirm_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _confirm(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        gid, cid = self.guild_id, self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+            if event.get("registration_open", False):
+                await send_feedback(interaction, t("reg.already_open", lang), ephemeral=True)
+                return
+            event["registration_open"] = True
+            event["is_closed"] = False
+            save_event(db_id, event, user_assignments)
+
+        await send_feedback(interaction, t("reg.manually_opened", lang, name=event["name"]), ephemeral=True)
+
+        # Replace the below-embed announcement: post the "now open" ping (if enabled),
+        # which also deletes the now-stale early-access / countdown announcement.
+        ch = bot.get_channel(cid)
+        content = None
+        if event.get("ping_on_open", False):
+            ping_text = _build_ping_text(event)
+            if ping_text:
+                content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
+        await _set_channel_announcement(
+            ch, event, db_id, user_assignments, content=content,
+            mentions=discord.AllowedMentions(roles=True, users=True))
+
+        await update_event_displays(gid, cid)
+        await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild=interaction.guild)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), embed=None, view=None)
+
+
+class CloseConfirmationView(BaseConfirmationView):
+    """Confirm/Cancel before manually closing registration."""
+    def __init__(self, guild_id, channel_id):
+        super().__init__(title="Close Registration")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        lang = get_guild_language(guild_id)
+
+        confirm_btn = ui.Button(label=t("reg.close_button", lang), style=discord.ButtonStyle.danger)
+        confirm_btn.callback = self._confirm
+        self.add_item(confirm_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _confirm(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        gid, cid = self.guild_id, self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+            if is_player_mode(event):
+                # Player mode has no early-access gate; the disabled buttons are the only thing
+                # stopping joins, so a real close must lock it (unregister stays allowed).
+                event["is_closed"] = True
+                event["registration_open"] = False
+            else:
+                # Rep/caster mode: revert to the early-access / not-yet-open state instead of
+                # hard-locking. Early-access roles keep registering (with their caps) and the
+                # buttons stay enabled. Clear the scheduled open time so the loop doesn't
+                # immediately auto-reopen; a *future* time set later via Edit Event still opens.
+                event["registration_open"] = False
+                event["registration_start_time"] = None
+            save_event(db_id, event, user_assignments)
+
+        await send_feedback(interaction, t("reg.manually_closed", lang, name=event["name"]), ephemeral=True)
+        await send_to_log_channel(t("log.reg_closed", lang, user=interaction.user.name, name=event["name"]), guild=interaction.guild)
+        await update_event_displays(gid, cid)
+
+        # Delete the now-stale announcement below the embed; the embed already shows the status.
+        ch = bot.get_channel(cid)
+        await _set_channel_announcement(ch, event, db_id, user_assignments, content=None)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), embed=None, view=None)
 
 
 # ############################# #

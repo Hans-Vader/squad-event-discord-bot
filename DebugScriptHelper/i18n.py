@@ -412,6 +412,34 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Die Anmeldungen für '{name}' wurden geschlossen.",
         "en": "Registration for '{name}' has been closed.",
     },
+    "reg.open_confirm_title": {
+        "de": "Anmeldung öffnen?",
+        "en": "Open registration?",
+    },
+    "reg.open_confirm": {
+        "de": "Möchtest du die Anmeldung für **{name}** öffnen?",
+        "en": "Open registration for **{name}**?",
+    },
+    "reg.open_confirm_ping": {
+        "de": "⚠️ Beim Öffnen wird eine Benachrichtigung gesendet an: {targets}",
+        "en": "⚠️ Opening will send a notification to: {targets}",
+    },
+    "reg.open_button": {
+        "de": "Öffnen",
+        "en": "Open",
+    },
+    "reg.close_confirm_title": {
+        "de": "Anmeldung schließen?",
+        "en": "Close registration?",
+    },
+    "reg.close_confirm": {
+        "de": "Möchtest du die Anmeldung für **{name}** schließen?",
+        "en": "Close registration for **{name}**?",
+    },
+    "reg.close_button": {
+        "de": "Schließen",
+        "en": "Close",
+    },
 
     # ── Squad registration ────────────────────────────────────────────────
     "squad.register_title": {

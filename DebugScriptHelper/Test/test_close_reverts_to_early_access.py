@@ -14,23 +14,16 @@ import os
 import sys
 import unittest
 from contextlib import ExitStack
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import discord  # noqa: E402
 import bot  # noqa: E402
 
-
-class _FakeUser:
-    name = "admin"
-
-
-class _FakeInteraction:
-    def __init__(self):
-        self.user = _FakeUser()
-        self.guild = None
+# The close mutations themselves now live in CloseConfirmationView._confirm and are
+# covered by test_open_close_confirmation.py. This module covers the resulting gating,
+# the event-action button rules, and the send_event_details wiring.
 
 
 class _FakeRole:
@@ -49,53 +42,6 @@ def _btn(view, custom_id):
         if getattr(child, "custom_id", None) == custom_id:
             return child
     return None
-
-
-class CloseMutationTest(unittest.IsolatedAsyncioTestCase):
-    async def _run_close(self, event):
-        # Build the view without its __init__ (we only exercise _close, which uses
-        # self.guild_id / self.channel_id).
-        view = bot.AdminActionView.__new__(bot.AdminActionView)
-        view.guild_id, view.channel_id = 1, 2
-        save_spy = MagicMock()
-        with ExitStack() as es:
-            es.enter_context(patch.object(bot, "get_guild_language", return_value="en"))
-            es.enter_context(patch.object(bot, "_get_channel_event", return_value=(event, {}, 7)))
-            es.enter_context(patch.object(bot, "save_event", save_spy))
-            es.enter_context(patch.object(bot, "send_feedback", AsyncMock()))
-            es.enter_context(patch.object(bot, "send_to_log_channel", AsyncMock()))
-            es.enter_context(patch.object(bot, "update_event_displays", AsyncMock()))
-            es.enter_context(patch.object(bot.bot, "get_channel", return_value=None))
-            await view._close(_FakeInteraction())
-        save_spy.assert_called()
-        return event
-
-    async def test_rep_mode_reverts_to_early_access(self):
-        event = {
-            "name": "Cup Night", "mode": "rep",
-            "registration_open": True, "is_closed": False,
-            "registration_start_time": datetime(2020, 1, 1, 20, 0),
-            "ping_message_ids": [], "announcement_message_id": 555,
-        }
-        await self._run_close(event)
-        self.assertFalse(event["registration_open"])
-        # Not hard-locked: buttons stay enabled, early-access roles + caps still apply.
-        self.assertFalse(event["is_closed"])
-        # Scheduled open cleared so the loop won't immediately auto-reopen.
-        self.assertIsNone(event["registration_start_time"])
-        # The below-embed announcement is deleted (no longer relabeled to "closed").
-        self.assertIsNone(event["announcement_message_id"])
-
-    async def test_player_mode_stays_fully_locked(self):
-        event = {
-            "name": "Pub Night", "mode": "player",
-            "registration_open": True, "is_closed": False,
-            "registration_start_time": datetime(2020, 1, 1, 20, 0),
-            "ping_message_ids": [],
-        }
-        await self._run_close(event)
-        self.assertTrue(event["is_closed"])
-        self.assertFalse(event["registration_open"])
 
 
 class PostCloseGatingTest(unittest.TestCase):
