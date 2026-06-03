@@ -344,6 +344,7 @@ def build_default_event(settings: dict, name: str, date: str, time_str: str,
         "ping_on_open": overrides.get("ping_on_open", False),
         "ping_message_ids": [],
         "early_access_message_id": None,
+        "announcement_message_id": None,
         "recurrence": overrides.get("recurrence", {"type": "never"}),
         "duration_minutes": overrides.get("duration_minutes", 120),
         "spawn_offset_minutes": overrides.get("spawn_offset_minutes", 5),
@@ -421,6 +422,7 @@ def clone_event_for_recurrence(old_event: dict, new_start: datetime) -> dict:
         "countdown_sent": False,
         "announcement_sent": False,
         "ping_message_ids": [],
+        "announcement_message_id": None,
     })
 
     # Registration start: preserve the delta from the original event start.

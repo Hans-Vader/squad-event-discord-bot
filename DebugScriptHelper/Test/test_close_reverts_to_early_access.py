@@ -75,7 +75,7 @@ class CloseMutationTest(unittest.IsolatedAsyncioTestCase):
             "name": "Cup Night", "mode": "rep",
             "registration_open": True, "is_closed": False,
             "registration_start_time": datetime(2020, 1, 1, 20, 0),
-            "ping_message_ids": [],
+            "ping_message_ids": [], "announcement_message_id": 555,
         }
         await self._run_close(event)
         self.assertFalse(event["registration_open"])
@@ -83,6 +83,8 @@ class CloseMutationTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(event["is_closed"])
         # Scheduled open cleared so the loop won't immediately auto-reopen.
         self.assertIsNone(event["registration_start_time"])
+        # The below-embed announcement is deleted (no longer relabeled to "closed").
+        self.assertIsNone(event["announcement_message_id"])
 
     async def test_player_mode_stays_fully_locked(self):
         event = {

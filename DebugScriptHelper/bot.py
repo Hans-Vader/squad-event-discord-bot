@@ -1971,20 +1971,20 @@ class AdminActionView(BaseView):
 
         await send_feedback(interaction, t("reg.manually_opened", lang, name=event["name"]), ephemeral=True)
 
+        # Replace the below-embed announcement: post the "now open" ping (if enabled),
+        # which also deletes the now-stale early-access / countdown announcement.
         ch = bot.get_channel(cid)
-        if ch and event.get("ping_on_open", False):
+        content = None
+        if event.get("ping_on_open", False):
             ping_text = _build_ping_text(event)
             if ping_text:
                 content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
-                ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-                event.setdefault("ping_message_ids", []).append(ping_msg.id)
-                save_event(db_id, event, user_assignments)
+        await _set_channel_announcement(
+            ch, event, db_id, user_assignments, content=content,
+            mentions=discord.AllowedMentions(roles=True, users=True))
 
         await update_event_displays(gid, cid)
         await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild=interaction.guild)
-
-        # Delete the now-stale early-access announcement
-        await _cleanup_early_access_message(ch, event, db_id, user_assignments)
 
     async def _close(self, interaction):
         gid = self.guild_id
@@ -2015,16 +2015,9 @@ class AdminActionView(BaseView):
         await send_to_log_channel(t("log.reg_closed", lang, user=interaction.user.name, name=event["name"]), guild=interaction.guild)
         await update_event_displays(gid, cid)
 
+        # Delete the now-stale announcement below the embed; the embed already shows the status.
         ch = bot.get_channel(cid)
-        if ch:
-            for ping_msg_id in event.get("ping_message_ids", []):
-                try:
-                    ping_msg = await ch.fetch_message(ping_msg_id)
-                    await ping_msg.edit(
-                        content=t("ping.reg_closed", lang, name=event["name"]),
-                        allowed_mentions=discord.AllowedMentions.none())
-                except Exception:
-                    pass
+        await _set_channel_announcement(ch, event, db_id, user_assignments, content=None)
 
     async def _add_squad(self, interaction):
         lang = get_guild_language(self.guild_id)
@@ -3905,6 +3898,13 @@ class DeleteConfirmationView(BaseConfirmationView):
                 await ea_msg.delete()
             except Exception:
                 pass
+        ann_msg_id = event.get("announcement_message_id")
+        if ann_msg_id:
+            try:
+                ann_msg = await channel.fetch_message(ann_msg_id)
+                await ann_msg.delete()
+            except Exception:
+                pass
 
         # 3. Soft-delete in DB
         delete_event(db_id)
@@ -4607,7 +4607,7 @@ class WizardConfirmationView(BaseView):
                     ping_msg = await channel.send(
                         content=f"{ping_text}" + t("reg.opened_announcement", lang, name=self.event["name"]),
                         allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-                    self.event.setdefault("ping_message_ids", []).append(ping_msg.id)
+                    self.event["announcement_message_id"] = ping_msg.id
                 except discord.Forbidden:
                     pass
 
@@ -4622,7 +4622,7 @@ class WizardConfirmationView(BaseView):
                 ping_msg = await channel.send(
                     content=f"{early_ping_text}" + t("reg.early_access_announcement", lang, name=self.event["name"]),
                     allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-                self.event["early_access_message_id"] = ping_msg.id
+                self.event["announcement_message_id"] = ping_msg.id
             except discord.Forbidden:
                 pass
 
@@ -4963,25 +4963,66 @@ async def _archive_event(event: dict, guild_id: int, channel_id: int, lang: str)
             await ea_msg.delete()
         except Exception:
             pass
+    ann_msg_id = event.get("announcement_message_id")
+    if ann_msg_id:
+        try:
+            ann_msg = await ch.fetch_message(ann_msg_id)
+            await ann_msg.delete()
+        except Exception:
+            pass
 
 
-async def _cleanup_early_access_message(ch, event, db_id, user_assignments):
-    """Delete the early-access announcement (best-effort) and clear its stored ID.
+async def _set_channel_announcement(ch, event, db_id, user_assignments,
+                                    content=None, mentions=None, attempts=1):
+    """Make ``content`` the single bot announcement below the event embed.
 
-    Called when registration opens (auto or manual). No-op if there is no
-    early-access message recorded for this event.
+    Posts the new message (if ``content`` is given), records it in
+    ``event["announcement_message_id"]``, then deletes whatever announcement was there
+    before. Pass ``content=None`` to just clear the current announcement. Best-effort:
+    the channel or messages may already be gone. Also sweeps the legacy trackers
+    (``early_access_message_id`` / ``countdown_message_id`` / ``ping_message_ids``) so
+    events created before this scheme self-heal on their next announcement.
     """
-    ea_id = event.pop("early_access_message_id", None)
-    if not ea_id:
-        return
+    old_ids = []
+    if event.get("announcement_message_id"):
+        old_ids.append(event["announcement_message_id"])
+    for legacy_key in ("early_access_message_id", "countdown_message_id"):
+        if event.get(legacy_key):
+            old_ids.append(event[legacy_key])
+    old_ids.extend(event.get("ping_message_ids", []) or [])
+
+    new_id = None
+    if content is not None and ch is not None:
+        for i in range(max(1, attempts)):
+            try:
+                msg = await ch.send(
+                    content=content,
+                    allowed_mentions=mentions or discord.AllowedMentions.none())
+                new_id = msg.id
+                break
+            except discord.Forbidden:
+                break
+            except Exception as e:
+                logger.warning(f"Attempt {i+1} to post announcement for '{event.get('name')}' failed: {e}")
+                if i + 1 < attempts:
+                    await asyncio.sleep(1)
+
+    # Record the new id and clear the legacy trackers BEFORE deleting the old messages, so
+    # a crash mid-delete can't lose the new id or resurrect the old ones.
+    event["announcement_message_id"] = new_id
+    event["early_access_message_id"] = None
+    event["countdown_message_id"] = None
+    event["ping_message_ids"] = []
     save_event(db_id, event, user_assignments)
-    if ch is None:
-        return
-    try:
-        msg = await ch.fetch_message(ea_id)
-        await msg.delete()
-    except Exception:
-        pass
+
+    if ch is not None:
+        for mid in old_ids:
+            if mid == new_id:
+                continue
+            try:
+                await (await ch.fetch_message(mid)).delete()
+            except Exception:
+                pass
 
 
 async def _maybe_spawn_recurrence(old_event: dict, guild_id: int, channel_id: int, lang: str):
@@ -5082,6 +5123,8 @@ async def check_events_loop():
                     if ch:
                         caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
                         await send_event_details(ch, event, db_id, lang, caster_enabled)
+                        # The "register now" announcement is stale now the event has started.
+                        await _set_channel_announcement(ch, event, db_id, user_assignments, content=None)
 
                 # ── End-of-event handling ──
                 if end_dt and now > end_dt:
@@ -5134,9 +5177,10 @@ async def check_events_loop():
                                     h_str = t("time.hour", lang) if hours == 1 else t("time.hours", lang, n=hours)
                                     remaining = f"{h_str} {t('time.minutes', lang, n=mins)}" if mins else h_str
                                 content = f"{ping_text}" + t("reg.opens_soon", lang, name=event["name"], ts=ts, remaining=remaining)
-                                countdown_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True))
-                                event["countdown_message_id"] = countdown_msg.id
-                                save_event(db_id, event, user_assignments)
+                                # Replaces the early-access ping (if any) with the countdown.
+                                await _set_channel_announcement(
+                                    ch, event, db_id, user_assignments, content=content,
+                                    mentions=discord.AllowedMentions(roles=True))
 
                 # ── Open registration (only if NOT closed) ──
                 if not is_open and not is_closed:
@@ -5152,45 +5196,21 @@ async def check_events_loop():
                             except Exception:
                                 ch = None
                         if ch:
-                            # PRIORITY 1: Send ping immediately
+                            # PRIORITY 1: Replace the announcement with the "now open" ping —
+                            # this also deletes the stale countdown / early-access announcement.
+                            # When ping_on_open is off, still clear the stale pre-open announcement.
+                            content = None
                             if event.get("ping_on_open", False):
                                 ping_text = _build_ping_text(event)
                                 if ping_text:
                                     content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
-                                    ping_msg = None
-                                    for attempt in range(2):
-                                        try:
-                                            ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-                                            break
-                                        except Exception as e:
-                                            logger.warning(f"Attempt {attempt+1} to send open announcement for '{event['name']}' failed: {e}")
-                                            if attempt == 0:
-                                                await asyncio.sleep(1)
-                                    if ping_msg:
-                                        event.setdefault("ping_message_ids", []).append(ping_msg.id)
-                                        save_event(db_id, event, user_assignments)
-                                    else:
-                                        logger.error(f"Failed to send open announcement for '{event['name']}' after 2 attempts")
+                            await _set_channel_announcement(
+                                ch, event, db_id, user_assignments, content=content,
+                                mentions=discord.AllowedMentions(roles=True, users=True), attempts=2)
 
                             # PRIORITY 2: Send/update event embed
                             caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
                             await send_event_details(ch, event, db_id, lang, caster_enabled)
-
-                            # LOW PRIORITY: Cleanup & log in background
-                            countdown_msg_id = event.pop("countdown_message_id", None)
-                            if countdown_msg_id:
-                                save_event(db_id, event, user_assignments)
-                                async def _delete_countdown(_ch, _msg_id):
-                                    try:
-                                        old_msg = await _ch.fetch_message(_msg_id)
-                                        await old_msg.delete()
-                                    except Exception:
-                                        pass
-                                bot.loop.create_task(_delete_countdown(ch, countdown_msg_id))
-
-                            # Delete the now-stale early-access announcement
-                            bot.loop.create_task(
-                                _cleanup_early_access_message(ch, event, db_id, user_assignments))
 
                         bot.loop.create_task(
                             send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild_id=guild_id)
