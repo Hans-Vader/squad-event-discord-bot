@@ -1977,6 +1977,9 @@ class AdminActionView(BaseView):
         await update_event_displays(gid, cid)
         await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild=interaction.guild)
 
+        # Delete the now-stale early-access announcement
+        await _cleanup_early_access_message(ch, event, db_id, user_assignments)
+
     async def _close(self, interaction):
         gid = self.guild_id
         cid = self.channel_id
@@ -3879,6 +3882,13 @@ class DeleteConfirmationView(BaseConfirmationView):
                 await cd_msg.delete()
             except Exception:
                 pass
+        ea_msg_id = event.get("early_access_message_id")
+        if ea_msg_id:
+            try:
+                ea_msg = await channel.fetch_message(ea_msg_id)
+                await ea_msg.delete()
+            except Exception:
+                pass
 
         # 3. Soft-delete in DB
         delete_event(db_id)
@@ -4596,7 +4606,7 @@ class WizardConfirmationView(BaseView):
                 ping_msg = await channel.send(
                     content=f"{early_ping_text}" + t("reg.early_access_announcement", lang, name=self.event["name"]),
                     allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-                self.event.setdefault("ping_message_ids", []).append(ping_msg.id)
+                self.event["early_access_message_id"] = ping_msg.id
             except discord.Forbidden:
                 pass
 
@@ -4930,6 +4940,32 @@ async def _archive_event(event: dict, guild_id: int, channel_id: int, lang: str)
             await cd_msg.delete()
         except Exception:
             pass
+    ea_msg_id = event.get("early_access_message_id")
+    if ea_msg_id:
+        try:
+            ea_msg = await ch.fetch_message(ea_msg_id)
+            await ea_msg.delete()
+        except Exception:
+            pass
+
+
+async def _cleanup_early_access_message(ch, event, db_id, user_assignments):
+    """Delete the early-access announcement (best-effort) and clear its stored ID.
+
+    Called when registration opens (auto or manual). No-op if there is no
+    early-access message recorded for this event.
+    """
+    ea_id = event.pop("early_access_message_id", None)
+    if not ea_id:
+        return
+    save_event(db_id, event, user_assignments)
+    if ch is None:
+        return
+    try:
+        msg = await ch.fetch_message(ea_id)
+        await msg.delete()
+    except Exception:
+        pass
 
 
 async def _maybe_spawn_recurrence(old_event: dict, guild_id: int, channel_id: int, lang: str):
@@ -5135,6 +5171,10 @@ async def check_events_loop():
                                     except Exception:
                                         pass
                                 bot.loop.create_task(_delete_countdown(ch, countdown_msg_id))
+
+                            # Delete the now-stale early-access announcement
+                            bot.loop.create_task(
+                                _cleanup_early_access_message(ch, event, db_id, user_assignments))
 
                         bot.loop.create_task(
                             send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild_id=guild_id)
