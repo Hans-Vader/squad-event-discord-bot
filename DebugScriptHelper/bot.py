@@ -529,54 +529,90 @@ def _early_access_role_squad_counts(event, user_assignments, guild):
     return counts
 
 
+def _seat_cap_usage(event, user_assignments, guild, member):
+    """Current early-access seat usage as a '12%/50%' string, or None if no seat-%
+    cap applies to this member (not early-access / open / unset)."""
+    if event.get("registration_open"):
+        return None
+    group = _member_register_type(member, event)
+    if group != "community_rep":
+        return None
+    pct = event.get("community_rep_cap_percent")
+    if pct is None:
+        return None
+    max_slots = int(event.get("max_player_slots", 0)) or 0
+    used = _group_seats_used(event, user_assignments, guild, group)
+    used_pct = round(used / max_slots * 100) if max_slots else 0
+    return f"{used_pct}%/{int(pct)}%"
+
+
+def _squad_role_cap_usage(event, user_assignments, guild, member):
+    """Current early-access per-role squad usage as a '3/5' string (the member's
+    most-used early-access role), or None if no per-role cap applies."""
+    if event.get("registration_open"):
+        return None
+    if _member_register_type(member, event) != "community_rep":
+        return None
+    limit = event.get("early_access_squads_per_role")
+    if limit is None:
+        return None
+    counts = _early_access_role_squad_counts(event, user_assignments, guild)
+    held = {r.id for r in getattr(member, "roles", [])}
+    max_count = max((counts.get(rid, 0) for rid in event.get("community_rep_role_ids", [])
+                     if rid in held), default=0)
+    return f"{max_count}/{int(limit)}"
+
+
 def _check_seat_cap(event, user_assignments, guild, member, added_seats):
-    """Early-access seat-% cap only. Returns (allowed, message_key_or_None).
+    """Early-access seat-% cap only. Returns (allowed, message_key_or_None, usage).
 
     Needs the squad size (added_seats), so it's checked once the squad type is
-    known. Lifted once registration is open.
+    known. Lifted once registration is open. `usage` is the current '12%/50%'
+    string on block (else None).
     """
     if event.get("registration_open"):
-        return True, None
+        return True, None, None
     group = _member_register_type(member, event)
     if group is None:
-        return True, None
+        return True, None, None
     cap = _seat_cap_slots(event, group)
     if cap is None:
-        return True, None
+        return True, None, None
     used = _group_seats_used(event, user_assignments, guild, group)
     if used + added_seats > cap:
-        return False, "gate.seat_cap_reached"
-    return True, None
+        return False, "gate.seat_cap_reached", _seat_cap_usage(event, user_assignments, guild, member)
+    return True, None, None
 
 
 def _check_squad_count_cap(event, user_assignments, guild, member, mode):
-    """Early-access per-role squad-count cap only (rep mode). Returns (allowed, key).
+    """Early-access per-role squad-count cap only (rep mode). Returns
+    (allowed, key, usage).
 
     Count-based (size-independent), so it can be checked as early as the button
     press. Counts toward EACH early-access role the member holds. Lifted once
-    registration is open.
+    registration is open. `usage` is the current '3/5' string on block (else None).
     """
     if event.get("registration_open"):
-        return True, None
+        return True, None, None
     if mode != "rep" or _member_register_type(member, event) != "community_rep":
-        return True, None
+        return True, None, None
     limit = event.get("early_access_squads_per_role")
     if limit is None:
-        return True, None
+        return True, None, None
     counts = _early_access_role_squad_counts(event, user_assignments, guild)
     held = {r.id for r in getattr(member, "roles", [])}
     for rid in event.get("community_rep_role_ids", []):
         if rid in held and counts.get(rid, 0) + 1 > limit:
-            return False, "gate.squad_role_cap_reached"
-    return True, None
+            return False, "gate.squad_role_cap_reached", _squad_role_cap_usage(event, user_assignments, guild, member)
+    return True, None, None
 
 
 def _check_registration_limits(event, user_assignments, guild, member, added_seats, mode):
     """Full early-access cap check (seat-% + per-role squad count) — final authority
-    used at registration time. Returns (allowed, message_key_or_None)."""
-    ok, key = _check_seat_cap(event, user_assignments, guild, member, added_seats)
+    used at registration time. Returns (allowed, message_key_or_None, usage)."""
+    ok, key, usage = _check_seat_cap(event, user_assignments, guild, member, added_seats)
     if not ok:
-        return ok, key
+        return ok, key, usage
     return _check_squad_count_cap(event, user_assignments, guild, member, mode)
 
 
@@ -817,8 +853,9 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
             return False
 
         user_id = str(interaction.user.id)
-        if not _exempt_from_user_squad_limit(event, interaction.user):
-            max_squads = event.get("max_squads_per_user", 1)
+        max_squads = event.get("max_squads_per_user", 1)
+        is_ea_exempt = _exempt_from_user_squad_limit(event, interaction.user)
+        if not is_ea_exempt:
             current_squads = get_user_squad_ids(user_assignments, user_id)
             if len(current_squads) >= max_squads:
                 if max_squads == 1 and current_squads:
@@ -833,10 +870,10 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
         available = event["max_player_slots"] - event["player_slots_used"]
         rep_name = interaction.user.display_name
 
-        ok_lim, lim_key = _check_registration_limits(
+        ok_lim, lim_key, lim_usage = _check_registration_limits(
             event, user_assignments, interaction.guild, interaction.user, size, "rep")
         if not ok_lim:
-            await send_feedback(interaction, t(lim_key, lang), ephemeral=True)
+            await send_feedback(interaction, t(lim_key, lang, usage=lim_usage), ephemeral=True)
             return False
 
         wl_key = _waitlist_key(squad_type)
@@ -867,8 +904,20 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
                    "vehicle": "Fahrzeug" if lang == "de" else "Vehicle",
                    "heli": "Heli"}
     type_label = type_labels.get(squad_type, squad_type)
-    user_squads_now = len(get_user_squad_ids(user_assignments, user_id))
-    squad_info = t("squad.your_squads_info", lang, current=user_squads_now, max=max_squads)
+    if is_ea_exempt:
+        # Early-access member: show their early-access cap usage (post-registration),
+        # not the per-user #12 count they're exempt from.
+        parts = []
+        seat_usage = _seat_cap_usage(event, user_assignments, interaction.guild, interaction.user)
+        if seat_usage:
+            parts.append(t("squad.cap_info_seat", lang, usage=seat_usage))
+        squad_usage = _squad_role_cap_usage(event, user_assignments, interaction.guild, interaction.user)
+        if squad_usage:
+            parts.append(t("squad.cap_info_squads", lang, usage=squad_usage))
+        squad_info = ("(" + " · ".join(parts) + ")") if parts else ""
+    else:
+        user_squads_now = len(get_user_squad_ids(user_assignments, user_id))
+        squad_info = t("squad.your_squads_info", lang, current=user_squads_now, max=max_squads)
     playstyle_enabled = event.get("playstyle_enabled", True)
 
     if result == "registered":
@@ -921,10 +970,10 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
             await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
             return False
 
-        ok_lim, lim_key = _check_registration_limits(
+        ok_lim, lim_key, lim_usage = _check_registration_limits(
             event, user_assignments, interaction.guild, user, 1, "player")
         if not ok_lim:
-            await send_feedback(interaction, t(lim_key, lang), ephemeral=True)
+            await send_feedback(interaction, t(lim_key, lang, usage=lim_usage), ephemeral=True)
             return False
 
         squad_name, status = _player_register(event, user_assignments, user_id, display_name, squad_type, roles)
@@ -1374,10 +1423,10 @@ class EventActionView(ui.View):
         # reject right here on button press. The seat-% cap needs the squad size and
         # is checked once the type is picked (SquadRegistrationView); the precise full
         # check still runs in register_squad (race safety).
-        ok_lim, lim_key = _check_squad_count_cap(
+        ok_lim, lim_key, lim_usage = _check_squad_count_cap(
             event, user_assignments, interaction.guild, interaction.user, "rep")
         if not ok_lim:
-            await interaction.response.send_message(t(lim_key, lang), ephemeral=True)
+            await interaction.response.send_message(t(lim_key, lang, usage=lim_usage), ephemeral=True)
             return
 
         settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
@@ -1650,11 +1699,11 @@ class SquadRegistrationView(BaseView):
             self._type_fits = True
             if event:
                 size = _get_squad_sizes(event).get(self.selected_type, 1)
-                ok, key = _check_seat_cap(event, user_assignments, interaction.guild,
-                                          interaction.user, size)
+                ok, key, usage = _check_seat_cap(event, user_assignments, interaction.guild,
+                                                 interaction.user, size)
                 if not ok:
                     self._type_fits = False
-                    content += f"\n⚠️ {t(key, lang)}"
+                    content += f"\n⚠️ {t(key, lang, usage=usage)}"
 
         self.continue_button.disabled = not (self._ready() and self._type_fits)
         await interaction.response.edit_message(content=content, view=self)

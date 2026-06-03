@@ -139,19 +139,58 @@ class TestSplitCaps(unittest.TestCase):
             ua, guild, _Member([EARLY]), "rep")[0])
 
 
+class TestCapUsageStrings(unittest.TestCase):
+    """Usage strings shown in the confirm/reject messages."""
+
+    def test_seat_cap_usage(self):
+        # 4 seats used of 98 → 4%, cap 50%.
+        ev = _event(community_rep_cap_percent=50, max_player_slots=98, squads={"s1": {"size": 4}})
+        guild = _Guild({10: _Member([EARLY])})
+        self.assertEqual(bot._seat_cap_usage(ev, {"10": ["s1"]}, guild, _Member([EARLY])), "4%/50%")
+        # None when uncapped / open / ungrouped.
+        self.assertIsNone(bot._seat_cap_usage(_event(), {}, _Guild({}), _Member([EARLY])))
+        self.assertIsNone(bot._seat_cap_usage(
+            _event(registration_open=True, community_rep_cap_percent=50), {}, _Guild({}), _Member([EARLY])))
+        self.assertIsNone(bot._seat_cap_usage(
+            _event(community_rep_cap_percent=50), {}, _Guild({}), _Member([999])))
+
+    def test_squad_role_cap_usage(self):
+        # Member holds two early-access roles; show the most-used one.
+        ev = _event(community_rep_role_ids=[EARLY, EARLY2], early_access_squads_per_role=5,
+                    squads={"s1": {"size": 6}, "s2": {"size": 6}})
+        ua = {"10": ["s1"], "20": ["s2"]}
+        guild = _Guild({10: _Member([EARLY, EARLY2]), 20: _Member([EARLY])})
+        # EARLY has 2 squads, EARLY2 has 1 → binding is 2/5.
+        self.assertEqual(bot._squad_role_cap_usage(ev, ua, guild, _Member([EARLY, EARLY2])), "2/5")
+        self.assertIsNone(bot._squad_role_cap_usage(_event(), {}, _Guild({}), _Member([EARLY])))
+
+    def test_check_returns_usage_on_block(self):
+        ev = _event(community_rep_cap_percent=5, max_player_slots=98, squads={"s1": {"size": 4}})
+        ua = {"10": ["s1"]}
+        guild = _Guild({10: _Member([EARLY])})
+        ok, key, usage = bot._check_seat_cap(ev, ua, guild, _Member([EARLY]), 1)
+        self.assertFalse(ok)
+        self.assertTrue(usage and usage.endswith("/5%"))
+        ev2 = _event(early_access_squads_per_role=1, squads={"s1": {"size": 6}})
+        ok, key, usage = bot._check_squad_count_cap(ev2, {"10": ["s1"]},
+                                                    _Guild({10: _Member([EARLY])}), _Member([EARLY]), "rep")
+        self.assertFalse(ok)
+        self.assertEqual(usage, "1/1")
+
+
 class TestCheckRegistrationLimits(unittest.TestCase):
     def test_seat_cap_rejects(self):
         ev = _event(community_rep_cap_percent=5,  # cap = 4 seats
                     squads={"s1": {"size": 4}})
         ua = {"10": ["s1"]}
         guild = _Guild({10: _Member([EARLY])})
-        ok, key = bot._check_registration_limits(ev, ua, guild, _Member([EARLY]), 1, "rep")
+        ok, key, _usage = bot._check_registration_limits(ev, ua, guild, _Member([EARLY]), 1, "rep")
         self.assertFalse(ok)
         self.assertEqual(key, "gate.seat_cap_reached")
 
     def test_seat_cap_allows_under(self):
         ev = _event(community_rep_cap_percent=50)  # cap = 49
-        ok, key = bot._check_registration_limits(ev, {}, _Guild({}), _Member([EARLY]), 6, "rep")
+        ok, key, _usage = bot._check_registration_limits(ev, {}, _Guild({}), _Member([EARLY]), 6, "rep")
         self.assertTrue(ok)
         self.assertIsNone(key)
 
@@ -159,7 +198,7 @@ class TestCheckRegistrationLimits(unittest.TestCase):
         ev = _event(early_access_squads_per_role=1, squads={"s1": {"size": 6}})
         ua = {"10": ["s1"]}
         guild = _Guild({10: _Member([EARLY])})
-        ok, key = bot._check_registration_limits(ev, ua, guild, _Member([EARLY]), 6, "rep")
+        ok, key, _usage = bot._check_registration_limits(ev, ua, guild, _Member([EARLY]), 6, "rep")
         self.assertFalse(ok)
         self.assertEqual(key, "gate.squad_role_cap_reached")
 
@@ -167,12 +206,12 @@ class TestCheckRegistrationLimits(unittest.TestCase):
         ev = _event(mode="player", early_access_squads_per_role=1,
                     squads={"Inf 1": {"members": [{"user_id": "10"}]}})
         guild = _Guild({10: _Member([EARLY])})
-        ok, key = bot._check_registration_limits(ev, {}, guild, _Member([EARLY]), 1, "player")
+        ok, key, _usage = bot._check_registration_limits(ev, {}, guild, _Member([EARLY]), 1, "player")
         self.assertTrue(ok)  # squad-count cap is rep-only; no seat-% cap set
 
     def test_ungrouped_member_unrestricted(self):
         ev = _event(community_rep_cap_percent=1)
-        ok, key = bot._check_registration_limits(ev, {}, _Guild({}), _Member([999]), 50, "rep")
+        ok, key, _usage = bot._check_registration_limits(ev, {}, _Guild({}), _Member([999]), 50, "rep")
         self.assertTrue(ok)
         self.assertIsNone(key)
 
@@ -193,7 +232,7 @@ class TestCheckRegistrationLimits(unittest.TestCase):
                     squads={"s1": {"size": 6}})
         ua = {"10": ["s1"]}
         guild = _Guild({10: _Member([EARLY])})
-        ok, key = bot._check_registration_limits(ev, ua, guild, _Member([EARLY]), 6, "rep")
+        ok, key, _usage = bot._check_registration_limits(ev, ua, guild, _Member([EARLY]), 6, "rep")
         self.assertTrue(ok)
         self.assertIsNone(key)
 
@@ -228,7 +267,13 @@ class TestI18nKeys(unittest.TestCase):
         "gate.seat_cap_reached", "gate.squad_role_cap_reached",
         "limit.prefix.regular", "limit.prefix.early", "limit.squads_per_user", "limit.squads_per_role",
         "wizard.cap_regular_squads_title", "wizard.playstyle_step_title", "wizard.playstyle_step_desc",
+        "squad.cap_info_seat", "squad.cap_info_squads",
     ]
+
+    def test_gate_messages_have_usage_placeholder(self):
+        for k in ("gate.seat_cap_reached", "gate.squad_role_cap_reached"):
+            for lang in ("de", "en"):
+                self.assertIn("{usage}", _STRINGS[k][lang])
 
     def test_present_both_languages(self):
         for k in self.KEYS:

@@ -522,6 +522,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "(Deine Squads: {current}/{max})",
         "en": "(Your squads: {current}/{max})",
     },
+    "squad.cap_info_seat": {
+        "de": "Vorab-Zugang-Slots: {usage}",
+        "en": "Early-access slots: {usage}",
+    },
+    "squad.cap_info_squads": {
+        "de": "Vorab-Zugang-Squads: {usage}",
+        "en": "Early-access squads: {usage}",
+    },
     "squad.unregistered": {
         "de": "Squad **{name}** wurde abgemeldet.",
         "en": "Squad **{name}** has been unregistered.",
@@ -1599,12 +1607,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "21. Max squads per early-access role",
     },
     "gate.seat_cap_reached": {
-        "de": "Das Slot-Kontingent deiner Anmeldegruppe für dieses Event ist erschöpft.",
-        "en": "Your registration group's slot quota for this event is full.",
+        "de": "Slot-Kontingent deiner Anmeldegruppe: {usage} — würde das Limit überschreiten.",
+        "en": "Your registration group's slot quota: {usage} — would exceed the cap.",
     },
     "gate.squad_role_cap_reached": {
-        "de": "Das Squad-Limit deiner Vorab-Zugang-Rolle ist erreicht.",
-        "en": "Your early-access role's squad limit is reached.",
+        "de": "Squad-Limit deiner Vorab-Zugang-Rolle: {usage} — würde das Limit überschreiten.",
+        "en": "Your early-access role's squad limit: {usage} — would exceed the cap.",
     },
 
     "log.event_edited": {
