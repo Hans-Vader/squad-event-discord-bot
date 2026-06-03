@@ -529,39 +529,55 @@ def _early_access_role_squad_counts(event, user_assignments, guild):
     return counts
 
 
-def _check_registration_limits(event, user_assignments, guild, member, added_seats, mode):
-    """Enforce per-register-type caps. Returns (allowed, message_key_or_None).
+def _check_seat_cap(event, user_assignments, guild, member, added_seats):
+    """Early-access seat-% cap only. Returns (allowed, message_key_or_None).
 
-    - Seat % cap: per register type (group total of player seats), both modes.
-    - Early-access squads-per-role: rep mode only; counts toward EACH early-access
-      role the member holds.
-
-    Both limits are early-access-only and apply only during the early-access window;
-    once registration is open to everyone, they're lifted.
+    Needs the squad size (added_seats), so it's checked once the squad type is
+    known. Lifted once registration is open.
     """
     if event.get("registration_open"):
         return True, None
-
     group = _member_register_type(member, event)
     if group is None:
         return True, None
-
     cap = _seat_cap_slots(event, group)
-    if cap is not None:
-        used = _group_seats_used(event, user_assignments, guild, group)
-        if used + added_seats > cap:
-            return False, "gate.seat_cap_reached"
-
-    if mode == "rep" and group == "community_rep":
-        limit = event.get("early_access_squads_per_role")
-        if limit is not None:
-            counts = _early_access_role_squad_counts(event, user_assignments, guild)
-            held = {r.id for r in getattr(member, "roles", [])}
-            for rid in event.get("community_rep_role_ids", []):
-                if rid in held and counts.get(rid, 0) + 1 > limit:
-                    return False, "gate.squad_role_cap_reached"
-
+    if cap is None:
+        return True, None
+    used = _group_seats_used(event, user_assignments, guild, group)
+    if used + added_seats > cap:
+        return False, "gate.seat_cap_reached"
     return True, None
+
+
+def _check_squad_count_cap(event, user_assignments, guild, member, mode):
+    """Early-access per-role squad-count cap only (rep mode). Returns (allowed, key).
+
+    Count-based (size-independent), so it can be checked as early as the button
+    press. Counts toward EACH early-access role the member holds. Lifted once
+    registration is open.
+    """
+    if event.get("registration_open"):
+        return True, None
+    if mode != "rep" or _member_register_type(member, event) != "community_rep":
+        return True, None
+    limit = event.get("early_access_squads_per_role")
+    if limit is None:
+        return True, None
+    counts = _early_access_role_squad_counts(event, user_assignments, guild)
+    held = {r.id for r in getattr(member, "roles", [])}
+    for rid in event.get("community_rep_role_ids", []):
+        if rid in held and counts.get(rid, 0) + 1 > limit:
+            return False, "gate.squad_role_cap_reached"
+    return True, None
+
+
+def _check_registration_limits(event, user_assignments, guild, member, added_seats, mode):
+    """Full early-access cap check (seat-% + per-role squad count) — final authority
+    used at registration time. Returns (allowed, message_key_or_None)."""
+    ok, key = _check_seat_cap(event, user_assignments, guild, member, added_seats)
+    if not ok:
+        return ok, key
+    return _check_squad_count_cap(event, user_assignments, guild, member, mode)
 
 
 def _resolve_reg_message(msg_key: str, lang: str) -> str:
@@ -1354,6 +1370,16 @@ class EventActionView(ui.View):
                     await interaction.response.send_message(t("squad.max_reached", lang, current=len(current), max=max_squads), ephemeral=True)
                 return
 
+        # Count-based caps (early-access per-role squad cap) are size-independent, so
+        # reject right here on button press. The seat-% cap needs the squad size and
+        # is checked once the type is picked (SquadRegistrationView); the precise full
+        # check still runs in register_squad (race safety).
+        ok_lim, lim_key = _check_squad_count_cap(
+            event, user_assignments, interaction.guild, interaction.user, "rep")
+        if not ok_lim:
+            await interaction.response.send_message(t(lim_key, lang), ephemeral=True)
+            return
+
         settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
         view = SquadRegistrationView(gid, cid, event)
         desc_key = "squad.step_1_desc" if event.get("playstyle_enabled", True) else "squad.step_1_desc_no_playstyle"
@@ -1562,6 +1588,7 @@ class SquadRegistrationView(BaseView):
         self.playstyle_enabled = bool(event.get("playstyle_enabled", True))
         self.selected_playstyle = None if self.playstyle_enabled else "Normal"
         self.event = event
+        self._type_fits = True  # set False if the picked type exceeds the early-access seat-% cap
 
         sizes = _get_squad_sizes(event)
         lang = get_guild_language(guild_id)
@@ -1612,8 +1639,25 @@ class SquadRegistrationView(BaseView):
         setattr(self, attr, select.values[0])
         for opt in select.options:
             opt.default = opt.value == select.values[0]
-        self.continue_button.disabled = not self._ready()
-        await interaction.response.edit_message(content=self._build_status_content(), view=self)
+
+        content = self._build_status_content()
+        # The early-access seat-% cap depends on the squad size, so check it the
+        # moment the type is selected. If this type won't fit, warn and keep
+        # Continue disabled so the user can pick a smaller type.
+        if attr == "selected_type":
+            lang = get_guild_language(self.guild_id)
+            event, user_assignments, _ = _get_channel_event(self.guild_id, self.channel_id)
+            self._type_fits = True
+            if event:
+                size = _get_squad_sizes(event).get(self.selected_type, 1)
+                ok, key = _check_seat_cap(event, user_assignments, interaction.guild,
+                                          interaction.user, size)
+                if not ok:
+                    self._type_fits = False
+                    content += f"\n⚠️ {t(key, lang)}"
+
+        self.continue_button.disabled = not (self._ready() and self._type_fits)
+        await interaction.response.edit_message(content=content, view=self)
 
     async def _continue(self, interaction):
         if not self._ready():

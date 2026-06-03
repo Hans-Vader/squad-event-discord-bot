@@ -100,6 +100,45 @@ class TestEarlyAccessRoleCounts(unittest.TestCase):
         self.assertEqual(counts[EARLY2], 1)
 
 
+class TestSplitCaps(unittest.TestCase):
+    """The seat-% cap and the per-role squad-count cap are checked independently."""
+
+    def test_seat_cap_only(self):
+        ev = _event(community_rep_cap_percent=5, squads={"s1": {"size": 4}})  # cap = 4
+        ua = {"10": ["s1"]}
+        guild = _Guild({10: _Member([EARLY])})
+        self.assertEqual(bot._check_seat_cap(ev, ua, guild, _Member([EARLY]), 1)[1],
+                         "gate.seat_cap_reached")
+        self.assertTrue(bot._check_seat_cap(_event(community_rep_cap_percent=50), {},
+                                            _Guild({}), _Member([EARLY]), 6)[0])
+        # Seat cap ignores the per-role squad cap entirely.
+        self.assertTrue(bot._check_seat_cap(
+            _event(early_access_squads_per_role=1, squads={"s1": {"size": 6}}),
+            {"10": ["s1"]}, _Guild({10: _Member([EARLY])}), _Member([EARLY]), 6)[0])
+        # Lifted once open; no-op for ungrouped.
+        self.assertTrue(bot._check_seat_cap(
+            _event(registration_open=True, community_rep_cap_percent=1), {}, _Guild({}),
+            _Member([EARLY]), 50)[0])
+        self.assertTrue(bot._check_seat_cap(
+            _event(community_rep_cap_percent=1), {}, _Guild({}), _Member([999]), 50)[0])
+
+    def test_squad_count_cap_only(self):
+        ev = _event(early_access_squads_per_role=1, squads={"s1": {"size": 6}})
+        ua = {"10": ["s1"]}
+        guild = _Guild({10: _Member([EARLY])})
+        self.assertEqual(bot._check_squad_count_cap(ev, ua, guild, _Member([EARLY]), "rep")[1],
+                         "gate.squad_role_cap_reached")
+        # Count cap ignores the seat-% cap; rep-only; lifted once open.
+        self.assertTrue(bot._check_squad_count_cap(
+            _event(community_rep_cap_percent=5, squads={"s1": {"size": 99}}),
+            {"10": ["s1"]}, _Guild({10: _Member([EARLY])}), _Member([EARLY]), "rep")[0])
+        self.assertTrue(bot._check_squad_count_cap(ev, ua, guild, _Member([EARLY]), "player")[0])
+        self.assertTrue(bot._check_squad_count_cap(
+            _event(registration_open=True, early_access_squads_per_role=1,
+                   squads={"s1": {"size": 6}}),
+            ua, guild, _Member([EARLY]), "rep")[0])
+
+
 class TestCheckRegistrationLimits(unittest.TestCase):
     def test_seat_cap_rejects(self):
         ev = _event(community_rep_cap_percent=5,  # cap = 4 seats
