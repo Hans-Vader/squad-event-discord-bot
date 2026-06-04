@@ -381,8 +381,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "The event has already started. Registration is no longer possible.",
     },
     "reg.opened_announcement": {
-        "de": "**Die Registrierung für {name} ist jetzt geöffnet!**\nMeldet eure Squads an!",
-        "en": "**Registration for {name} is now open!**\nRegister your squads!",
+        "de": "**Die Registrierung für {name} ist jetzt geöffnet!**\nRegistriert euch jetzt!",
+        "en": "**Registration for {name} is now open!**\nRegister now!",
     },
     "reg.early_access_announcement": {
         "de": "**Ihr habt Early Access zur Anmeldung für {name}!**\nIhr könnt eure Squads bereits jetzt anmelden.",
@@ -412,6 +412,34 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Die Anmeldungen für '{name}' wurden geschlossen.",
         "en": "Registration for '{name}' has been closed.",
     },
+    "reg.open_confirm_title": {
+        "de": "Anmeldung öffnen?",
+        "en": "Open registration?",
+    },
+    "reg.open_confirm": {
+        "de": "Möchtest du die Anmeldung für **{name}** öffnen?",
+        "en": "Open registration for **{name}**?",
+    },
+    "reg.open_confirm_ping": {
+        "de": "⚠️ Beim Öffnen wird eine Benachrichtigung gesendet an: {targets}",
+        "en": "⚠️ Opening will send a notification to: {targets}",
+    },
+    "reg.open_button": {
+        "de": "Öffnen",
+        "en": "Open",
+    },
+    "reg.close_confirm_title": {
+        "de": "Anmeldung schließen?",
+        "en": "Close registration?",
+    },
+    "reg.close_confirm": {
+        "de": "Möchtest du die Anmeldung für **{name}** schließen?",
+        "en": "Close registration for **{name}**?",
+    },
+    "reg.close_button": {
+        "de": "Schließen",
+        "en": "Close",
+    },
 
     # ── Squad registration ────────────────────────────────────────────────
     "squad.register_title": {
@@ -419,8 +447,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Register squad",
     },
     "squad.step_1_title": {
-        "de": "Squad anmelden - Schritt 1/2",
-        "en": "Register squad - Step 1/2",
+        "de": "Squad anmelden",
+        "en": "Register squad",
     },
     "squad.step_1_desc": {
         "de": "Wähle den Squad-Typ und Spielstil:",
@@ -506,10 +534,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Alle {type}-Plätze sind belegt! Squad **{name}** ({type}, {size} Spieler) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
         "en": "All {type} slots are taken! Squad **{name}** ({type}, {size} players) has been waitlisted (position {pos}). {info}",
     },
-    "squad.duplicate_name": {
-        "de": "Ein Squad mit dem Namen '{name}' existiert bereits.",
-        "en": "A squad with the name '{name}' already exists.",
-    },
     "squad.max_reached": {
         "de": "Du hast bereits {current}/{max} Squads angemeldet.",
         "en": "You already have {current}/{max} squads registered.",
@@ -521,6 +545,14 @@ _STRINGS: dict[str, dict[str, str]] = {
     "squad.your_squads_info": {
         "de": "(Deine Squads: {current}/{max})",
         "en": "(Your squads: {current}/{max})",
+    },
+    "squad.cap_info_seat": {
+        "de": "Vorab-Zugang-Slots: {usage}",
+        "en": "Early-access slots: {usage}",
+    },
+    "squad.cap_info_squads": {
+        "de": "Vorab-Zugang-Squads: {usage}",
+        "en": "Early-access squads: {usage}",
     },
     "squad.unregistered": {
         "de": "Squad **{name}** wurde abgemeldet.",
@@ -670,6 +702,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "🚁 Heli",
         "en": "🚁 Heli",
     },
+    # Plain (no emoji) labels for localizing auto-generated player-mode squad
+    # names, e.g. the stored "Infantry 1" renders as "Infanterie 1" in German.
+    "squad.label_infantry": {
+        "de": "Infanterie",
+        "en": "Infantry",
+    },
+    "squad.label_vehicle": {
+        "de": "Fahrzeug",
+        "en": "Vehicle",
+    },
+    "squad.label_heli": {
+        "de": "Heli",
+        "en": "Heli",
+    },
     "embed.squads_label": {
         "de": "Squads",
         "en": "Squads",
@@ -697,8 +743,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Register squad",
     },
     "button.join": {
-        "de": "Beitreten",
-        "en": "Join",
+        "de": "Anmelden",
+        "en": "Register",
     },
     "button.register_caster": {
         "de": "Als Caster anmelden",
@@ -755,6 +801,14 @@ _STRINGS: dict[str, dict[str, str]] = {
     "player.unregister_confirm": {
         "de": "Möchtest du dich wirklich aus **{squad}** abmelden? Du verlierst deinen Platz.",
         "en": "Do you really want to unregister from **{squad}**? You will lose your spot.",
+    },
+    "player.unregister_waitlist_confirm": {
+        "de": "Möchtest du dich wirklich von der **{type}**-Warteliste abmelden? Du verlierst deinen Wartelistenplatz.",
+        "en": "Do you really want to remove yourself from the **{type}** waitlist? You will lose your waitlist spot.",
+    },
+    "player.waitlist_unregistered": {
+        "de": "✅ Du wurdest von der **{type}**-Warteliste entfernt.",
+        "en": "✅ You have been removed from the **{type}** waitlist.",
     },
     "player.not_player_mode": {
         "de": "Dieses Event ist nicht im Player-Modus.",
@@ -919,6 +973,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "log.event_created": {
         "de": "Event erstellt: '{name}' am {date} um {time} durch {user}. {reg_info}",
         "en": "Event created: '{name}' on {date} at {time} by {user}. {reg_info}",
+    },
+    "log.event_created_settings_title": {
+        "de": "Event-Einstellungen: {name}",
+        "en": "Event settings: {name}",
     },
     "log.event_deleted": {
         "de": "Event gelöscht: {user} hat das Event '{name}' gelöscht",
@@ -1323,12 +1381,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Days of month: {days}",
     },
     "edit.property.duration": {
-        "de": "17. Dauer",
+        "de": "17. Eventdauer",
         "en": "17. Duration",
     },
     "edit.property.spawn_offset": {
-        "de": "18. Folgeevent-Verzögerung",
-        "en": "18. Spawn delay",
+        "de": "18. Folge-Event erstellen nach",
+        "en": "18. Recreate next event after",
     },
     "edit.property.playstyle_enabled": {
         "de": "19. Spielstil-Auswahl bei Anmeldung",
@@ -1430,6 +1488,165 @@ _STRINGS: dict[str, dict[str, str]] = {
     "edit.recurrence.weekday_full.4": {"de": "Freitag", "en": "Friday"},
     "edit.recurrence.weekday_full.5": {"de": "Samstag", "en": "Saturday"},
     "edit.recurrence.weekday_full.6": {"de": "Sonntag", "en": "Sunday"},
+
+    # ── View-based DM editor (dropdown + Fertig/Done) ─────────────────────
+    "edit.select_property_v2": {
+        "de": "Wähle unten eine Eigenschaft aus, um sie zu ändern.",
+        "en": "Choose a property from the dropdown below to change it.",
+    },
+    "edit.footer_hint_v2": {
+        "de": "Eigenschaft wählen · „Fertig“ zum Beenden",
+        "en": "Pick a property · “Done” to finish",
+    },
+    "edit.pick_property": {
+        "de": "Eigenschaft auswählen…",
+        "en": "Select a property…",
+    },
+    "edit.pick_value": {
+        "de": "Wert auswählen…",
+        "en": "Select a value…",
+    },
+    "edit.open_input": {
+        "de": "Wert eingeben",
+        "en": "Enter value",
+    },
+    "edit.input_label": {
+        "de": "Neuer Wert",
+        "en": "New value",
+    },
+    "edit.event_link": {
+        "de": "Zum Event",
+        "en": "Go to event",
+    },
+    "edit.updated_inline": {
+        "de": "{prop} aktualisiert.",
+        "en": "{prop} updated.",
+    },
+    "edit.required": {
+        "de": "Dieses Feld darf nicht leer sein.",
+        "en": "This field cannot be empty.",
+    },
+    "edit.image_send": {
+        "de": "Bild senden / URL",
+        "en": "Send image / URL",
+    },
+    "edit.image_clear": {
+        "de": "Bild entfernen",
+        "en": "Remove image",
+    },
+    "edit.image_waiting": {
+        "de": "Sende jetzt ein Bild (Datei) oder füge eine HTTPS-URL ein. Du hast 5 Minuten Zeit.",
+        "en": "Now send an image (file) or paste an HTTPS URL. You have 5 minutes.",
+    },
+    "edit.recurrence.field.interval": {
+        "de": "Intervall (ganze Zahl ≥ 1)",
+        "en": "Interval (integer ≥ 1)",
+    },
+    "edit.recurrence.field.date": {
+        "de": "Datum: TT.MM.JJJJ HH:MM",
+        "en": "Date: DD.MM.YYYY HH:MM",
+    },
+    "edit.recurrence.field.weekdays": {
+        "de": "Wochentage, z.B. 1,3,5",
+        "en": "Weekdays, e.g. 1,3,5",
+    },
+    "edit.recurrence.field.month_days": {
+        "de": "Tage im Monat, z.B. 1,15",
+        "en": "Days of month, e.g. 1,15",
+    },
+    "edit.recurrence.opt.never": {"de": "Nie", "en": "Never"},
+    "edit.recurrence.opt.every_minutes": {"de": "Alle X Minuten", "en": "Every X minutes"},
+    "edit.recurrence.opt.every_hours": {"de": "Alle X Stunden", "en": "Every X hours"},
+    "edit.recurrence.opt.every_days": {"de": "Alle X Tage", "en": "Every X days"},
+    "edit.recurrence.opt.every_weeks": {"de": "Alle X Wochen", "en": "Every X weeks"},
+    "edit.recurrence.opt.every_month": {"de": "Jeden Monat", "en": "Every month"},
+    "edit.recurrence.opt.first_weekday": {"de": "Erster {day} des nächsten Monats", "en": "First {day} of next month"},
+    "edit.recurrence.opt.fourth_weekday": {"de": "Vierter {day} des nächsten Monats", "en": "Fourth {day} of next month"},
+    "edit.recurrence.opt.last_weekday": {"de": "Letzter {day} des nächsten Monats", "en": "Last {day} of next month"},
+    "edit.recurrence.opt.specific_date": {"de": "Bestimmtes Datum (einmalig)", "en": "Specific date (one-shot)"},
+    "edit.recurrence.opt.specific_weekdays": {"de": "Bestimmte Wochentage", "en": "Specific weekdays"},
+    "edit.recurrence.opt.specific_month_days": {"de": "Bestimmte Tage im Monat", "en": "Specific days of month"},
+
+    # ── Per-register-type registration limits ────────────────────────────
+    "limit.none": {
+        "de": "Kein Limit",
+        "en": "No limit",
+    },
+    "limit.prefix.regular": {
+        "de": "Regulär",
+        "en": "Regular",
+    },
+    "limit.prefix.early": {
+        "de": "Vorab-Zugang",
+        "en": "Early access",
+    },
+    "limit.squads_per_user": {
+        "de": "{n} Squads/Nutzer",
+        "en": "{n} squads/user",
+    },
+    "limit.squads_per_role": {
+        "de": "{n} Squads/Rolle",
+        "en": "{n} squads/role",
+    },
+    "percent.value": {
+        "de": "{n}%",
+        "en": "{n}%",
+    },
+    "wizard.slot_limits_title": {
+        "de": "Slot-Limits — Registrierungskontingente",
+        "en": "Slot Limits — Registration Quotas",
+    },
+    "wizard.slot_limits_desc": {
+        "de": ("Optional Anmeldegruppe Limitierung.\n"
+               "Caster zählen nie mit. Prozente beziehen sich nur auf die Spieler-Slots.\n"
+               "• Vorab-Zugang-Rollen — max. % der Slots (alle Vorab-Rollen teilen sich diesen Anteil)\n"
+               "• Vorab-Zugang-Rollen — max. Squads pro Rolle (Gesamtsumme je Rolle)\n"
+               "• Reguläre Rollen — max. Squads pro Nutzer (Limit je Person)\n"
+               "Lass einen Wert auf „Kein Limit“ oder überspringe für keine Begrenzung."),
+        "en": ("Optionally registration group cap.\n"
+               "Casters never count. Percentages are of the player slots only.\n"
+               "• Early-access roles — max % of slots (all early-access roles share this)\n"
+               "• Early-access roles — max squads per role (each role's total)\n"
+               "• Regular roles — max squads per user (limit per person)\n"
+               "Leave any on “No limit” or skip for no restriction."),
+    },
+    "wizard.cap_early_pct_title": {
+        "de": "Vorab-Zugang-Rollen — max. % der Slots",
+        "en": "Early-access roles — max % of slots",
+    },
+    "wizard.cap_regular_squads_title": {
+        "de": "Reguläre Rollen — max. Squads pro Nutzer",
+        "en": "Regular roles — max squads per user",
+    },
+    "wizard.cap_early_squads_title": {
+        "de": "Vorab-Zugang-Rollen — max. Squads pro Rolle",
+        "en": "Early-access roles — max squads per role",
+    },
+    "wizard.playstyle_step_title": {
+        "de": "Spielstil-Auswahl",
+        "en": "Playstyle selection",
+    },
+    "wizard.playstyle_step_desc": {
+        "de": "Sollen Squads bei der Anmeldung einen Spielstil wählen?",
+        "en": "Should squads pick a playstyle when registering?",
+    },
+    "edit.property.early_pct_cap": {
+        "de": "20. Slot-Limit: Vorab-Zugang (%)",
+        "en": "20. Slot limit: early access (%)",
+    },
+    "edit.property.early_squad_cap": {
+        "de": "21. Max. Squads pro Vorab-Zugang-Rolle",
+        "en": "21. Max squads per early-access role",
+    },
+    "gate.seat_cap_reached": {
+        "de": "Slot-Kontingent deiner Anmeldegruppe: {usage} — würde das Limit überschreiten.",
+        "en": "Your registration group's slot quota: {usage} — would exceed the cap.",
+    },
+    "gate.squad_role_cap_reached": {
+        "de": "Squad-Limit deiner Vorab-Zugang-Rolle: {usage} — würde das Limit überschreiten.",
+        "en": "Your early-access role's squad limit: {usage} — would exceed the cap.",
+    },
+
     "log.event_edited": {
         "de": "Event bearbeitet: {user} hat '{property}' geändert (Event: {name})",
         "en": "Event edited: {user} changed '{property}' (Event: {name})",
@@ -1481,16 +1698,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "{min} minutes before",
     },
     "wizard.squad_rep_title": {
-        "de": "Squad-Rep Rolle (optional)",
-        "en": "Squad rep role (optional)",
+        "de": "Rollen mit Anmeldeberechtigung (optional)",
+        "en": "Roles allowed to register (optional)",
     },
     "wizard.squad_rep_desc": {
         "de": "Wähle die Rolle, die Squads anmelden darf:",
         "en": "Select the role that may register squads:",
     },
     "wizard.community_rep_title": {
-        "de": "Community-Rep (optional)",
-        "en": "Community rep (optional)",
+        "de": "Rollen mit Vorab-Zugang (optional)",
+        "en": "Roles with early access (optional)",
     },
     "wizard.caster_role_title": {
         "de": "Caster-Rollen (optional)",
@@ -1541,12 +1758,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Role configuration",
     },
     "wizard.summary_squad_roles": {
-        "de": "Squad-Rep Rollen/Benutzer",
-        "en": "Squad rep roles/users",
+        "de": "Rollen mit Anmeldeberechtigung",
+        "en": "Roles allowed to register",
     },
     "wizard.summary_community_roles": {
-        "de": "Community-Rep Rollen/Benutzer",
-        "en": "Community rep roles/users",
+        "de": "Rollen mit Vorab-Zugang",
+        "en": "Roles with early access",
     },
     "wizard.summary_caster_roles": {
         "de": "Caster-Rollen/Benutzer",
@@ -1564,6 +1781,30 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Keine",
         "en": "None",
     },
+    "wizard.summary_recurrence": {
+        "de": "Wiederholung",
+        "en": "Recurrence",
+    },
+    "wizard.summary_duration": {
+        "de": "Eventdauer",
+        "en": "Duration",
+    },
+    "wizard.summary_spawn_offset": {
+        "de": "Folge-Event erstellen nach",
+        "en": "Recreate next event after",
+    },
+    "wizard.summary_slot_limits": {
+        "de": "Slot-Limits",
+        "en": "Slot limits",
+    },
+    "wizard.summary_early_pct_cap": {
+        "de": "Vorab-Zugang (% der Slots)",
+        "en": "Early access (% of slots)",
+    },
+    "wizard.summary_early_squad_cap": {
+        "de": "Max. Squads pro Vorab-Zugang-Rolle",
+        "en": "Max squads per early-access role",
+    },
     "wizard.reminder_title": {
         "de": "Event-Erinnerung",
         "en": "Event Reminder",
@@ -1573,8 +1814,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Optionally select a reminder to be sent before the event starts.",
     },
     "wizard.reminder_placeholder": {
-        "de": "Erinnerung auswählen...",
-        "en": "Select reminder...",
+        "de": "Erinnerung vor Event-Start...",
+        "en": "Reminder before event start...",
     },
     "wizard.reminder_none": {
         "de": "Keine Erinnerung",
@@ -1617,12 +1858,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Reminder & Countdown",
     },
     "wizard.timing_desc": {
-        "de": "Konfiguriere optionale Erinnerung und Countdown-Nachricht.",
-        "en": "Configure optional reminder and countdown message.",
+        "de": "Optional: eine Erinnerung vor dem Event-Start und ein Countdown vor dem Anmeldestart. Wähle unten oder überspringe.",
+        "en": "Optional: a reminder before the event starts, and a countdown before registration opens. Pick below or skip.",
     },
     "wizard.countdown_placeholder": {
-        "de": "Countdown auswählen...",
-        "en": "Select countdown...",
+        "de": "Countdown vor Anmeldestart...",
+        "en": "Countdown before registration opens...",
     },
     "wizard.countdown_none": {
         "de": "Kein Countdown",
@@ -1673,16 +1914,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Countdown",
     },
     "wizard.ping_select_title": {
-        "de": "Rollen/Benutzer bei Öffnung pingen?",
-        "en": "Ping roles/users on open?",
+        "de": "Ausgewählte Rollen/Benutzer bei Anmeldestart benachrichtigen?",
+        "en": "Notify the selected roles/users when registration opens?",
     },
     "wizard.ping_yes": {
-        "de": "Ja — Rollen/Benutzer benachrichtigen",
-        "en": "Yes — Notify roles/users",
+        "de": "Ja — bei Anmeldestart per @-Erwähnung pingen",
+        "en": "Yes — @mention them when registration opens",
     },
     "wizard.ping_no": {
-        "de": "Nein — Keine Benachrichtigung",
-        "en": "No — No notification",
+        "de": "Nein — ohne Benachrichtigung öffnen",
+        "en": "No — open silently, no notification",
     },
     "wizard.summary_ping": {
         "de": "Ping bei Öffnung",
@@ -1966,10 +2207,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Dieser Benutzer hat keine aktive Zuweisung.",
         "en": "This user has no active assignment.",
     },
-    "admin.duplicate_squad": {
-        "de": "Ein Squad mit dem Namen '{name}' existiert bereits.",
-        "en": "A squad with the name '{name}' already exists.",
-    },
     "admin.invalid_size": {
         "de": "Ungültige Größe. Muss mindestens 1 sein.",
         "en": "Invalid size. Must be at least 1.",
@@ -1993,8 +2230,8 @@ _STRINGS: dict[str, dict[str, str]] = {
 
     # ── Role gating ──────────────────────────────────────────────────────
     "gate.squad_denied": {
-        "de": "Du hast nicht die erforderliche Rolle oder Berechtigung, um Squads anzumelden.",
-        "en": "You do not have the required role or permission to register squads.",
+        "de": "Du hast nicht die erforderliche Rolle oder Berechtigung, um dich anzumelden.",
+        "en": "You do not have the required role or permission to register.",
     },
     "gate.caster_denied": {
         "de": "Du hast nicht die erforderliche Rolle oder Berechtigung, um dich als Caster anzumelden.",
@@ -2003,16 +2240,16 @@ _STRINGS: dict[str, dict[str, str]] = {
 
     # ── Post-creation wizard ─────────────────────────────────────────────
     "wizard.squad_roles_title": {
-        "de": "Rollen-Konfiguration — Schritt 1/2: Squad-Rollen",
-        "en": "Role Configuration — Step 1/2: Squad Roles",
+        "de": "Rollen-Konfiguration: Anmeldeberechtigung",
+        "en": "Role Configuration: Registration Access",
     },
     "wizard.squad_roles_desc": {
-        "de": "Wähle optional Rollen/Benutzer, die Squads anmelden dürfen und Vorab-Zugang erhalten.\nÜberspringe diesen Schritt, wenn jeder Squads anmelden darf.",
-        "en": "Optionally select roles/users who can register squads and get early access.\nSkip this step if anyone should be allowed to register squads.",
+        "de": "Wähle optional, wer sich anmelden darf und wer Vorab-Zugang vor der Öffnung erhält.\nÜberspringe diesen Schritt, wenn jeder sich anmelden darf.",
+        "en": "Optionally choose who may register, and who gets early access before registration opens.\nSkip this step if anyone may register.",
     },
     "wizard.caster_roles_title": {
-        "de": "Rollen-Konfiguration — Schritt 2/2: Caster-Rollen",
-        "en": "Role Configuration — Step 2/2: Caster Roles",
+        "de": "Rollen-Konfiguration: Caster-Rollen",
+        "en": "Role Configuration: Caster Roles",
     },
     "wizard.caster_roles_desc": {
         "de": "Wähle optional Rollen/Benutzer, die sich als Caster anmelden dürfen und Vorab-Zugang erhalten.\nÜberspringe diesen Schritt, wenn jeder sich als Caster anmelden darf.",

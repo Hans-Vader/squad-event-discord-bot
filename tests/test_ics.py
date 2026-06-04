@@ -7,7 +7,7 @@ import types
 import unittest
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bot"))
 
 
 class _AttrStub(types.ModuleType):
@@ -17,12 +17,24 @@ class _AttrStub(types.ModuleType):
         return placeholder
 
 
-if "discord" not in sys.modules:
+# Prefer the real libraries when installed (dev/CI always has discord.py as a
+# hard dependency). Only fall back to a lightweight stub when they are absent, so
+# this module never replaces a real `discord` in sys.modules and thereby breaks a
+# sibling test that does `import bot` (which needs the real discord.ext.commands).
+try:
+    import discord  # noqa: F401
+except ImportError:
     sys.modules["discord"] = _AttrStub("discord")
-if "dotenv" not in sys.modules:
+try:
+    import dotenv  # noqa: F401
+except ImportError:
     dotenv_stub = types.ModuleType("dotenv")
     dotenv_stub.load_dotenv = lambda *a, **kw: None
     sys.modules["dotenv"] = dotenv_stub
+
+# Pin the ICS timezone so the CEST/CET offset assertions are deterministic
+# regardless of the test host's TZ (config reads EVENT_TIMEZONE at import).
+os.environ.setdefault("EVENT_TIMEZONE", "Europe/Berlin")
 
 from utils import (  # noqa: E402
     _ics_dt,

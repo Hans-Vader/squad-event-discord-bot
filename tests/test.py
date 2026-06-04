@@ -19,14 +19,14 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("Test/test.log"),
+        logging.FileHandler("tests/test.log"),
         logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger("event_bot_test")
 
 # Pfade für Testdaten
-TEST_DATA_FILE = "Test/test_event_data.pkl"
+TEST_DATA_FILE = "tests/test_event_data.pkl"
 
 # Globale Testdaten
 event_data = {}

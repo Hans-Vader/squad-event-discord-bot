@@ -343,11 +343,15 @@ def build_default_event(settings: dict, name: str, date: str, time_str: str,
         "announcement_sent": False,
         "ping_on_open": overrides.get("ping_on_open", False),
         "ping_message_ids": [],
+        "early_access_message_id": None,
+        "announcement_message_id": None,
         "recurrence": overrides.get("recurrence", {"type": "never"}),
         "duration_minutes": overrides.get("duration_minutes", 120),
         "spawn_offset_minutes": overrides.get("spawn_offset_minutes", 5),
         "mode": overrides.get("mode", "rep"),
         "playstyle_enabled": overrides.get("playstyle_enabled", True),
+        "community_rep_cap_percent": overrides.get("community_rep_cap_percent", None),
+        "early_access_squads_per_role": overrides.get("early_access_squads_per_role", None),
     }
 
 
@@ -373,6 +377,8 @@ _CARRY_OVER_KEYS = (
     "duration_minutes", "spawn_offset_minutes",
     "mode",
     "playstyle_enabled",
+    "community_rep_cap_percent",
+    "early_access_squads_per_role",
 )
 
 
@@ -416,6 +422,7 @@ def clone_event_for_recurrence(old_event: dict, new_start: datetime) -> dict:
         "countdown_sent": False,
         "announcement_sent": False,
         "ping_message_ids": [],
+        "announcement_message_id": None,
     })
 
     # Registration start: preserve the delta from the original event start.

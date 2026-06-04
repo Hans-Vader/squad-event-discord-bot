@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # Skript zum Ausführen der Testsuite für den Discord-Bot
+# Hinweis: Aus dem Projekt-Stammverzeichnis ausführen (z. B. ./tests/run_test.sh),
+# da die Pfade relativ zum aktuellen Verzeichnis aufgelöst werden.
 echo "=== Event-Bot Testsuite ==="
 echo "Wählen Sie eine Option:"
 echo "1) Vollständige Testsuite ausführen"
@@ -13,17 +15,17 @@ read -p "Auswahl: " choice
 case $choice in
   1)
     echo "Führe vollständige Testsuite aus..."
-    python3 Test/test.py
-    echo "Test abgeschlossen. Die Ergebnisse wurden in Test/test.log gespeichert."
-    echo "Sie können die Zusammenfassung mit 'cat Test/test_summary.md' anzeigen."
+    python3 tests/test.py
+    echo "Test abgeschlossen. Die Ergebnisse wurden in tests/test.log gespeichert."
+    echo "Sie können die Zusammenfassung mit 'cat tests/test_summary.md' anzeigen."
     ;;
   2)
     echo "Starte interaktiven Test..."
-    python3 Test/interactive_test.py
+    python3 tests/interactive_test.py
     ;;
   3)
     echo "Zeige Test-Zusammenfassung..."
-    cat Test/test_summary.md
+    cat tests/test_summary.md
     ;;
   q)
     echo "Programm wird beendet."

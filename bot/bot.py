@@ -14,7 +14,9 @@ import discord
 from discord import app_commands, ui
 from discord.ext import commands
 import asyncio
+import time
 from datetime import datetime, timedelta
+from typing import Optional
 import logging
 import sys
 import csv
@@ -40,6 +42,7 @@ from utils import (
     export_log_file, clear_log_file, logger,
     resolve_event_defaults, role_label,
     _player_register, _player_unregister, _player_remove_from_waitlist,
+    _player_waitlist_type, _player_self_unregister,
     build_event_ics, _ics_slug,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
@@ -85,8 +88,12 @@ bot = EventBot()
 # ---------------------------------------------------------------------------
 # Locks per guild to protect concurrent state mutations
 _guild_locks: dict[int, asyncio.Lock] = {}
-# Track active DM edit sessions: user_id -> {guild_id, channel_id}
+# Track active DM edit sessions: user_id ->
+# {guild_id, channel_id, db_id, lang, dm_message, active_view, last_activity}
 _active_edit_sessions: dict[int, dict] = {}
+# A session whose view's on_timeout never fired is considered stuck after this
+# many seconds, so a new /edit can reclaim it instead of being blocked forever.
+SESSION_STALE_AFTER_SECONDS = 660
 # Debounced display update tasks per (guild_id, channel_id)
 _display_update_tasks: dict[tuple[int, int], asyncio.Task] = {}
 
@@ -111,6 +118,8 @@ _EDIT_PROPERTIES = [
     (17, "duration_minutes",       "edit.property.duration",        "duration",        None),
     (18, "spawn_offset_minutes",   "edit.property.spawn_offset",    "spawn_offset",    None),
     (19, "playstyle_enabled",      "edit.property.playstyle_enabled","bool",           None),
+    (20, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
+    (21, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
 ]
 
 
@@ -137,19 +146,34 @@ async def _dispatch_player_register(interaction, guild_id: int, channel_id: int,
 async def _dispatch_player_unregister(interaction, guild_id: int, channel_id: int,
                                       lang: str, user_assignments: dict):
     """Show a confirmation dialog for player-mode self-unregister. Entry point
-    for the Unregister button."""
+    for the Unregister button. Works for seated players and for players who
+    only hold a waitlist spot."""
     user_id = str(interaction.user.id)
-    if user_id not in (user_assignments or {}):
-        await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
+    if user_id in (user_assignments or {}):
+        squad_names = user_assignments.get(user_id, [])
+        squad_name = squad_names[0] if squad_names else "?"
+        embed = discord.Embed(
+            title=t("player.unregister_confirm_title", lang),
+            description=t("player.unregister_confirm", lang, squad=squad_name),
+            color=discord.Color.red())
+        view = PlayerUnregisterConfirmView(guild_id, channel_id, squad_name)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         return
-    squad_names = user_assignments.get(user_id, [])
-    squad_name = squad_names[0] if squad_names else "?"
-    embed = discord.Embed(
-        title=t("player.unregister_confirm_title", lang),
-        description=t("player.unregister_confirm", lang, squad=squad_name),
-        color=discord.Color.red())
-    view = PlayerUnregisterConfirmView(guild_id, channel_id, squad_name)
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    # Not seated — a waitlisted player can still unregister themselves.
+    event, _, _ = _get_channel_event(guild_id, channel_id)
+    wl_type = _player_waitlist_type(event, user_id) if event else None
+    if wl_type is not None:
+        type_label = t(f"embed.type_{wl_type}", lang) if wl_type in SQUAD_TYPES else wl_type
+        embed = discord.Embed(
+            title=t("player.unregister_confirm_title", lang),
+            description=t("player.unregister_waitlist_confirm", lang, type=type_label),
+            color=discord.Color.red())
+        view = PlayerUnregisterConfirmView(guild_id, channel_id, None)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        return
+
+    await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +231,8 @@ def _ensure_event_keys(event: dict):
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "mode": "rep",
         "playstyle_enabled": True,
+        "community_rep_cap_percent": None,
+        "early_access_squads_per_role": None,
     }
     for key, default in defaults.items():
         if key not in event:
@@ -265,6 +291,23 @@ def _resolve_squad_name(event, squad_id):
             if len(entry) > 4 and entry[4] == squad_id:
                 return entry[0]
     return squad_id
+
+
+def _resolve_squad_meta(event, squad_id):
+    """Resolve a squad_id to its ``(name, type, size)`` for display.
+
+    Looks in the active squads first, then the per-type waitlists (whose entries
+    are ``(name, type, playstyle, size, squad_id, rep_name)`` tuples). Falls back
+    to the raw id with ``None`` type/size when the squad can't be found.
+    """
+    data = event.get("squads", {}).get(squad_id)
+    if data:
+        return data.get("name", squad_id), data.get("type"), data.get("size")
+    for st in ("infantry", "vehicle", "heli"):
+        for entry in event.get(f"{st}_waitlist", []):
+            if len(entry) > 4 and entry[4] == squad_id:
+                return entry[0], entry[1], entry[3]
+    return squad_id, None, None
 
 
 # ---------------------------------------------------------------------------
@@ -421,6 +464,189 @@ def check_role_gate(event, user, registration_type):
             return True, None
 
     return False, deny_key
+
+
+# ---------------------------------------------------------------------------
+# Per-register-type registration limits (seat % + early-access squads/role)
+# ---------------------------------------------------------------------------
+def _member_register_type(member, event):
+    """Classify a member by registration role group. Roles only, early-access first.
+
+    Plain role membership (NOT has_role) so admins are classified by their actual
+    roles rather than bypassing into every group.
+    """
+    if member is None:
+        return None
+    held = {r.id for r in getattr(member, "roles", [])}
+    if held & set(event.get("community_rep_role_ids", [])):
+        return "community_rep"
+    if held & set(event.get("squad_rep_role_ids", [])):
+        return "squad_rep"
+    return None
+
+
+def _exempt_from_user_squad_limit(event, member) -> bool:
+    """Whether a member skips the per-user squad limit (max_squads_per_user, #12).
+
+    During the early-access window, early-access members are governed by the
+    per-role squad cap instead of the per-user limit. Once registration opens the
+    per-role cap lifts and #12 applies to them like everyone else.
+    """
+    if event.get("registration_open"):
+        return False
+    return _member_register_type(member, event) == "community_rep"
+
+
+def _seat_cap_slots(event, group):
+    """Max player slots a register-type group may consume, or None if uncapped.
+
+    Only early access (community_rep) has a seat-% cap; regular registration has none.
+    """
+    if group != "community_rep":
+        return None
+    pct = event.get("community_rep_cap_percent")
+    if pct is None:
+        return None
+    return int(pct) * int(event.get("max_player_slots", 0)) // 100
+
+
+def _squad_rep_map(user_assignments):
+    """Reverse map squad_id → rep user_id from user_assignments."""
+    rep_of = {}
+    for uid, sids in (user_assignments or {}).items():
+        for sid in sids:
+            rep_of[sid] = uid
+    return rep_of
+
+
+def _group_seats_used(event, user_assignments, guild, group):
+    """Player seats currently consumed by registrants of `group` (both modes)."""
+    if guild is None:
+        return 0
+    used = 0
+    if is_player_mode(event):
+        for squad in event.get("squads", {}).values():
+            for m in squad.get("members", []):
+                member = guild.get_member(int(m["user_id"]))
+                if member and _member_register_type(member, event) == group:
+                    used += 1
+    else:
+        rep_of = _squad_rep_map(user_assignments)
+        for sid, squad in event.get("squads", {}).items():
+            uid = rep_of.get(sid)
+            if uid is None:
+                continue
+            member = guild.get_member(int(uid))
+            if member and _member_register_type(member, event) == group:
+                used += squad.get("size", 0)
+    return used
+
+
+def _early_access_role_squad_counts(event, user_assignments, guild):
+    """Per early-access role: how many registered squads its holders have (rep mode)."""
+    counts = {rid: 0 for rid in event.get("community_rep_role_ids", [])}
+    if guild is None or not counts:
+        return counts
+    rep_of = _squad_rep_map(user_assignments)
+    for sid in event.get("squads", {}):
+        uid = rep_of.get(sid)
+        if uid is None:
+            continue
+        member = guild.get_member(int(uid))
+        if not member:
+            continue
+        held = {r.id for r in getattr(member, "roles", [])}
+        for rid in counts:
+            if rid in held:
+                counts[rid] += 1
+    return counts
+
+
+def _seat_cap_usage(event, user_assignments, guild, member):
+    """Current early-access seat usage as a '12%/50%' string, or None if no seat-%
+    cap applies to this member (not early-access / open / unset)."""
+    if event.get("registration_open"):
+        return None
+    group = _member_register_type(member, event)
+    if group != "community_rep":
+        return None
+    pct = event.get("community_rep_cap_percent")
+    if pct is None:
+        return None
+    max_slots = int(event.get("max_player_slots", 0)) or 0
+    used = _group_seats_used(event, user_assignments, guild, group)
+    used_pct = round(used / max_slots * 100) if max_slots else 0
+    return f"{used_pct}%/{int(pct)}%"
+
+
+def _squad_role_cap_usage(event, user_assignments, guild, member):
+    """Current early-access per-role squad usage as a '3/5' string (the member's
+    most-used early-access role), or None if no per-role cap applies."""
+    if event.get("registration_open"):
+        return None
+    if _member_register_type(member, event) != "community_rep":
+        return None
+    limit = event.get("early_access_squads_per_role")
+    if limit is None:
+        return None
+    counts = _early_access_role_squad_counts(event, user_assignments, guild)
+    held = {r.id for r in getattr(member, "roles", [])}
+    max_count = max((counts.get(rid, 0) for rid in event.get("community_rep_role_ids", [])
+                     if rid in held), default=0)
+    return f"{max_count}/{int(limit)}"
+
+
+def _check_seat_cap(event, user_assignments, guild, member, added_seats):
+    """Early-access seat-% cap only. Returns (allowed, message_key_or_None, usage).
+
+    Needs the squad size (added_seats), so it's checked once the squad type is
+    known. Lifted once registration is open. `usage` is the current '12%/50%'
+    string on block (else None).
+    """
+    if event.get("registration_open"):
+        return True, None, None
+    group = _member_register_type(member, event)
+    if group is None:
+        return True, None, None
+    cap = _seat_cap_slots(event, group)
+    if cap is None:
+        return True, None, None
+    used = _group_seats_used(event, user_assignments, guild, group)
+    if used + added_seats > cap:
+        return False, "gate.seat_cap_reached", _seat_cap_usage(event, user_assignments, guild, member)
+    return True, None, None
+
+
+def _check_squad_count_cap(event, user_assignments, guild, member, mode):
+    """Early-access per-role squad-count cap only (rep mode). Returns
+    (allowed, key, usage).
+
+    Count-based (size-independent), so it can be checked as early as the button
+    press. Counts toward EACH early-access role the member holds. Lifted once
+    registration is open. `usage` is the current '3/5' string on block (else None).
+    """
+    if event.get("registration_open"):
+        return True, None, None
+    if mode != "rep" or _member_register_type(member, event) != "community_rep":
+        return True, None, None
+    limit = event.get("early_access_squads_per_role")
+    if limit is None:
+        return True, None, None
+    counts = _early_access_role_squad_counts(event, user_assignments, guild)
+    held = {r.id for r in getattr(member, "roles", [])}
+    for rid in event.get("community_rep_role_ids", []):
+        if rid in held and counts.get(rid, 0) + 1 > limit:
+            return False, "gate.squad_role_cap_reached", _squad_role_cap_usage(event, user_assignments, guild, member)
+    return True, None, None
+
+
+def _check_registration_limits(event, user_assignments, guild, member, added_seats, mode):
+    """Full early-access cap check (seat-% + per-role squad count) — final authority
+    used at registration time. Returns (allowed, message_key_or_None, usage)."""
+    ok, key, usage = _check_seat_cap(event, user_assignments, guild, member, added_seats)
+    if not ok:
+        return ok, key, usage
+    return _check_squad_count_cap(event, user_assignments, guild, member, mode)
 
 
 def _resolve_reg_message(msg_key: str, lang: str) -> str:
@@ -604,10 +830,13 @@ async def send_event_details(channel, event, db_id, lang="de", caster_enabled=Tr
     """Send or edit event embed in channel."""
     try:
         embed = format_event_details(event, lang, caster_enabled)
+        start_dt = compute_event_start(event)
+        event_started = start_dt is not None and datetime.now() >= start_dt
         view = EventActionView(
             lang,
             mode=event.get("mode", "rep"),
             is_closed=event.get("is_closed", False),
+            event_started=event_started,
         )
 
         if not isinstance(embed, discord.Embed):
@@ -661,19 +890,27 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
 
         user_id = str(interaction.user.id)
         max_squads = event.get("max_squads_per_user", 1)
-        current_squads = get_user_squad_ids(user_assignments, user_id)
-        if len(current_squads) >= max_squads:
-            if max_squads == 1 and current_squads:
-                await send_feedback(interaction, t("squad.already_assigned", lang, name=_resolve_squad_name(event, current_squads[0])), ephemeral=True)
-            else:
-                await send_feedback(interaction, t("squad.max_reached", lang, current=len(current_squads), max=max_squads), ephemeral=True)
-            return False
+        is_ea_exempt = _exempt_from_user_squad_limit(event, interaction.user)
+        if not is_ea_exempt:
+            current_squads = get_user_squad_ids(user_assignments, user_id)
+            if len(current_squads) >= max_squads:
+                if max_squads == 1 and current_squads:
+                    await send_feedback(interaction, t("squad.already_assigned", lang, name=_resolve_squad_name(event, current_squads[0])), ephemeral=True)
+                else:
+                    await send_feedback(interaction, t("squad.max_reached", lang, current=len(current_squads), max=max_squads), ephemeral=True)
+                return False
 
         sizes = _get_squad_sizes(event)
         size = sizes.get(squad_type, sizes["infantry"])
         squad_id = generate_squad_id(squad_name, len(event.get("squads", {})))
         available = event["max_player_slots"] - event["player_slots_used"]
         rep_name = interaction.user.display_name
+
+        ok_lim, lim_key, lim_usage = _check_registration_limits(
+            event, user_assignments, interaction.guild, interaction.user, size, "rep")
+        if not ok_lim:
+            await send_feedback(interaction, t(lim_key, lang, usage=lim_usage), ephemeral=True)
+            return False
 
         wl_key = _waitlist_key(squad_type)
         if _is_squad_type_full(event, squad_type):
@@ -699,12 +936,21 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
             result = "waitlisted"
             wl_pos = len(event[wl_key])
 
-    type_labels = {"infantry": "Infanterie" if lang == "de" else "Infantry",
-                   "vehicle": "Fahrzeug" if lang == "de" else "Vehicle",
-                   "heli": "Heli"}
-    type_label = type_labels.get(squad_type, squad_type)
-    user_squads_now = len(get_user_squad_ids(user_assignments, user_id))
-    squad_info = t("squad.your_squads_info", lang, current=user_squads_now, max=max_squads)
+    type_label = t(f"squad.label_{squad_type}", lang) if squad_type in SQUAD_TYPES else squad_type
+    if is_ea_exempt:
+        # Early-access member: show their early-access cap usage (post-registration),
+        # not the per-user #12 count they're exempt from.
+        parts = []
+        seat_usage = _seat_cap_usage(event, user_assignments, interaction.guild, interaction.user)
+        if seat_usage:
+            parts.append(t("squad.cap_info_seat", lang, usage=seat_usage))
+        squad_usage = _squad_role_cap_usage(event, user_assignments, interaction.guild, interaction.user)
+        if squad_usage:
+            parts.append(t("squad.cap_info_squads", lang, usage=squad_usage))
+        squad_info = ("(" + " · ".join(parts) + ")") if parts else ""
+    else:
+        user_squads_now = len(get_user_squad_ids(user_assignments, user_id))
+        squad_info = t("squad.your_squads_info", lang, current=user_squads_now, max=max_squads)
     playstyle_enabled = event.get("playstyle_enabled", True)
 
     if result == "registered":
@@ -757,6 +1003,12 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
             await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
             return False
 
+        ok_lim, lim_key, lim_usage = _check_registration_limits(
+            event, user_assignments, interaction.guild, user, 1, "player")
+        if not ok_lim:
+            await send_feedback(interaction, t(lim_key, lang, usage=lim_usage), ephemeral=True)
+            return False
+
         squad_name, status = _player_register(event, user_assignments, user_id, display_name, squad_type, roles)
         if status in ("registered", "waitlisted"):
             save_event(db_id, event, user_assignments)
@@ -789,7 +1041,8 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
 
 
 async def player_unregister(interaction, guild_id, channel_id, target_user=None):
-    """Unregister a single player (player mode)."""
+    """Unregister a single player (player mode) — from their squad or, if they
+    only hold a waitlist spot, from the waitlist."""
     lock = _get_guild_lock(guild_id)
     lang = get_guild_language(guild_id)
     user = target_user or interaction.user
@@ -805,13 +1058,23 @@ async def player_unregister(interaction, guild_id, channel_id, target_user=None)
             await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
             return False
 
-        ok, squad_name, promoted = _player_unregister(event, user_assignments, user_id)
+        status, name_or_type, promoted = _player_self_unregister(event, user_assignments, user_id)
         save_event(db_id, event, user_assignments)
 
-    if not ok:
+    if status is None:
         await send_feedback(interaction, t("player.not_registered", lang), ephemeral=True)
         return False
 
+    if status == "waitlist":
+        type_label = t(f"embed.type_{name_or_type}", lang) if name_or_type in SQUAD_TYPES else name_or_type
+        await send_feedback(interaction, t("player.waitlist_unregistered", lang, type=type_label), ephemeral=True)
+        await send_to_log_channel(
+            t("log.player_waitlist_removed", lang, user=user.name, type=type_label),
+            guild=interaction.guild)
+        await update_event_displays(guild_id, channel_id)
+        return True
+
+    squad_name = name_or_type
     await send_feedback(interaction, t("player.unregistered", lang, squad=squad_name or "?"), ephemeral=True)
     await send_to_log_channel(
         t("log.player_unregistered", lang, user=user.name, squad=squad_name or "?"),
@@ -1116,30 +1379,33 @@ class BaseConfirmationView(BaseView):
 
 class EventActionView(ui.View):
     """Persistent view with event action buttons."""
-    def __init__(self, lang="de", mode: str = "rep", is_closed: bool = False):
+    def __init__(self, lang="de", mode: str = "rep", is_closed: bool = False, event_started: bool = False):
         super().__init__(timeout=None)
 
+        reg_disabled = is_closed or event_started
         if mode == "player":
             self.add_item(ui.Button(
                 label=t("button.join", lang), style=discord.ButtonStyle.success,
                 custom_id="event_register_squad", emoji="🪖",
-                disabled=is_closed,
+                disabled=reg_disabled,
             ))
         else:
             self.add_item(ui.Button(
                 label=t("button.register_squad", lang), style=discord.ButtonStyle.success,
                 custom_id="event_register_squad", emoji="🪖",
-                disabled=is_closed,
+                disabled=reg_disabled,
             ))
             self.add_item(ui.Button(
                 label=t("button.register_caster", lang), style=discord.ButtonStyle.primary,
                 custom_id="event_register_caster", emoji="🎙️",
-                disabled=is_closed,
+                disabled=reg_disabled,
             ))
+        # Unregister stays enabled when merely closed, so members who registered while open can
+        # always withdraw — but it's disabled once the event itself has started.
         self.add_item(ui.Button(
             label=t("button.unregister", lang), style=discord.ButtonStyle.danger,
             custom_id="event_unregister", emoji="❌",
-            disabled=is_closed,
+            disabled=event_started,
         ))
         self.add_item(ui.Button(
             label=t("button.ics", lang), style=discord.ButtonStyle.secondary,
@@ -1190,13 +1456,24 @@ class EventActionView(ui.View):
             return
 
         user_id = str(interaction.user.id)
-        max_squads = event.get("max_squads_per_user", 1)
-        current = get_user_squad_ids(user_assignments, user_id)
-        if len(current) >= max_squads:
-            if max_squads == 1 and current:
-                await interaction.response.send_message(t("squad.already_assigned", lang, name=_resolve_squad_name(event, current[0])), ephemeral=True)
-            else:
-                await interaction.response.send_message(t("squad.max_reached", lang, current=len(current), max=max_squads), ephemeral=True)
+        if not _exempt_from_user_squad_limit(event, interaction.user):
+            max_squads = event.get("max_squads_per_user", 1)
+            current = get_user_squad_ids(user_assignments, user_id)
+            if len(current) >= max_squads:
+                if max_squads == 1 and current:
+                    await interaction.response.send_message(t("squad.already_assigned", lang, name=_resolve_squad_name(event, current[0])), ephemeral=True)
+                else:
+                    await interaction.response.send_message(t("squad.max_reached", lang, current=len(current), max=max_squads), ephemeral=True)
+                return
+
+        # Count-based caps (early-access per-role squad cap) are size-independent, so
+        # reject right here on button press. The seat-% cap needs the squad size and
+        # is checked once the type is picked (SquadRegistrationView); the precise full
+        # check still runs in register_squad (race safety).
+        ok_lim, lim_key, lim_usage = _check_squad_count_cap(
+            event, user_assignments, interaction.guild, interaction.user, "rep")
+        if not ok_lim:
+            await interaction.response.send_message(t(lim_key, lang, usage=lim_usage), ephemeral=True)
             return
 
         settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
@@ -1270,15 +1547,20 @@ class EventActionView(ui.View):
             view = CasterUnregisterConfirmView(gid, cid)
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         elif len(assignments) == 1:
-            display_name = _resolve_squad_name(event, assignments[0]) if event else assignments[0]
-            embed = discord.Embed(
-                title=t("squad.unregister_title", lang),
-                description=t("squad.unregister_confirm", lang, name=display_name),
-                color=discord.Color.red())
-            view = SquadUnregisterConfirmView(gid, cid, assignments[0])
+            embed, view = _build_squad_unregister_confirm(event, gid, cid, assignments[0], lang)
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         else:
-            options = [discord.SelectOption(label=_resolve_squad_name(event, sn) if event else sn, value=sn) for sn in assignments if sn != "__caster__"]
+            options = []
+            for sn in assignments:
+                if sn == "__caster__":
+                    continue
+                if event:
+                    name, stype, size = _resolve_squad_meta(event, sn)
+                else:
+                    name, stype, size = sn, None, None
+                # Secondary line in the dropdown, e.g. "⚔️ Infantry (6 players)".
+                desc = t(f"squad.type_{stype}", lang, size=size) if stype in SQUAD_TYPES else None
+                options.append(discord.SelectOption(label=name, description=desc, value=sn))
             view = UserSquadUnregisterSelector(gid, cid, options)
             await interaction.response.send_message(t("squad.pick_to_unregister", lang), view=view, ephemeral=True)
 
@@ -1407,6 +1689,7 @@ class SquadRegistrationView(BaseView):
         self.playstyle_enabled = bool(event.get("playstyle_enabled", True))
         self.selected_playstyle = None if self.playstyle_enabled else "Normal"
         self.event = event
+        self._type_fits = True  # set False if the picked type exceeds the early-access seat-% cap
 
         sizes = _get_squad_sizes(event)
         lang = get_guild_language(guild_id)
@@ -1457,8 +1740,25 @@ class SquadRegistrationView(BaseView):
         setattr(self, attr, select.values[0])
         for opt in select.options:
             opt.default = opt.value == select.values[0]
-        self.continue_button.disabled = not self._ready()
-        await interaction.response.edit_message(content=self._build_status_content(), view=self)
+
+        content = self._build_status_content()
+        # The early-access seat-% cap depends on the squad size, so check it the
+        # moment the type is selected. If this type won't fit, warn and keep
+        # Continue disabled so the user can pick a smaller type.
+        if attr == "selected_type":
+            lang = get_guild_language(self.guild_id)
+            event, user_assignments, _ = _get_channel_event(self.guild_id, self.channel_id)
+            self._type_fits = True
+            if event:
+                size = _get_squad_sizes(event).get(self.selected_type, 1)
+                ok, key, usage = _check_seat_cap(event, user_assignments, interaction.guild,
+                                                 interaction.user, size)
+                if not ok:
+                    self._type_fits = False
+                    content += f"\n⚠️ {t(key, lang, usage=usage)}"
+
+        self.continue_button.disabled = not (self._ready() and self._type_fits)
+        await interaction.response.edit_message(content=content, view=self)
 
     async def _continue(self, interaction):
         if not self._ready():
@@ -1519,6 +1819,18 @@ class SquadUnregisterConfirmView(BaseConfirmationView):
             return
         lang = get_guild_language(self.guild_id)
         await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
+
+
+def _build_squad_unregister_confirm(event, guild_id, channel_id, squad_id, lang):
+    """Build the red 'are you sure?' embed and Confirm/Cancel view shown before a
+    squad is unregistered. Shared by the single-squad path and the multi-squad
+    dropdown so both ask for confirmation identically."""
+    display_name = _resolve_squad_name(event, squad_id) if event else squad_id
+    embed = discord.Embed(
+        title=t("squad.unregister_title", lang),
+        description=t("squad.unregister_confirm", lang, name=display_name),
+        color=discord.Color.red())
+    return embed, SquadUnregisterConfirmView(guild_id, channel_id, squad_id)
 
 
 class PlayerUnregisterConfirmView(BaseConfirmationView):
@@ -1588,8 +1900,13 @@ class UserSquadUnregisterSelector(BaseView):
 
     async def _selected(self, interaction):
         selected = interaction.data["values"][0]
-        await interaction.response.defer(ephemeral=True)
-        await unregister_squad(interaction, self.guild_id, self.channel_id, selected)
+        lang = get_guild_language(self.guild_id)
+        event, _, _ = _get_channel_event(self.guild_id, self.channel_id)
+        embed, view = _build_squad_unregister_confirm(
+            event, self.guild_id, self.channel_id, selected, lang)
+        # Replace the dropdown in place with the Confirm/Cancel prompt; the actual
+        # removal still happens only in SquadUnregisterConfirmView._confirm.
+        await interaction.response.edit_message(content=None, embed=embed, view=view)
 
 
 # ---------------------------------------------------------------------------
@@ -1635,11 +1952,6 @@ class AdminActionView(BaseView):
     async def _edit(self, interaction):
         lang = get_guild_language(self.guild_id)
 
-        if interaction.user.id in _active_edit_sessions:
-            await interaction.response.send_message(
-                t("edit.active_session", lang), ephemeral=True)
-            return
-
         event, user_assignments, db_id = _get_channel_event(self.guild_id, self.channel_id)
         if not event:
             await interaction.response.send_message(
@@ -1647,21 +1959,7 @@ class AdminActionView(BaseView):
             return
 
         await interaction.response.defer(ephemeral=True)
-
-        try:
-            await interaction.user.create_dm()
-        except discord.Forbidden:
-            await interaction.followup.send(
-                t("edit.dm_blocked", lang), ephemeral=True)
-            return
-
-        _active_edit_sessions[interaction.user.id] = {
-            "guild_id": self.guild_id,
-            "channel_id": self.channel_id,
-        }
-        await interaction.followup.send(t("edit.dm_sent", lang), ephemeral=True)
-        bot.loop.create_task(
-            _run_dm_edit_session(interaction.user, self.guild_id, self.channel_id, db_id))
+        await start_dm_edit_session(interaction, self.guild_id, self.channel_id, db_id, lang)
 
     async def _delete(self, interaction):
         lang = get_guild_language(self.guild_id)
@@ -1682,62 +1980,35 @@ class AdminActionView(BaseView):
         cid = self.channel_id
         lang = get_guild_language(gid)
 
-        lock = _get_guild_lock(gid)
-        async with lock:
-            event, user_assignments, db_id = _get_channel_event(gid, cid)
-            if not event:
-                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-                return
-            if event.get("registration_open", False):
-                await send_feedback(interaction, t("reg.already_open", lang), ephemeral=True)
-                return
-            event["registration_open"] = True
-            event["is_closed"] = False
-            save_event(db_id, event, user_assignments)
+        event, _, _ = _get_channel_event(gid, cid)
+        if not event:
+            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+            return
+        if event.get("registration_open", False):
+            await send_feedback(interaction, t("reg.already_open", lang), ephemeral=True)
+            return
 
-        await send_feedback(interaction, t("reg.manually_opened", lang, name=event["name"]), ephemeral=True)
-
-        ch = bot.get_channel(cid)
-        if ch and event.get("ping_on_open", False):
-            ping_text = _build_ping_text(event)
-            if ping_text:
-                content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
-                ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-                event.setdefault("ping_message_ids", []).append(ping_msg.id)
-                save_event(db_id, event, user_assignments)
-
-        await update_event_displays(gid, cid)
-        await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild=interaction.guild)
+        # Confirm first — opening may send a ping to configured roles.
+        embed = _build_open_confirm_embed(event, lang)
+        view = OpenConfirmationView(gid, cid)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _close(self, interaction):
         gid = self.guild_id
         cid = self.channel_id
         lang = get_guild_language(gid)
 
-        lock = _get_guild_lock(gid)
-        async with lock:
-            event, user_assignments, db_id = _get_channel_event(gid, cid)
-            if not event:
-                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
-                return
-            event["is_closed"] = True
-            event["registration_open"] = False
-            save_event(db_id, event, user_assignments)
+        event, _, _ = _get_channel_event(gid, cid)
+        if not event:
+            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+            return
 
-        await send_feedback(interaction, t("reg.manually_closed", lang, name=event["name"]), ephemeral=True)
-        await send_to_log_channel(t("log.reg_closed", lang, user=interaction.user.name, name=event["name"]), guild=interaction.guild)
-        await update_event_displays(gid, cid)
-
-        ch = bot.get_channel(cid)
-        if ch:
-            for ping_msg_id in event.get("ping_message_ids", []):
-                try:
-                    ping_msg = await ch.fetch_message(ping_msg_id)
-                    await ping_msg.edit(
-                        content=t("ping.reg_closed", lang, name=event["name"]),
-                        allowed_mentions=discord.AllowedMentions.none())
-                except Exception:
-                    pass
+        embed = discord.Embed(
+            title=t("reg.close_confirm_title", lang),
+            description=t("reg.close_confirm", lang, name=event["name"]),
+            color=discord.Color.orange())
+        view = CloseConfirmationView(gid, cid)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _add_squad(self, interaction):
         lang = get_guild_language(self.guild_id)
@@ -2232,9 +2503,7 @@ class _AdminSquadNameModal(ui.Modal):
             add_user_assignment(user_assignments, rep_uid, squad_id)
             save_event(db_id, event, user_assignments)
 
-        type_labels = {"infantry": "Infanterie" if lang == "de" else "Infantry",
-                       "vehicle": "Fahrzeug" if lang == "de" else "Vehicle", "heli": "Heli"}
-        type_label = type_labels.get(self.squad_type, self.squad_type)
+        type_label = t(f"squad.label_{self.squad_type}", lang) if self.squad_type in SQUAD_TYPES else self.squad_type
         msg_key = "admin.squad_added" if event.get("playstyle_enabled", True) else "admin.squad_added_no_playstyle"
         await interaction.followup.send(
             t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=self.playstyle, status=status),
@@ -2367,6 +2636,8 @@ class _ConfirmRemoveView(BaseView):
         self.add_item(cancel_btn)
 
     async def _confirm(self, interaction):
+        if self.check_response(interaction):
+            return
         await interaction.response.defer(ephemeral=True)
         lang = get_guild_language(self.guild_id)
 
@@ -2412,6 +2683,8 @@ class _ConfirmRemoveView(BaseView):
             await update_event_displays(gid, cid)
 
     async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
         lang = get_guild_language(self.guild_id)
         await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
 
@@ -2474,6 +2747,45 @@ _DURATION_PRESETS = [30, 60, 120, 240, 360, 480, 720, 1440]
 _DURATION_KEYS = ["30m", "1h", "2h", "4h", "6h", "8h", "12h", "24h"]
 _SPAWN_PRESETS = [1, 5, 10, 30, 60, 360, 1440, 10080]
 _SPAWN_KEYS = ["1m", "5m", "10m", "30m", "1h", "6h", "1d", "1w"]
+# Registration-limit dropdowns. `None` = "no limit". Both fit Discord's 25-option cap.
+_PERCENT_PRESETS = [None, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95]
+_COUNT_PRESETS = [None, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+# Regular per-user squad limit (#12): required value 1–20, no "no limit".
+_REGULAR_SQUAD_PRESETS = list(range(1, 21))
+
+
+def _format_percent_value(percent, lang):
+    """Render a percentage cap; None → 'No limit'."""
+    if percent is None:
+        return t("limit.none", lang)
+    try:
+        return t("percent.value", lang, n=int(percent))
+    except (TypeError, ValueError):
+        return t("limit.none", lang)
+
+
+def _format_count_value(count, lang):
+    """Render a squad-count cap; None → 'No limit'."""
+    if count is None:
+        return t("limit.none", lang)
+    try:
+        return str(int(count))
+    except (TypeError, ValueError):
+        return t("limit.none", lang)
+
+
+def _format_squads_per_user(count, lang):
+    """Context-carrying value for the regular per-user squad dropdown."""
+    if count is None:
+        return t("limit.none", lang)
+    return t("limit.squads_per_user", lang, n=int(count))
+
+
+def _format_squads_per_role(count, lang):
+    """Context-carrying value for the early-access per-role squad dropdown."""
+    if count is None:
+        return t("limit.none", lang)
+    return t("limit.squads_per_role", lang, n=int(count))
 
 
 def _format_duration_value(minutes, lang):
@@ -2532,6 +2844,10 @@ def _format_property_value(event, key, vtype, lang):
         return _format_duration_value(val, lang)
     if vtype == "spawn_offset":
         return _format_spawn_offset_value(val, lang)
+    if vtype == "percent":
+        return _format_percent_value(val, lang)
+    if vtype == "squad_count":
+        return _format_count_value(val, lang)
     return str(val) if val is not None else not_set
 
 
@@ -2623,221 +2939,12 @@ def _validate_edit_value(message, key, vtype, lang):
     return text, None
 
 
-def _format_display_value(value, vtype, lang, event=None):
-    """Format a parsed value for the confirmation embed."""
-    if vtype == "recurrence":
-        return _format_recurrence(value, lang, event=event)
-    if vtype == "duration":
-        return _format_duration_value(value, lang)
-    if vtype == "spawn_offset":
-        return _format_spawn_offset_value(value, lang)
-    if vtype == "bool":
-        return t("edit.bool.enabled", lang) if value else t("edit.bool.disabled", lang)
-    if value is None:
-        return t("edit.not_set", lang)
-    if value == "__immediate__":
-        return t("wizard.summary_reg_immediate", lang)
-    if isinstance(value, datetime):
-        return value.strftime("%d.%m.%Y %H:%M")
-    return str(value)
-
-
 def _parse_int_list(text):
     """Parse comma/whitespace-separated integers. Returns None on any parse error."""
     try:
         return [int(p) for p in re.split(r"[,\s]+", text.strip()) if p]
     except ValueError:
         return None
-
-
-async def _prompt_int_min_one(user, dm_check, lang, is_cancel, prompt_key):
-    """Small helper: prompt for a positive integer. Returns (val, cancelled, timed_out)."""
-    await user.send(t(prompt_key, lang) + "\n" + t("edit.cancel_hint", lang))
-    while True:
-        try:
-            reply = await bot.wait_for("message", check=dm_check, timeout=300)
-        except asyncio.TimeoutError:
-            return None, False, True
-        if is_cancel(reply):
-            return None, True, False
-        try:
-            val = int(reply.content.strip())
-        except ValueError:
-            await user.send(t("edit.invalid_integer", lang))
-            continue
-        if val < 1:
-            await user.send(t("edit.invalid_integer", lang))
-            continue
-        return val, False, False
-
-
-async def _prompt_preset(user, dm_check, lang, is_cancel, prompt_key, values):
-    """Prompt with a preset list; returns (selected_value, cancelled, timed_out)."""
-    await user.send(t(prompt_key, lang) + "\n" + t("edit.cancel_hint", lang))
-    while True:
-        try:
-            reply = await bot.wait_for("message", check=dm_check, timeout=300)
-        except asyncio.TimeoutError:
-            return None, False, True
-        if is_cancel(reply):
-            return None, True, False
-        try:
-            choice = int(reply.content.strip())
-        except ValueError:
-            await user.send(t("edit.recurrence.invalid", lang))
-            continue
-        if 1 <= choice <= len(values):
-            return values[choice - 1], False, False
-        await user.send(t("edit.recurrence.invalid", lang))
-
-
-async def _prompt_recurrence(user, dm_check, lang, is_cancel, event):
-    """Multi-step DM flow to build a recurrence dict (flat 12-option menu).
-
-    Returns (value, cancelled, timed_out). If cancelled, value is None and the
-    caller should return to the overview. If timed_out, caller should break.
-    """
-    day_name = _event_weekday_name(event, lang)
-    event_time = event.get("time")
-    await user.send(
-        t("edit.recurrence.prompt", lang, day=day_name) + "\n" + t("edit.cancel_hint", lang))
-
-    simple = {
-        1: {"type": "never"},
-        6: {"type": "every_month"},
-        7: {"type": "first_weekday"},
-        8: {"type": "fourth_weekday"},
-        9: {"type": "last_weekday"},
-    }
-
-    while True:
-        try:
-            reply = await bot.wait_for("message", check=dm_check, timeout=300)
-        except asyncio.TimeoutError:
-            return None, False, True
-        if is_cancel(reply):
-            return None, True, False
-        try:
-            choice = int(reply.content.strip())
-        except ValueError:
-            await user.send(t("edit.recurrence.invalid", lang))
-            continue
-
-        if choice in simple:
-            return simple[choice], False, False
-
-        interval_map = {
-            2: ("every_minutes", "edit.recurrence.minutes.prompt"),
-            3: ("every_hours",   "edit.recurrence.hours.prompt"),
-            4: ("every_days",    "edit.recurrence.days.prompt"),
-            5: ("every_weeks",   "edit.recurrence.weeks.prompt"),
-        }
-        if choice in interval_map:
-            rtype, pkey = interval_map[choice]
-            n, cancelled, timed_out = await _prompt_int_min_one(user, dm_check, lang, is_cancel, pkey)
-            if timed_out:
-                return None, False, True
-            if cancelled:
-                return None, True, False
-            return {"type": rtype, "interval": n}, False, False
-
-        if choice == 10:  # specific_date
-            await user.send(t("edit.recurrence.specific_date.prompt", lang) + "\n" + t("edit.cancel_hint", lang))
-            while True:
-                try:
-                    reply = await bot.wait_for("message", check=dm_check, timeout=300)
-                except asyncio.TimeoutError:
-                    return None, False, True
-                if is_cancel(reply):
-                    return None, True, False
-                text = reply.content.strip()
-                parts = text.split(maxsplit=1)
-                date_str = parts[0]
-                time_str = parts[1] if len(parts) > 1 else (event_time or "20:00")
-                # Validate
-                try:
-                    datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
-                except ValueError:
-                    await user.send(t("edit.recurrence.invalid_specific_date", lang))
-                    continue
-                return {"type": "specific_date", "date": date_str, "time": time_str}, False, False
-
-        if choice == 11:  # specific_weekdays
-            await user.send(t("edit.recurrence.weekdays.prompt", lang) + "\n" + t("edit.cancel_hint", lang))
-            while True:
-                try:
-                    reply = await bot.wait_for("message", check=dm_check, timeout=300)
-                except asyncio.TimeoutError:
-                    return None, False, True
-                if is_cancel(reply):
-                    return None, True, False
-                nums = _parse_int_list(reply.content.strip())
-                if not nums or not all(1 <= n <= 7 for n in nums):
-                    await user.send(t("edit.recurrence.invalid_weekdays", lang))
-                    continue
-                weekdays = sorted({n - 1 for n in nums})
-                return {"type": "specific_weekdays", "weekdays": weekdays}, False, False
-
-        if choice == 12:  # specific_month_days
-            await user.send(t("edit.recurrence.month_days.prompt", lang) + "\n" + t("edit.cancel_hint", lang))
-            while True:
-                try:
-                    reply = await bot.wait_for("message", check=dm_check, timeout=300)
-                except asyncio.TimeoutError:
-                    return None, False, True
-                if is_cancel(reply):
-                    return None, True, False
-                nums = _parse_int_list(reply.content.strip())
-                if not nums or not all(1 <= n <= 31 for n in nums):
-                    await user.send(t("edit.recurrence.invalid_month_days", lang))
-                    continue
-                return {"type": "specific_month_days", "month_days": sorted(set(nums))}, False, False
-
-        await user.send(t("edit.recurrence.invalid", lang))
-
-
-class _EditConfirmView(ui.View):
-    def __init__(self, lang):
-        super().__init__(timeout=300)
-        self.result = None
-        btn_yes = ui.Button(label=t("general.confirm", lang), style=discord.ButtonStyle.success)
-        btn_yes.callback = self._confirm
-        self.add_item(btn_yes)
-        btn_no = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
-        btn_no.callback = self._cancel
-        self.add_item(btn_no)
-
-    async def _confirm(self, interaction):
-        self.result = "confirm"
-        await interaction.response.defer()
-        self.stop()
-
-    async def _cancel(self, interaction):
-        self.result = "cancel"
-        await interaction.response.defer()
-        self.stop()
-
-
-class _EditMoreView(ui.View):
-    def __init__(self, lang):
-        super().__init__(timeout=300)
-        self.result = None
-        btn_more = ui.Button(label=t("edit.yes_more", lang), style=discord.ButtonStyle.primary)
-        btn_more.callback = self._more
-        self.add_item(btn_more)
-        btn_done = ui.Button(label=t("edit.no_done", lang), style=discord.ButtonStyle.secondary)
-        btn_done.callback = self._done
-        self.add_item(btn_done)
-
-    async def _more(self, interaction):
-        self.result = "more"
-        await interaction.response.defer()
-        self.stop()
-
-    async def _done(self, interaction):
-        self.result = "done"
-        await interaction.response.defer()
-        self.stop()
 
 
 def _visible_edit_properties(event):
@@ -2850,265 +2957,865 @@ def _visible_edit_properties(event):
     return list(_EDIT_PROPERTIES)
 
 
-async def _run_dm_edit_session(user, guild_id, channel_id, db_id):
-    """Run the full DM-based event editing conversation."""
-    try:
-        lang = get_guild_language(guild_id)
-        cancel_word = t("edit.cancel_word", lang)
+# ═══════════════════════════════════════════════════════════════════════════
+# View-based DM event editor
+#
+# A persistent DM message shows a property dropdown + a "Fertig/Done" button.
+# Picking a property swaps in a small sub-editor (modal for text/numbers,
+# buttons for the bool, a dropdown for presets, a dropdown + modals for
+# recurrence, a hybrid listen step for the image). Each edit saves immediately
+# and returns to the overview; Done closes the session. Session state lives in
+# _active_edit_sessions; every view's on_timeout tears the session down.
+# ═══════════════════════════════════════════════════════════════════════════
 
-        def dm_check(m):
-            return m.author.id == user.id and isinstance(m.channel, discord.DMChannel)
+def _find_edit_property(key):
+    """Return the _EDIT_PROPERTIES tuple for a property key, or None."""
+    return next((p for p in _EDIT_PROPERTIES if p[1] == key), None)
 
-        def _is_cancel(msg):
-            return msg.content.strip().lower() == cancel_word
 
-        while True:
-            # Re-load event fresh each iteration
-            event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
-            if not event:
-                await user.send(t("general.no_active_event", lang))
-                break
+def _prop_short_label(label_key, lang):
+    """Property label without the leading 'NN. ' numbering used in the embed."""
+    return t(label_key, lang).split(". ", 1)[-1]
 
-            # Build grouped embed property list (mode-filtered)
-            visible_props = _visible_edit_properties(event)
-            groups = [
-                ("edit.group.general", visible_props[0:4]),
-                ("edit.group.squad_config", visible_props[4:12]),
-                ("edit.group.extras", visible_props[12:]),
-            ]
-            edit_embed = discord.Embed(
-                title=t("edit.title", lang),
-                description=t("edit.select_property", lang),
-                color=discord.Color.blue(),
-            )
-            for group_key, props in groups:
-                field_lines = []
-                for num, key, label_key, vtype, special in props:
-                    current = _format_property_value(event, key, vtype, lang)
-                    field_lines.append(f"`{num:>2}.` {t(label_key, lang).split('. ', 1)[-1]}:  `{current}`")
-                edit_embed.add_field(
-                    name=t(group_key, lang),
-                    value="\n".join(field_lines),
-                    inline=False,
-                )
-            edit_embed.set_footer(text=t("edit.footer_hint", lang))
 
-            await user.send(embed=edit_embed)
+def _validate_edit_text(text, vtype, lang):
+    """Parse/validate typed modal input for a scalar vtype.
 
-            # Wait for property number
-            try:
-                reply = await bot.wait_for("message", check=dm_check, timeout=300)
-            except asyncio.TimeoutError:
-                await user.send(t("edit.timeout", lang))
-                break
+    Returns (value, error_key_or_None). Mirrors the text branches of
+    _validate_edit_value (which still handles the image attachment case).
+    """
+    text = (text or "").strip()
+    clear_words = {"leer", "empty", "none", ""}
 
-            if _is_cancel(reply):
-                continue  # back to overview
-
-            try:
-                choice = int(reply.content.strip())
-            except ValueError:
-                await user.send(t("edit.invalid_number", lang, max=len(visible_props)))
-                continue
-
-            if choice < 1 or choice > len(visible_props):
-                await user.send(t("edit.invalid_number", lang, max=len(visible_props)))
-                continue
-
-            num, key, label_key, vtype, special = visible_props[choice - 1]
-
-            # Show current value and prompt for new one
-            current_display = _format_property_value(event, key, vtype, lang)
-
-            if vtype == "recurrence":
-                await user.send(t("edit.current_value", lang, value=current_display))
-                new_value, cancelled, timed_out = await _prompt_recurrence(
-                    user, dm_check, lang, _is_cancel, event)
-                if timed_out:
-                    await user.send(t("edit.timeout", lang))
-                    break
-                if cancelled:
-                    continue
-            elif vtype == "duration":
-                await user.send(t("edit.current_value", lang, value=current_display))
-                new_value, cancelled, timed_out = await _prompt_preset(
-                    user, dm_check, lang, _is_cancel,
-                    "edit.duration.prompt", _DURATION_PRESETS)
-                if timed_out:
-                    await user.send(t("edit.timeout", lang))
-                    break
-                if cancelled:
-                    continue
-            elif vtype == "spawn_offset":
-                await user.send(t("edit.current_value", lang, value=current_display))
-                new_value, cancelled, timed_out = await _prompt_preset(
-                    user, dm_check, lang, _is_cancel,
-                    "edit.spawn_offset.prompt", _SPAWN_PRESETS)
-                if timed_out:
-                    await user.send(t("edit.timeout", lang))
-                    break
-                if cancelled:
-                    continue
-            else:
-                prompt = t("edit.current_value", lang, value=current_display) + "\n"
-
-                if vtype == "image":
-                    prompt += t("edit.image_hint", lang)
-                elif vtype == "reg_start":
-                    prompt += t("edit.reg_start_hint", lang)
-                elif vtype == "string_nullable":
-                    prompt += t("edit.description_hint", lang)
-                elif vtype == "bool":
-                    prompt += t("edit.bool_hint", lang)
-                else:
-                    prompt += t("edit.enter_new_value", lang)
-
-                prompt += "\n" + t("edit.cancel_hint", lang)
-                await user.send(prompt)
-
-                # Wait for new value
-                try:
-                    value_msg = await bot.wait_for("message", check=dm_check, timeout=300)
-                except asyncio.TimeoutError:
-                    await user.send(t("edit.timeout", lang))
-                    break
-
-                if _is_cancel(value_msg):
-                    continue  # back to overview
-
-                # Validate
-                new_value, error_key = _validate_edit_value(value_msg, key, vtype, lang)
-                if error_key:
-                    await user.send(t(error_key, lang))
-                    continue
-
-            # Confirmation embed with buttons
-            new_display = _format_display_value(new_value, vtype, lang, event=event)
-            confirm_embed = discord.Embed(
-                title=t("edit.confirm_change", lang),
-                color=discord.Color.orange(),
-            )
-            confirm_embed.add_field(
-                name=t("edit.old_value", lang), value=f"`{current_display}`", inline=True)
-            confirm_embed.add_field(
-                name=t("edit.new_value", lang), value=f"`{new_display}`", inline=True)
-
-            confirm_view = _EditConfirmView(lang)
-            await user.send(embed=confirm_embed, view=confirm_view)
-
-            timed_out = await confirm_view.wait()
-            if timed_out:
-                await user.send(t("edit.timeout", lang))
-                break
-            if confirm_view.result != "confirm":
-                continue  # back to overview
-
-            # Apply change under guild lock
-            lock = _get_guild_lock(guild_id)
-            invalid_reason = None
-            async with lock:
-                event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
-                if not event:
-                    await user.send(t("general.no_active_event", lang))
-                    break
-
-                if key in ("max_vehicle_squads", "max_heli_squads") and new_value == 0:
-                    type_key = "vehicle" if key == "max_vehicle_squads" else "heli"
-                    has_squads = any(s.get("type") == type_key for s in event.get("squads", {}).values())
-                    has_wl = bool(event.get(f"{type_key}_waitlist", []))
-                    if has_squads or has_wl:
-                        await user.send(t("edit.cannot_disable_type_with_entries", lang,
-                                          type=t(f"embed.type_{type_key}", lang)))
-                        continue
-
-                # Handle registration start special case
-                if key == "registration_start_time":
-                    if new_value == "__immediate__":
-                        event["registration_open"] = True
-                        event["registration_start_time"] = None
-                    elif new_value is None:
-                        event["registration_start_time"] = None
-                    elif isinstance(new_value, datetime) and new_value <= datetime.now():
-                        event["registration_open"] = True
-                        event["registration_start_time"] = None
-                    elif isinstance(new_value, datetime):
-                        event_dt = parse_date(event["date"])
-                        if event_dt and event.get("time"):
-                            h, m = map(int, event["time"].split(":"))
-                            event_dt = event_dt.replace(hour=h, minute=m)
-                        if event_dt and new_value >= event_dt:
-                            await dm_channel.send(t("event.reg_after_event", lang))
-                            break
-                        event["registration_start_time"] = new_value
-                        event["registration_open"] = False
-                    else:
-                        event["registration_start_time"] = new_value
-                        event["registration_open"] = False
-                else:
-                    event[key] = new_value
-
-                # Side effects
-                if special == "recalc_slots":
-                    event["max_player_slots"] = event["server_max_players"] - event["max_caster_slots"]
-
-                # Invariant: the next occurrence must still fire after end + spawn_offset
-                if key in ("date", "time", "recurrence", "duration_minutes", "spawn_offset_minutes"):
-                    start_dt = compute_event_start(event)
-                    end_dt = compute_event_end(event)
-                    if start_dt and end_dt:
-                        ok, reason_key = validate_recurrence_fits(
-                            start_dt, end_dt,
-                            event.get("recurrence"),
-                            event.get("spawn_offset_minutes", 5),
-                        )
-                        if not ok:
-                            invalid_reason = reason_key
-
-                if invalid_reason is None:
-                    save_event(db_id, event, user_assignments)
-
-            if invalid_reason:
-                await user.send(t(invalid_reason, lang))
-                continue
-
-            # Update channel display
-            await update_event_displays(guild_id, channel_id)
-
-            # Log the edit
-            if special == "recalc_slots":
-                await user.send(t("edit.recalculated", lang, slots=event["max_player_slots"]))
-
-            guild = bot.get_guild(guild_id)
-            if guild:
-                await send_to_log_channel(
-                    t("log.event_edited", lang,
-                      user=user.name,
-                      property=t(label_key, lang),
-                      name=event["name"]),
-                    guild=guild)
-
-            # Combined "updated + edit more?" with event link and buttons
-            link = _build_event_message_link(event, channel_id, guild_id) or ""
-            more_msg = t("edit.updated", lang, link=link)
-            more_msg += "\n" + t("edit.edit_more_question", lang)
-            more_view = _EditMoreView(lang)
-            await user.send(more_msg, view=more_view)
-
-            timed_out = await more_view.wait()
-            if timed_out or more_view.result != "more":
-                await user.send(t("edit.finished", lang))
-                break
-
-    except discord.Forbidden:
-        logger.warning(f"DM edit session: user {user.id} has DMs disabled mid-session")
-    except Exception as e:
-        logger.error(f"Error in DM edit session for user {user.id}: {e}", exc_info=True)
+    if vtype == "string":
+        if not text:
+            return None, "edit.required"
+        return text, None
+    if vtype == "string_nullable":
+        if text.lower() in clear_words:
+            return None, None
+        return text, None
+    if vtype == "date":
+        if not parse_date(text):
+            return None, "edit.invalid_date"
+        return text, None
+    if vtype == "time":
+        m = re.match(r"^(\d{1,2}):(\d{2})$", text)
+        if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+            return None, "edit.invalid_time"
+        return f"{int(m.group(1)):02d}:{int(m.group(2)):02d}", None
+    if vtype == "int":
         try:
-            await user.send(t("general.error", get_guild_language(guild_id), error=str(e)))
-        except Exception:
+            val = int(text)
+        except ValueError:
+            return None, "edit.invalid_integer"
+        return (val, None) if val >= 1 else (None, "edit.invalid_integer")
+    if vtype == "int_zero":
+        try:
+            val = int(text)
+        except ValueError:
+            return None, "edit.invalid_integer"
+        return (val, None) if val >= 0 else (None, "edit.invalid_integer")
+    if vtype == "int_nullable":
+        try:
+            val = int(text)
+        except ValueError:
+            return None, "edit.invalid_integer"
+        if val < 0:
+            return None, "edit.invalid_integer"
+        return (val if val > 0 else None), None
+    if vtype == "reg_start":
+        if text.lower() in clear_words:
+            return None, None
+        if text.lower() in {"sofort", "now", "jetzt", "immediately"}:
+            return "__immediate__", None
+        parsed = parse_registration_start(text)
+        if parsed is None:
+            return None, "edit.invalid_date"
+        return parsed, None
+    return text, None
+
+
+def _apply_property_change(event, key, vtype, special, new_value, lang):
+    """Mutate `event` in place for a confirmed edit. Returns (ok, error_text).
+
+    When ok is False the caller must NOT save — error_text is a ready-to-send,
+    localized message. Carries over every invariant from the old edit loop
+    (vehicle/heli disable guard, registration-start special cases, slot
+    recalculation, recurrence-fits check) and fixes the crash where the old
+    code referenced an undefined `dm_channel`.
+    """
+    if key in ("max_vehicle_squads", "max_heli_squads") and new_value == 0:
+        type_key = "vehicle" if key == "max_vehicle_squads" else "heli"
+        has_squads = any(s.get("type") == type_key for s in event.get("squads", {}).values())
+        has_wl = bool(event.get(f"{type_key}_waitlist", []))
+        if has_squads or has_wl:
+            return False, t("edit.cannot_disable_type_with_entries", lang,
+                            type=t(f"embed.type_{type_key}", lang))
+
+    if key == "registration_start_time":
+        if new_value == "__immediate__":
+            event["registration_open"] = True
+            event["registration_start_time"] = None
+        elif new_value is None:
+            event["registration_start_time"] = None
+        elif isinstance(new_value, datetime) and new_value <= datetime.now():
+            event["registration_open"] = True
+            event["registration_start_time"] = None
+        elif isinstance(new_value, datetime):
+            event_dt = parse_date(event.get("date", ""))
+            if event_dt and event.get("time"):
+                h, m = map(int, event["time"].split(":"))
+                event_dt = event_dt.replace(hour=h, minute=m)
+            if event_dt and new_value >= event_dt:
+                return False, t("event.reg_after_event", lang)
+            event["registration_start_time"] = new_value
+            event["registration_open"] = False
+        else:
+            event["registration_start_time"] = new_value
+            event["registration_open"] = False
+    else:
+        if key in ("date", "time", "recurrence", "duration_minutes", "spawn_offset_minutes"):
+            # Validate on a probe copy before mutating, so a rejected change
+            # never leaks into `event` (the caller relies on this on failure).
+            probe = {**event, key: new_value}
+            start_dt = compute_event_start(probe)
+            end_dt = compute_event_end(probe)
+            if start_dt and end_dt:
+                ok, reason_key = validate_recurrence_fits(
+                    start_dt, end_dt, probe.get("recurrence"),
+                    probe.get("spawn_offset_minutes", 5))
+                if not ok:
+                    # validate_recurrence_fits returns bare keys ("recurrence.error.*");
+                    # the localized strings live under the "edit." namespace.
+                    return False, t(f"edit.{reason_key}", lang)
+        event[key] = new_value
+
+    if special == "recalc_slots":
+        event["max_player_slots"] = event["server_max_players"] - event["max_caster_slots"]
+
+    return True, None
+
+
+# Recurrence dropdown options: value_id -> a ready dict (apply immediately) or a
+# string naming the follow-up modal flow.
+_RECURRENCE_OPTIONS = [
+    ("never", {"type": "never"}),
+    ("every_minutes", "interval"),
+    ("every_hours", "interval"),
+    ("every_days", "interval"),
+    ("every_weeks", "interval"),
+    ("every_month", {"type": "every_month"}),
+    ("first_weekday", {"type": "first_weekday"}),
+    ("fourth_weekday", {"type": "fourth_weekday"}),
+    ("last_weekday", {"type": "last_weekday"}),
+    ("specific_date", "specific_date"),
+    ("specific_weekdays", "weekdays"),
+    ("specific_month_days", "month_days"),
+]
+_RECURRENCE_SPEC = dict(_RECURRENCE_OPTIONS)
+
+
+# ── Session lifecycle ──────────────────────────────────────────────────────
+
+def _close_session(user_id):
+    _active_edit_sessions.pop(user_id, None)
+
+
+def _set_active_view(user_id, view):
+    """Mark `view` as the live dialog for this session and bump activity."""
+    session = _active_edit_sessions.get(user_id)
+    if session is not None:
+        session["active_view"] = view
+        session["last_activity"] = time.monotonic()
+
+
+async def _force_close_stale_session(user_id):
+    """Tear down a stuck session and disable its old DM dialog (best-effort)."""
+    session = _active_edit_sessions.pop(user_id, None)
+    if not session:
+        return
+    dm_msg = session.get("dm_message")
+    if dm_msg is not None:
+        try:
+            await dm_msg.edit(view=None)
+        except discord.HTTPException:
             pass
-    finally:
+
+
+async def _handle_edit_timeout(view, user_id):
+    """Shared on_timeout handler for every edit view.
+
+    No-op if the session was already closed (Done pressed) or `view` is a stale
+    view the user navigated away from — each navigation supersedes the previous
+    view's timer.
+    """
+    session = _active_edit_sessions.get(user_id)
+    if not session or session.get("active_view") is not view:
+        return
+    _active_edit_sessions.pop(user_id, None)
+    lang = session.get("lang", "de")
+    dm_msg = session.get("dm_message")
+    if dm_msg is None:
+        return
+    try:
+        await dm_msg.edit(view=None)
+    except discord.HTTPException:
+        pass
+    try:
+        await dm_msg.channel.send(t("edit.timeout", lang))
+    except discord.HTTPException:
+        pass
+
+
+async def _notify_event_gone(interaction, user_id, lang, via_modal=False):
+    """Close the session and tell the user the event no longer exists."""
+    _close_session(user_id)
+    if via_modal:
+        try:
+            await interaction.response.send_message(
+                t("general.no_active_event", lang), ephemeral=True)
+        except discord.InteractionResponded:
+            pass
+    else:
+        try:
+            await interaction.response.edit_message(
+                embed=discord.Embed(description=t("general.no_active_event", lang),
+                                    color=discord.Color.red()),
+                view=None)
+        except discord.HTTPException:
+            pass
+
+
+# ── Overview embed + refresh ───────────────────────────────────────────────
+
+def _build_edit_main_embed(event, lang, updated_note=None):
+    """Property overview embed shown at the top of the editor."""
+    visible = _visible_edit_properties(event)
+    groups = [
+        ("edit.group.general", visible[0:4]),
+        ("edit.group.squad_config", visible[4:12]),
+        ("edit.group.extras", visible[12:]),
+    ]
+    embed = discord.Embed(
+        title=t("edit.title", lang),
+        description=t("edit.select_property_v2", lang),
+        color=discord.Color.blue(),
+    )
+    for group_key, props in groups:
+        if not props:
+            continue
+        lines = []
+        for num, key, label_key, vtype, special in props:
+            current = _format_property_value(event, key, vtype, lang)
+            lines.append(f"`{num:>2}.` {_prop_short_label(label_key, lang)}:  `{current}`")
+        embed.add_field(name=t(group_key, lang), value="\n".join(lines), inline=False)
+    if updated_note:
+        embed.add_field(name="​", value=f"✅ {updated_note}", inline=False)
+    embed.set_footer(text=t("edit.footer_hint_v2", lang))
+    return embed
+
+
+async def _refresh_main_view(interaction, user_id, guild_id, channel_id, db_id, lang,
+                             updated_note=None, via_modal=False):
+    """Re-render the overview (after an edit or cancel) on the session message."""
+    event, _ua, _db = _get_channel_event(guild_id, channel_id)
+    if not event:
+        await _notify_event_gone(interaction, user_id, lang, via_modal=via_modal)
+        return
+    embed = _build_edit_main_embed(event, lang, updated_note=updated_note)
+    view = EditMainView(user_id, guild_id, channel_id, db_id, lang)
+    _set_active_view(user_id, view)
+    if via_modal:
+        try:
+            await interaction.response.defer()
+        except discord.InteractionResponded:
+            pass
+        session = _active_edit_sessions.get(user_id)
+        dm_msg = session.get("dm_message") if session else None
+        if dm_msg is not None:
+            try:
+                await dm_msg.edit(embed=embed, view=view)
+            except discord.HTTPException:
+                pass
+    else:
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+async def _reshow_overview_dm(user_id, guild_id, channel_id, db_id, lang, note=None):
+    """Edit the stored session DM message back to the overview (no interaction)."""
+    session = _active_edit_sessions.get(user_id)
+    dm_msg = session.get("dm_message") if session else None
+    event, _ua, _db = _get_channel_event(guild_id, channel_id)
+    if not event or dm_msg is None:
+        return
+    view = EditMainView(user_id, guild_id, channel_id, db_id, lang)
+    _set_active_view(user_id, view)
+    try:
+        await dm_msg.edit(embed=_build_edit_main_embed(event, lang, updated_note=note),
+                          view=view)
+    except discord.HTTPException:
+        pass
+
+
+# ── Persist + apply ────────────────────────────────────────────────────────
+
+async def _persist_event_edit(guild_id, channel_id, prop, new_value, lang, editor_name):
+    """Validate + save one property edit under the guild lock.
+
+    Returns ("ok", recalc_slots_or_None) | ("gone", None) | ("error", text).
+    On success also refreshes the public event display and writes a log line.
+    """
+    num, key, label_key, vtype, special = prop
+    lock = _get_guild_lock(guild_id)
+    recalc_value = None
+    event_name = None
+    async with lock:
+        event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
+        if not event:
+            return "gone", None
+        ok, err_text = _apply_property_change(event, key, vtype, special, new_value, lang)
+        if not ok:
+            return "error", err_text
+        save_event(db_id, event, user_assignments)
+        if special == "recalc_slots":
+            recalc_value = event.get("max_player_slots")
+        event_name = event.get("name")
+    await update_event_displays(guild_id, channel_id)
+    guild = bot.get_guild(guild_id)
+    if guild:
+        await send_to_log_channel(
+            t("log.event_edited", lang, user=editor_name,
+              property=t(label_key, lang), name=event_name),
+            guild=guild)
+    return "ok", recalc_value
+
+
+def _edit_success_note(prop, lang, recalc_value):
+    num, key, label_key, vtype, special = prop
+    note = t("edit.updated_inline", lang, prop=_prop_short_label(label_key, lang))
+    if special == "recalc_slots" and recalc_value is not None:
+        note = f"{note} · {t('edit.recalculated', lang, slots=recalc_value)}"
+    return note
+
+
+async def _apply_edit(interaction, user_id, guild_id, channel_id, db_id, lang,
+                      prop, new_value, via_modal=False):
+    """Persist an edit from a live interaction, then refresh or surface an error."""
+    status, payload = await _persist_event_edit(
+        guild_id, channel_id, prop, new_value, lang, interaction.user.name)
+    if status == "gone":
+        await _notify_event_gone(interaction, user_id, lang, via_modal=via_modal)
+        return
+    if status == "error":
+        try:
+            await interaction.response.send_message(payload, ephemeral=True)
+        except discord.InteractionResponded:
+            try:
+                await interaction.followup.send(payload, ephemeral=True)
+            except discord.HTTPException:
+                pass
+        return
+    await _refresh_main_view(interaction, user_id, guild_id, channel_id, db_id, lang,
+                             updated_note=_edit_success_note(prop, lang, payload),
+                             via_modal=via_modal)
+
+
+async def _apply_edit_dm(user_id, guild_id, channel_id, db_id, lang, prop,
+                         new_value, editor_name):
+    """Persist an edit without a live interaction (image hybrid path)."""
+    status, payload = await _persist_event_edit(
+        guild_id, channel_id, prop, new_value, lang, editor_name)
+    if status == "gone":
+        session = _active_edit_sessions.get(user_id)
+        dm_msg = session.get("dm_message") if session else None
+        _close_session(user_id)
+        if dm_msg is not None:
+            try:
+                await dm_msg.edit(embed=discord.Embed(
+                    description=t("general.no_active_event", lang),
+                    color=discord.Color.red()), view=None)
+            except discord.HTTPException:
+                pass
+        return
+    note = None
+    if status == "error":
+        session = _active_edit_sessions.get(user_id)
+        dm_msg = session.get("dm_message") if session else None
+        if dm_msg is not None:
+            try:
+                await dm_msg.channel.send(payload)
+            except discord.HTTPException:
+                pass
+    else:
+        note = _edit_success_note(prop, lang, payload)
+    await _reshow_overview_dm(user_id, guild_id, channel_id, db_id, lang, note=note)
+
+
+# ── Editor display helpers ─────────────────────────────────────────────────
+
+def _scalar_hint(vtype, lang):
+    if vtype == "reg_start":
+        return t("edit.reg_start_hint", lang)
+    if vtype == "string_nullable":
+        return t("edit.description_hint", lang)
+    return ""
+
+
+def _scalar_placeholder(vtype):
+    return {
+        "date": "TT.MM.JJJJ",
+        "time": "HH:MM",
+        "reg_start": "TT.MM.JJJJ HH:MM / now / empty",
+    }.get(vtype, "")
+
+
+def _preset_label(value, vtype, lang):
+    if vtype == "duration":
+        return _format_duration_value(value, lang)
+    if vtype == "percent":
+        return _format_percent_value(value, lang)
+    if vtype == "squad_count":
+        return _format_count_value(value, lang)
+    return _format_spawn_offset_value(value, lang)
+
+
+async def _show_property_editor(interaction, user_id, guild_id, channel_id, db_id, lang, prop):
+    """Swap the overview for the editor of a specific property."""
+    num, key, label_key, vtype, special = prop
+    event, _ua, _db = _get_channel_event(guild_id, channel_id)
+    if not event:
+        await _notify_event_gone(interaction, user_id, lang)
+        return
+    label = _prop_short_label(label_key, lang)
+    current_display = _format_property_value(event, key, vtype, lang)
+
+    def _editor_embed(extra=None):
+        desc = t("edit.current_value", lang, value=current_display)
+        if extra:
+            desc = f"{desc}\n{extra}"
+        return discord.Embed(title=label, description=desc, color=discord.Color.blurple())
+
+    if vtype == "bool":
+        view = EditBoolView(user_id, guild_id, channel_id, db_id, lang, prop, bool(event.get(key)))
+        embed = _editor_embed()
+    elif vtype in ("duration", "spawn_offset", "percent", "squad_count"):
+        presets = {"duration": _DURATION_PRESETS, "spawn_offset": _SPAWN_PRESETS,
+                   "percent": _PERCENT_PRESETS, "squad_count": _COUNT_PRESETS}[vtype]
+        view = EditPresetView(user_id, guild_id, channel_id, db_id, lang, prop, presets)
+        embed = _editor_embed()
+    elif vtype == "recurrence":
+        view = EditRecurrenceView(user_id, guild_id, channel_id, db_id, lang, prop, event)
+        embed = _editor_embed()
+    elif vtype == "image":
+        view = EditImageView(user_id, guild_id, channel_id, db_id, lang, prop)
+        embed = _editor_embed(t("edit.image_hint", lang))
+    else:
+        view = EditScalarView(user_id, guild_id, channel_id, db_id, lang, prop)
+        embed = _editor_embed(_scalar_hint(vtype, lang) or None)
+    _set_active_view(user_id, view)
+    await interaction.response.edit_message(embed=embed, view=view)
+
+
+# ── Views ──────────────────────────────────────────────────────────────────
+
+class EditMainView(ui.View):
+    """Persistent overview: property dropdown + Done button."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang):
+        super().__init__(timeout=600)
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.db_id = db_id
+        self.lang = lang
+        event, _ua, _db = _get_channel_event(guild_id, channel_id)
+        visible = _visible_edit_properties(event) if event else list(_EDIT_PROPERTIES)
+        # Keep the leading "NN. " numbering so dropdown entries line up with the
+        # numbered overview list above.
+        options = [discord.SelectOption(label=t(p[2], lang)[:100], value=p[1])
+                   for p in visible]
+        select = ui.Select(placeholder=t("edit.pick_property", lang), options=options,
+                           min_values=1, max_values=1)
+        select.callback = self._on_select
+        self.add_item(select)
+        done = ui.Button(label=t("general.done", lang),
+                         style=discord.ButtonStyle.secondary, emoji="🛑")
+        done.callback = self._on_done
+        self.add_item(done)
+
+    async def _on_select(self, interaction):
+        prop = _find_edit_property(interaction.data["values"][0])
+        if not prop:
+            return
+        await _show_property_editor(interaction, self.user_id, self.guild_id,
+                                    self.channel_id, self.db_id, self.lang, prop)
+
+    async def _on_done(self, interaction):
+        _close_session(self.user_id)
+        try:
+            await interaction.response.edit_message(view=None)
+        except discord.HTTPException:
+            pass
+        text = t("edit.finished", self.lang)
+        event, _ua, _db = _get_channel_event(self.guild_id, self.channel_id)
+        link = _build_event_message_link(event, self.channel_id, self.guild_id) if event else None
+        if link:
+            text = f"{text} [{t('edit.event_link', self.lang)}]({link})"
+        try:
+            await interaction.channel.send(text)
+        except discord.HTTPException:
+            pass
+
+    async def on_timeout(self):
+        await _handle_edit_timeout(self, self.user_id)
+
+
+class _EditDialogView(ui.View):
+    """Shared state + Cancel/timeout wiring for the per-property sub-editors."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(timeout=600)
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.db_id = db_id
+        self.lang = lang
+        self.prop = prop
+
+    def _add_cancel(self):
+        cancel = ui.Button(label=t("general.cancel", self.lang),
+                           style=discord.ButtonStyle.secondary, emoji="↩️")
+        cancel.callback = self._on_cancel
+        self.add_item(cancel)
+
+    async def _on_cancel(self, interaction):
+        await _refresh_main_view(interaction, self.user_id, self.guild_id,
+                                 self.channel_id, self.db_id, self.lang)
+
+    async def _apply(self, interaction, value, via_modal=False):
+        await _apply_edit(interaction, self.user_id, self.guild_id, self.channel_id,
+                          self.db_id, self.lang, self.prop, value, via_modal=via_modal)
+
+    async def on_timeout(self):
+        await _handle_edit_timeout(self, self.user_id)
+
+
+class EditScalarView(_EditDialogView):
+    """Opens a modal for text/number properties (string/date/time/int/reg_start)."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        btn = ui.Button(label=t("edit.open_input", lang),
+                        style=discord.ButtonStyle.primary, emoji="⌨️")
+        btn.callback = self._on_edit
+        self.add_item(btn)
+        self._add_cancel()
+
+    async def _on_edit(self, interaction):
+        await interaction.response.send_modal(EditScalarModal(
+            self.user_id, self.guild_id, self.channel_id, self.db_id, self.lang, self.prop))
+
+
+class EditScalarModal(ui.Modal):
+    """Single-field text modal; validates via _validate_edit_text on submit."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        num, key, label_key, vtype, special = prop
+        super().__init__(title=_prop_short_label(label_key, lang)[:45])
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.db_id = db_id
+        self.lang = lang
+        self.prop = prop
+        self.value_input = ui.TextInput(
+            label=t("edit.input_label", lang)[:45],
+            placeholder=_scalar_placeholder(vtype),
+            required=vtype not in ("string_nullable", "reg_start"),
+            max_length=200,
+        )
+        self.add_item(self.value_input)
+
+    async def on_submit(self, interaction):
+        vtype = self.prop[3]
+        value, err = _validate_edit_text(self.value_input.value, vtype, self.lang)
+        if err:
+            await interaction.response.send_message(t(err, self.lang), ephemeral=True)
+            return
+        await _apply_edit(interaction, self.user_id, self.guild_id, self.channel_id,
+                          self.db_id, self.lang, self.prop, value, via_modal=True)
+
+
+class EditBoolView(_EditDialogView):
+    """Enable/Disable/Cancel buttons for a bool property."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, current):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        enable = ui.Button(
+            label=t("edit.bool.enabled", lang), emoji="✅",
+            style=discord.ButtonStyle.success if current else discord.ButtonStyle.secondary)
+        enable.callback = self._make(True)
+        self.add_item(enable)
+        disable = ui.Button(
+            label=t("edit.bool.disabled", lang), emoji="❌",
+            style=discord.ButtonStyle.danger if not current else discord.ButtonStyle.secondary)
+        disable.callback = self._make(False)
+        self.add_item(disable)
+        self._add_cancel()
+
+    def _make(self, value):
+        async def cb(interaction):
+            await self._apply(interaction, value)
+        return cb
+
+
+class EditPresetView(_EditDialogView):
+    """Dropdown of preset values for duration / spawn_offset (minutes)."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, presets):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        vtype = prop[3]
+        # `None` in a preset list means "no limit" → option value "none" → stored None.
+        options = [discord.SelectOption(
+            label=_preset_label(v, vtype, lang)[:100],
+            value="none" if v is None else str(v))
+            for v in presets]
+        select = ui.Select(placeholder=t("edit.pick_value", lang), options=options,
+                           min_values=1, max_values=1)
+        select.callback = self._on_select
+        self.add_item(select)
+        self._add_cancel()
+
+    async def _on_select(self, interaction):
+        raw = interaction.data["values"][0]
+        await self._apply(interaction, None if raw == "none" else int(raw))
+
+
+class EditImageView(_EditDialogView):
+    """Image editor: keeps file-upload support via a short hybrid listen step."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        send = ui.Button(label=t("edit.image_send", lang),
+                         style=discord.ButtonStyle.primary, emoji="🖼️")
+        send.callback = self._on_send
+        self.add_item(send)
+        clear = ui.Button(label=t("edit.image_clear", lang),
+                          style=discord.ButtonStyle.secondary, emoji="🗑️")
+        clear.callback = self._on_clear
+        self.add_item(clear)
+        self._add_cancel()
+
+    async def _on_clear(self, interaction):
+        await self._apply(interaction, None)
+
+    async def _on_send(self, interaction):
+        # Consume the interaction, then listen for the next DM so file uploads
+        # (which modals can't accept) still work.
+        await interaction.response.edit_message(
+            embed=discord.Embed(description=t("edit.image_waiting", self.lang),
+                                color=discord.Color.blurple()),
+            view=None)
+
+        def check(m):
+            return m.author.id == self.user_id and isinstance(m.channel, discord.DMChannel)
+
+        try:
+            msg = await bot.wait_for("message", check=check, timeout=300)
+        except asyncio.TimeoutError:
+            await _handle_edit_timeout(self, self.user_id)
+            return
+        value, err = _validate_edit_value(msg, self.prop[1], "image", self.lang)
+        if err:
+            try:
+                await msg.channel.send(t(err, self.lang))
+            except discord.HTTPException:
+                pass
+            await _reshow_overview_dm(self.user_id, self.guild_id, self.channel_id,
+                                      self.db_id, self.lang)
+            return
+        await _apply_edit_dm(self.user_id, self.guild_id, self.channel_id, self.db_id,
+                             self.lang, self.prop, value, msg.author.name)
+
+
+class EditRecurrenceView(_EditDialogView):
+    """Dropdown of the 12 recurrence types; complex ones chain a modal."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, event):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        day = _event_weekday_name(event, lang)
+        options = [discord.SelectOption(
+            label=t(f"edit.recurrence.opt.{vid}", lang, day=day)[:100], value=vid)
+            for vid, _spec in _RECURRENCE_OPTIONS]
+        select = ui.Select(placeholder=t("edit.pick_value", lang), options=options,
+                           min_values=1, max_values=1)
+        select.callback = self._on_select
+        self.add_item(select)
+        self._add_cancel()
+
+    async def _on_select(self, interaction):
+        vid = interaction.data["values"][0]
+        spec = _RECURRENCE_SPEC.get(vid)
+        if isinstance(spec, dict):
+            await self._apply(interaction, dict(spec))
+            return
+        modal_cls = {
+            "interval": None,  # handled below (needs rtype)
+            "specific_date": RecurrenceDateModal,
+            "weekdays": RecurrenceWeekdaysModal,
+            "month_days": RecurrenceMonthDaysModal,
+        }.get(spec)
+        if spec == "interval":
+            await interaction.response.send_modal(RecurrenceIntervalModal(
+                self.user_id, self.guild_id, self.channel_id, self.db_id, self.lang,
+                self.prop, vid))
+        elif modal_cls is not None:
+            await interaction.response.send_modal(modal_cls(
+                self.user_id, self.guild_id, self.channel_id, self.db_id, self.lang, self.prop))
+
+
+class _RecurrenceModal(ui.Modal):
+    """Base for recurrence follow-up modals (one text field, apply on submit)."""
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop,
+                 title, field_label, placeholder=""):
+        super().__init__(title=title[:45])
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.db_id = db_id
+        self.lang = lang
+        self.prop = prop
+        self.value_input = ui.TextInput(label=field_label[:45], placeholder=placeholder[:100],
+                                        required=True, max_length=40)
+        self.add_item(self.value_input)
+
+    async def _apply(self, interaction, value):
+        await _apply_edit(interaction, self.user_id, self.guild_id, self.channel_id,
+                          self.db_id, self.lang, self.prop, value, via_modal=True)
+
+    async def _error(self, interaction, key):
+        await interaction.response.send_message(t(key, self.lang), ephemeral=True)
+
+
+class RecurrenceIntervalModal(_RecurrenceModal):
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, rtype):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop,
+                         title=t(f"edit.recurrence.opt.{rtype}", lang),
+                         field_label=t("edit.recurrence.field.interval", lang),
+                         placeholder="1")
+        self.rtype = rtype
+
+    async def on_submit(self, interaction):
+        try:
+            n = int(self.value_input.value.strip())
+        except ValueError:
+            n = 0
+        if n < 1:
+            await self._error(interaction, "edit.invalid_integer")
+            return
+        await self._apply(interaction, {"type": self.rtype, "interval": n})
+
+
+class RecurrenceDateModal(_RecurrenceModal):
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop,
+                         title=t("edit.recurrence.opt.specific_date", lang),
+                         field_label=t("edit.recurrence.field.date", lang),
+                         placeholder="TT.MM.JJJJ HH:MM")
+
+    async def on_submit(self, interaction):
+        event, _ua, _db = _get_channel_event(self.guild_id, self.channel_id)
+        event_time = (event.get("time") if event else None) or "20:00"
+        parts = self.value_input.value.strip().split(maxsplit=1)
+        if not parts or not parts[0]:
+            await self._error(interaction, "edit.recurrence.invalid_specific_date")
+            return
+        date_str = parts[0]
+        time_str = parts[1] if len(parts) > 1 else event_time
+        try:
+            datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
+        except ValueError:
+            await self._error(interaction, "edit.recurrence.invalid_specific_date")
+            return
+        await self._apply(interaction, {"type": "specific_date", "date": date_str, "time": time_str})
+
+
+class RecurrenceWeekdaysModal(_RecurrenceModal):
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop,
+                         title=t("edit.recurrence.opt.specific_weekdays", lang),
+                         field_label=t("edit.recurrence.field.weekdays", lang),
+                         placeholder="1,3,5")
+
+    async def on_submit(self, interaction):
+        nums = _parse_int_list(self.value_input.value.strip())
+        if not nums or not all(1 <= n <= 7 for n in nums):
+            await self._error(interaction, "edit.recurrence.invalid_weekdays")
+            return
+        weekdays = sorted({n - 1 for n in nums})
+        await self._apply(interaction, {"type": "specific_weekdays", "weekdays": weekdays})
+
+
+class RecurrenceMonthDaysModal(_RecurrenceModal):
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop,
+                         title=t("edit.recurrence.opt.specific_month_days", lang),
+                         field_label=t("edit.recurrence.field.month_days", lang),
+                         placeholder="1,15")
+
+    async def on_submit(self, interaction):
+        nums = _parse_int_list(self.value_input.value.strip())
+        if not nums or not all(1 <= n <= 31 for n in nums):
+            await self._error(interaction, "edit.recurrence.invalid_month_days")
+            return
+        await self._apply(interaction, {"type": "specific_month_days", "month_days": sorted(set(nums))})
+
+
+async def start_dm_edit_session(interaction, guild_id, channel_id, db_id, lang):
+    """Open (or reclaim) a view-based DM edit session for this event.
+
+    The caller must have already deferred the interaction ephemerally; this
+    replies via followup.
+    """
+    user = interaction.user
+    existing = _active_edit_sessions.get(user.id)
+    if existing is not None:
+        if time.monotonic() - existing.get("last_activity", 0) < SESSION_STALE_AFTER_SECONDS:
+            await interaction.followup.send(t("edit.active_session", lang), ephemeral=True)
+            return
+        await _force_close_stale_session(user.id)
+
+    try:
+        dm = await user.create_dm()
+    except discord.Forbidden:
+        await interaction.followup.send(t("edit.dm_blocked", lang), ephemeral=True)
+        return
+
+    session = {
+        "guild_id": guild_id, "channel_id": channel_id, "db_id": db_id,
+        "lang": lang, "dm_message": None, "active_view": None,
+        "last_activity": time.monotonic(),
+    }
+    _active_edit_sessions[user.id] = session
+
+    event, _ua, _db = _get_channel_event(guild_id, channel_id)
+    if not event:
         _active_edit_sessions.pop(user.id, None)
+        await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
+        return
+
+    view = EditMainView(user.id, guild_id, channel_id, db_id, lang)
+    try:
+        dm_msg = await dm.send(embed=_build_edit_main_embed(event, lang), view=view)
+    except discord.Forbidden:
+        _active_edit_sessions.pop(user.id, None)
+        await interaction.followup.send(t("edit.dm_blocked", lang), ephemeral=True)
+        return
+    session["dm_message"] = dm_msg
+    session["active_view"] = view
+    await interaction.followup.send(t("edit.dm_sent", lang), ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -3159,27 +3866,7 @@ class DeleteConfirmationView(BaseConfirmationView):
 
         # 2. Delete the event embed message and ping messages from channel
         channel = bot.get_channel(self.channel_id) or await bot.fetch_channel(self.channel_id)
-        msg_id = event.get("event_message_id")
-        if msg_id:
-            try:
-                msg = await channel.fetch_message(msg_id)
-                await msg.delete()
-            except Exception as e:
-                logger.warning(f"Could not delete event embed: {e}")
-
-        for ping_msg_id in event.get("ping_message_ids", []):
-            try:
-                ping_msg = await channel.fetch_message(ping_msg_id)
-                await ping_msg.delete()
-            except Exception:
-                pass
-        countdown_msg_id = event.get("countdown_message_id")
-        if countdown_msg_id:
-            try:
-                cd_msg = await channel.fetch_message(countdown_msg_id)
-                await cd_msg.delete()
-            except Exception:
-                pass
+        await _delete_event_messages(channel, event)
 
         # 3. Soft-delete in DB
         delete_event(db_id)
@@ -3191,6 +3878,137 @@ class DeleteConfirmationView(BaseConfirmationView):
             return
         lang = get_guild_language(self.guild_id)
         await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
+
+
+def _build_open_confirm_embed(event, lang):
+    """Confirmation embed shown before manually opening registration. When a ping will
+    be sent (ping_on_open + targets configured), it lists the target roles/users — these
+    render as mentions in the embed, which does NOT trigger an actual notification."""
+    desc = t("reg.open_confirm", lang, name=event["name"])
+    if event.get("ping_on_open", False):
+        targets = _build_ping_text(event).strip()
+        if targets:
+            desc += "\n\n" + t("reg.open_confirm_ping", lang, targets=targets)
+    return discord.Embed(
+        title=t("reg.open_confirm_title", lang),
+        description=desc,
+        color=discord.Color.green())
+
+
+class OpenConfirmationView(BaseConfirmationView):
+    """Confirm/Cancel before manually opening registration (which may ping roles)."""
+    def __init__(self, guild_id, channel_id):
+        super().__init__(title="Open Registration")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        lang = get_guild_language(guild_id)
+
+        confirm_btn = ui.Button(label=t("reg.open_button", lang), style=discord.ButtonStyle.success)
+        confirm_btn.callback = self._confirm
+        self.add_item(confirm_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _confirm(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        gid, cid = self.guild_id, self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+            if event.get("registration_open", False):
+                await send_feedback(interaction, t("reg.already_open", lang), ephemeral=True)
+                return
+            event["registration_open"] = True
+            event["is_closed"] = False
+            save_event(db_id, event, user_assignments)
+
+        await send_feedback(interaction, t("reg.manually_opened", lang, name=event["name"]), ephemeral=True)
+
+        # Replace the below-embed announcement: post the "now open" ping (if enabled),
+        # which also deletes the now-stale early-access / countdown announcement.
+        ch = bot.get_channel(cid)
+        content = None
+        if event.get("ping_on_open", False):
+            ping_text = _build_ping_text(event)
+            if ping_text:
+                content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
+        await _set_channel_announcement(
+            ch, event, db_id, user_assignments, content=content,
+            mentions=discord.AllowedMentions(roles=True, users=True))
+
+        await update_event_displays(gid, cid)
+        await send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild=interaction.guild)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), embed=None, view=None)
+
+
+class CloseConfirmationView(BaseConfirmationView):
+    """Confirm/Cancel before manually closing registration."""
+    def __init__(self, guild_id, channel_id):
+        super().__init__(title="Close Registration")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        lang = get_guild_language(guild_id)
+
+        confirm_btn = ui.Button(label=t("reg.close_button", lang), style=discord.ButtonStyle.danger)
+        confirm_btn.callback = self._confirm
+        self.add_item(confirm_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _confirm(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        gid, cid = self.guild_id, self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+            if is_player_mode(event):
+                # Player mode has no early-access gate; the disabled buttons are the only thing
+                # stopping joins, so a real close must lock it (unregister stays allowed).
+                event["is_closed"] = True
+                event["registration_open"] = False
+            else:
+                # Rep/caster mode: revert to the early-access / not-yet-open state instead of
+                # hard-locking. Early-access roles keep registering (with their caps) and the
+                # buttons stay enabled. Clear the scheduled open time so the loop doesn't
+                # immediately auto-reopen; a *future* time set later via Edit Event still opens.
+                event["registration_open"] = False
+                event["registration_start_time"] = None
+            save_event(db_id, event, user_assignments)
+
+        await send_feedback(interaction, t("reg.manually_closed", lang, name=event["name"]), ephemeral=True)
+        await send_to_log_channel(t("log.reg_closed", lang, user=interaction.user.name, name=event["name"]), guild=interaction.guild)
+        await update_event_displays(gid, cid)
+
+        # Delete the now-stale announcement below the embed; the embed already shows the status.
+        ch = bot.get_channel(cid)
+        await _set_channel_announcement(ch, event, db_id, user_assignments, content=None)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), embed=None, view=None)
 
 
 # ############################# #
@@ -3209,27 +4027,32 @@ class WizardSquadRolesView(BaseView):
         self.interaction_user = interaction_user
         lang = get_guild_language(guild_id)
 
-        self.squad_rep_select = ui.MentionableSelect(
+        self.squad_rep_select = ui.RoleSelect(
             placeholder=t("wizard.squad_rep_title", lang),
             min_values=0, max_values=25, row=0)
         self.squad_rep_select.callback = self._squad_rep_selected
         self.add_item(self.squad_rep_select)
 
-        self.community_rep_select = ui.MentionableSelect(
+        self.community_rep_select = ui.RoleSelect(
             placeholder=t("wizard.community_rep_title", lang),
             min_values=0, max_values=25, row=1)
         self.community_rep_select.callback = self._community_rep_selected
         self.add_item(self.community_rep_select)
 
-        self.ping_select = ui.Select(
-            placeholder=t("wizard.ping_select_title", lang),
-            options=[
-                discord.SelectOption(label=t("wizard.ping_no", lang), value="no", default=True),
-                discord.SelectOption(label=t("wizard.ping_yes", lang), value="yes"),
-            ],
-            min_values=1, max_values=1, row=2)
-        self.ping_select.callback = self._ping_selected
-        self.add_item(self.ping_select)
+        # The "notify when registration opens" question only makes sense when
+        # registration isn't already open at creation; otherwise there's no
+        # open moment to announce, so we skip it (ping_on_open stays False).
+        self.ping_select = None
+        if not event.get("registration_open", False):
+            self.ping_select = ui.Select(
+                placeholder=t("wizard.ping_select_title", lang),
+                options=[
+                    discord.SelectOption(label=t("wizard.ping_no", lang), value="no", default=True),
+                    discord.SelectOption(label=t("wizard.ping_yes", lang), value="yes"),
+                ],
+                min_values=1, max_values=1, row=2)
+            self.ping_select.callback = self._ping_selected
+            self.add_item(self.ping_select)
 
         skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=3)
         skip_btn.callback = self._skip
@@ -3240,19 +4063,15 @@ class WizardSquadRolesView(BaseView):
         self.add_item(continue_btn)
 
         self._squad_rep_roles = []
-        self._squad_rep_users = []
         self._community_rep_roles = []
-        self._community_rep_users = []
         self._ping_on_open = False
 
     async def _squad_rep_selected(self, interaction):
-        self._squad_rep_roles = [v.id for v in self.squad_rep_select.values if isinstance(v, discord.Role)]
-        self._squad_rep_users = [str(v.id) for v in self.squad_rep_select.values if isinstance(v, (discord.Member, discord.User))]
+        self._squad_rep_roles = [r.id for r in self.squad_rep_select.values]
         await interaction.response.defer()
 
     async def _community_rep_selected(self, interaction):
-        self._community_rep_roles = [v.id for v in self.community_rep_select.values if isinstance(v, discord.Role)]
-        self._community_rep_users = [str(v.id) for v in self.community_rep_select.values if isinstance(v, (discord.Member, discord.User))]
+        self._community_rep_roles = [r.id for r in self.community_rep_select.values]
         await interaction.response.defer()
 
     async def _ping_selected(self, interaction):
@@ -3260,29 +4079,25 @@ class WizardSquadRolesView(BaseView):
         await interaction.response.defer()
 
     def _save_selections(self):
-        if self._squad_rep_roles or self._squad_rep_users:
+        if self._squad_rep_roles:
             self.event["squad_rep_role_ids"] = self._squad_rep_roles
-            self.event["squad_rep_user_ids"] = self._squad_rep_users
-        if self._community_rep_roles or self._community_rep_users:
+        if self._community_rep_roles:
             self.event["community_rep_role_ids"] = self._community_rep_roles
-            self.event["community_rep_user_ids"] = self._community_rep_users
         self.event["ping_on_open"] = self._ping_on_open
 
     async def _advance_after_squad_roles(self, interaction):
-        lang = get_guild_language(self.guild_id)
-        if is_player_mode(self.event):
-            # Player mode skips caster roles — go straight to timing.
-            next_view = WizardTimingView(self.guild_id, self.channel_id, self.event, self.user_assignments,
-                                         self.settings, self.interaction_user)
+        # When a role gate is configured, offer the optional per-type slot limits;
+        # otherwise jump straight to the next wizard step.
+        if _gate_configured(self.event):
+            lang = get_guild_language(self.guild_id)
+            next_view = WizardSlotLimitsView(self.guild_id, self.channel_id, self.event,
+                                             self.user_assignments, self.settings, self.interaction_user)
             await interaction.response.edit_message(
-                content=f"**{t('wizard.timing_title', lang)}**\n{t('wizard.timing_desc', lang)}",
+                content=f"**{t('wizard.slot_limits_title', lang)}**\n{t('wizard.slot_limits_desc', lang)}",
                 view=next_view)
             return
-        next_view = WizardCasterRolesView(self.guild_id, self.channel_id, self.event, self.user_assignments,
-                                          self.settings, self.interaction_user)
-        await interaction.response.edit_message(
-            content=f"**{t('wizard.caster_roles_title', lang)}**\n{t('wizard.caster_roles_desc', lang)}",
-            view=next_view)
+        await _advance_to_post_roles(interaction, self.guild_id, self.channel_id, self.event,
+                                     self.user_assignments, self.settings, self.interaction_user)
 
     async def _continue(self, interaction):
         self._save_selections()
@@ -3290,6 +4105,133 @@ class WizardSquadRolesView(BaseView):
 
     async def _skip(self, interaction):
         await self._advance_after_squad_roles(interaction)
+
+
+def _gate_configured(event) -> bool:
+    """True when at least one register-type role is set (caps are meaningful then)."""
+    return bool(event.get("squad_rep_role_ids") or event.get("community_rep_role_ids"))
+
+
+async def _advance_to_post_roles(interaction, guild_id, channel_id, event,
+                                 user_assignments, settings, interaction_user):
+    """Transition from the role/slot-limit steps to caster roles (rep) or timing (player)."""
+    lang = get_guild_language(guild_id)
+    if is_player_mode(event):
+        next_view = WizardTimingView(guild_id, channel_id, event, user_assignments,
+                                     settings, interaction_user)
+        await interaction.response.edit_message(
+            content=f"**{t('wizard.timing_title', lang)}**\n{t('wizard.timing_desc', lang)}",
+            view=next_view)
+        return
+    next_view = WizardCasterRolesView(guild_id, channel_id, event, user_assignments,
+                                      settings, interaction_user)
+    await interaction.response.edit_message(
+        content=f"**{t('wizard.caster_roles_title', lang)}**\n{t('wizard.caster_roles_desc', lang)}",
+        view=next_view)
+
+
+class WizardSlotLimitsView(BaseView):
+    """Optional per-register-type limits, shown only when a role gate is configured.
+
+    Rep mode shows four dropdowns (two seat-% caps + two squad caps); player mode
+    shows only the two % caps (squad limits don't apply; #12 forced to 1). Option
+    labels carry their register-type prefix so a chosen value stays self-explanatory.
+    """
+
+    def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
+        super().__init__(timeout=300, title="Wizard Slot Limits")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.event = event
+        self.user_assignments = user_assignments
+        self.settings = settings
+        self.interaction_user = interaction_user
+        lang = get_guild_language(guild_id)
+        rep_mode = not is_player_mode(event)
+
+        self._early_pct = event.get("community_rep_cap_percent")
+        self._reg_squads = event.get("max_squads_per_user", 1) or 1
+        self._early_squads = event.get("early_access_squads_per_role")
+
+        self.early_pct_select = ui.Select(
+            placeholder=t("wizard.cap_early_pct_title", lang),
+            options=_capped_options("limit.prefix.early", _PERCENT_PRESETS,
+                                    _format_percent_value, lang, self._early_pct),
+            min_values=1, max_values=1, row=0)
+        self.early_pct_select.callback = self._early_pct_selected
+        self.add_item(self.early_pct_select)
+
+        btn_row = 1
+        if rep_mode:
+            self.early_squads_select = ui.Select(
+                placeholder=t("wizard.cap_early_squads_title", lang),
+                options=_capped_options("limit.prefix.early", _COUNT_PRESETS,
+                                        _format_squads_per_role, lang, self._early_squads),
+                min_values=1, max_values=1, row=1)
+            self.early_squads_select.callback = self._early_squads_selected
+            self.add_item(self.early_squads_select)
+
+            self.reg_squads_select = ui.Select(
+                placeholder=t("wizard.cap_regular_squads_title", lang),
+                options=_capped_options("limit.prefix.regular", _REGULAR_SQUAD_PRESETS,
+                                        _format_squads_per_user, lang, self._reg_squads),
+                min_values=1, max_values=1, row=2)
+            self.reg_squads_select.callback = self._reg_squads_selected
+            self.add_item(self.reg_squads_select)
+            btn_row = 3
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=btn_row)
+        skip_btn.callback = self._skip
+        self.add_item(skip_btn)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=btn_row)
+        continue_btn.callback = self._continue
+        self.add_item(continue_btn)
+
+    @staticmethod
+    def _value(raw):
+        return None if raw == "none" else int(raw)
+
+    async def _early_pct_selected(self, interaction):
+        self._early_pct = self._value(self.early_pct_select.values[0])
+        await interaction.response.defer()
+
+    async def _reg_squads_selected(self, interaction):
+        self._reg_squads = int(self.reg_squads_select.values[0])
+        await interaction.response.defer()
+
+    async def _early_squads_selected(self, interaction):
+        self._early_squads = self._value(self.early_squads_select.values[0])
+        await interaction.response.defer()
+
+    def _save_selections(self):
+        self.event["community_rep_cap_percent"] = self._early_pct
+        if not is_player_mode(self.event):
+            self.event["max_squads_per_user"] = self._reg_squads
+            self.event["early_access_squads_per_role"] = self._early_squads
+
+    async def _continue(self, interaction):
+        self._save_selections()
+        await _advance_to_post_roles(interaction, self.guild_id, self.channel_id, self.event,
+                                     self.user_assignments, self.settings, self.interaction_user)
+
+    async def _skip(self, interaction):
+        await _advance_to_post_roles(interaction, self.guild_id, self.channel_id, self.event,
+                                     self.user_assignments, self.settings, self.interaction_user)
+
+
+def _capped_options(prefix_key, presets, value_fmt, lang, current):
+    """SelectOptions labeled '<type>: <value>' so the choice stays self-explanatory.
+
+    A `None` preset becomes the option value "none" (→ stored None / no limit).
+    """
+    prefix = t(prefix_key, lang)
+    opts = []
+    for v in presets:
+        opts.append(discord.SelectOption(
+            label=f"{prefix}: {value_fmt(v, lang)}"[:100],
+            value="none" if v is None else str(v),
+            default=(v == current)))
+    return opts
 
 
 class WizardCasterRolesView(BaseView):
@@ -3468,9 +4410,13 @@ class WizardTimingView(BaseView):
         default_limit = self.event.get("max_squads_per_user", 1)
         next_view = WizardSquadLimitView(self.guild_id, self.channel_id, self.event, self.user_assignments,
                                          self.settings, self.interaction_user)
-        await interaction.response.edit_message(
-            content=f"**{t('wizard.squad_limit_title', lang)}**\n{t('wizard.squad_limit_desc', lang, default=default_limit)}",
-            embed=None, view=next_view)
+        if _gate_configured(self.event):
+            # The per-user squad limit was already set in the Slot Limits step;
+            # this step now only configures playstyle.
+            content = f"**{t('wizard.playstyle_step_title', lang)}**\n{t('wizard.playstyle_step_desc', lang)}"
+        else:
+            content = f"**{t('wizard.squad_limit_title', lang)}**\n{t('wizard.squad_limit_desc', lang, default=default_limit)}"
+        await interaction.response.edit_message(content=content, embed=None, view=next_view)
 
     async def _continue(self, interaction):
         self._save_selections()
@@ -3493,16 +4439,21 @@ class WizardSquadLimitView(BaseView):
         self.interaction_user = interaction_user
         lang = get_guild_language(guild_id)
 
-        current_default = event.get("max_squads_per_user", 1)
-        options = []
-        for n in range(1, 21):
-            label = f"{n} Squad" if n == 1 else f"{n} Squads"
-            options.append(discord.SelectOption(label=label, value=str(n), default=(n == current_default)))
-
-        self.limit_select = ui.Select(placeholder=t("wizard.squad_limit_placeholder", lang),
-                                      options=options, min_values=1, max_values=1, row=0)
-        self.limit_select.callback = self._limit_selected
-        self.add_item(self.limit_select)
+        # When a role gate is configured, the per-user squad limit (#12) is set in
+        # the Slot Limits step instead, so this step only configures playstyle.
+        self.limit_select = None
+        play_row = 0
+        if not _gate_configured(event):
+            current_default = event.get("max_squads_per_user", 1)
+            options = []
+            for n in range(1, 21):
+                label = f"{n} Squad" if n == 1 else f"{n} Squads"
+                options.append(discord.SelectOption(label=label, value=str(n), default=(n == current_default)))
+            self.limit_select = ui.Select(placeholder=t("wizard.squad_limit_placeholder", lang),
+                                          options=options, min_values=1, max_values=1, row=0)
+            self.limit_select.callback = self._limit_selected
+            self.add_item(self.limit_select)
+            play_row = 1
 
         playstyle_default = bool(event.get("playstyle_enabled", True))
         self.playstyle_select = ui.Select(
@@ -3513,7 +4464,7 @@ class WizardSquadLimitView(BaseView):
                 discord.SelectOption(label=t("wizard.playstyle_disabled", lang),
                                      value="no", default=not playstyle_default),
             ],
-            min_values=1, max_values=1, row=1)
+            min_values=1, max_values=1, row=play_row)
         self.playstyle_select.callback = self._playstyle_selected
         self.add_item(self.playstyle_select)
 
@@ -3624,6 +4575,15 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
             countdown_val = t("wizard.countdown_none", lang)
         embed.add_field(name=t("wizard.summary_countdown", lang), value=countdown_val, inline=True)
 
+    # Recurrence / duration / (recreate-after, only for recurring events)
+    embed.add_field(name=t("wizard.summary_recurrence", lang),
+                    value=_format_recurrence(event.get("recurrence"), lang, event=event), inline=True)
+    embed.add_field(name=t("wizard.summary_duration", lang),
+                    value=_format_duration_value(event.get("duration_minutes"), lang), inline=True)
+    if (event.get("recurrence") or {}).get("type", "never") != "never":
+        embed.add_field(name=t("wizard.summary_spawn_offset", lang),
+                        value=_format_spawn_offset_value(event.get("spawn_offset_minutes"), lang), inline=True)
+
     # Calculate unused slots for confirmation summary
     _cap = event.get("server_max_players", 100)
     _max_casters = event.get("max_caster_slots", 2)
@@ -3669,6 +4629,19 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
         f"{_fmt(event.get('caster_community_role_ids', []), event.get('caster_community_user_ids', []))}"
     )
     embed.add_field(name=t("wizard.summary_roles", lang), value=roles_info, inline=False)
+
+    # Slot limits — only relevant once early-access roles are configured.
+    if event.get("community_rep_role_ids"):
+        limit_lines = [
+            f"**{t('wizard.summary_early_pct_cap', lang)}:** "
+            f"{_format_percent_value(event.get('community_rep_cap_percent'), lang)}"
+        ]
+        if event.get("mode", "rep") != "player":
+            limit_lines.append(
+                f"**{t('wizard.summary_early_squad_cap', lang)}:** "
+                f"{_format_count_value(event.get('early_access_squads_per_role'), lang)}")
+        embed.add_field(name=t("wizard.summary_slot_limits", lang),
+                        value="\n".join(limit_lines), inline=False)
 
     return embed
 
@@ -3727,7 +4700,7 @@ class WizardConfirmationView(BaseView):
                     ping_msg = await channel.send(
                         content=f"{ping_text}" + t("reg.opened_announcement", lang, name=self.event["name"]),
                         allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-                    self.event.setdefault("ping_message_ids", []).append(ping_msg.id)
+                    self.event["announcement_message_id"] = ping_msg.id
                 except discord.Forbidden:
                     pass
 
@@ -3742,7 +4715,7 @@ class WizardConfirmationView(BaseView):
                 ping_msg = await channel.send(
                     content=f"{early_ping_text}" + t("reg.early_access_announcement", lang, name=self.event["name"]),
                     allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-                self.event.setdefault("ping_message_ids", []).append(ping_msg.id)
+                self.event["announcement_message_id"] = ping_msg.id
             except discord.Forbidden:
                 pass
 
@@ -3763,6 +4736,18 @@ class WizardConfirmationView(BaseView):
               name=self.event["name"], date=self.event["date"], time=self.event["time"],
               user=self.interaction_user.name, reg_info=reg_info),
             guild_id=self.guild_id)
+
+        # Also post the full approved settings (the embed the creator confirmed)
+        # to the log channel for traceability. Best-effort: never break creation.
+        settings_embed = _build_confirmation_embed(self.event, self.guild_id)
+        settings_embed.title = t("log.event_created_settings_title", lang, name=self.event["name"])
+        settings_embed.color = discord.Color.blue()
+        log_ch = get_log_channel(self.guild_id)
+        if log_ch:
+            try:
+                await log_ch.send(embed=settings_embed)
+            except Exception as e:
+                logger.error(f"Could not send event settings to log: {e}")
 
         await interaction.edit_original_response(
             content=t("event.created", lang, name=self.event["name"], reg_info=reg_info))
@@ -4026,6 +5011,32 @@ async def _get_or_fetch_channel(channel_id: int):
     return ch
 
 
+async def _delete_event_messages(channel, event):
+    """Best-effort delete of every bot message tied to an event: the embed, the
+    ping messages, and the (legacy + current) announcement/countdown/early-access
+    messages. Safe when the channel or messages are already gone."""
+    if channel is None:
+        return
+    msg_id = event.get("event_message_id")
+    if msg_id:
+        try:
+            await (await channel.fetch_message(msg_id)).delete()
+        except Exception as e:
+            logger.warning(f"Could not delete event embed: {e}")
+    for mid in (event.get("ping_message_ids", []) or []):
+        try:
+            await (await channel.fetch_message(mid)).delete()
+        except Exception:
+            pass
+    for field in ("countdown_message_id", "early_access_message_id", "announcement_message_id"):
+        mid = event.get(field)
+        if mid:
+            try:
+                await (await channel.fetch_message(mid)).delete()
+            except Exception:
+                pass
+
+
 async def _archive_event(event: dict, guild_id: int, channel_id: int, lang: str):
     """Log the event summary to the guild log channel and delete the embed + related messages."""
     event_name = event.get("name", "?")
@@ -4044,26 +5055,60 @@ async def _archive_event(event: dict, guild_id: int, channel_id: int, lang: str)
     if ch is None:
         return
 
-    msg_id = event.get("event_message_id")
-    if msg_id:
-        try:
-            msg = await ch.fetch_message(msg_id)
-            await msg.delete()
-        except Exception as e:
-            logger.warning(f"Could not delete expired event embed: {e}")
-    for ping_msg_id in event.get("ping_message_ids", []):
-        try:
-            ping_msg = await ch.fetch_message(ping_msg_id)
-            await ping_msg.delete()
-        except Exception:
-            pass
-    countdown_msg_id = event.get("countdown_message_id")
-    if countdown_msg_id:
-        try:
-            cd_msg = await ch.fetch_message(countdown_msg_id)
-            await cd_msg.delete()
-        except Exception:
-            pass
+    await _delete_event_messages(ch, event)
+
+
+async def _set_channel_announcement(ch, event, db_id, user_assignments,
+                                    content=None, mentions=None, attempts=1):
+    """Make ``content`` the single bot announcement below the event embed.
+
+    Posts the new message (if ``content`` is given), records it in
+    ``event["announcement_message_id"]``, then deletes whatever announcement was there
+    before. Pass ``content=None`` to just clear the current announcement. Best-effort:
+    the channel or messages may already be gone. Also sweeps the legacy trackers
+    (``early_access_message_id`` / ``countdown_message_id`` / ``ping_message_ids``) so
+    events created before this scheme self-heal on their next announcement.
+    """
+    old_ids = []
+    if event.get("announcement_message_id"):
+        old_ids.append(event["announcement_message_id"])
+    for legacy_key in ("early_access_message_id", "countdown_message_id"):
+        if event.get(legacy_key):
+            old_ids.append(event[legacy_key])
+    old_ids.extend(event.get("ping_message_ids", []) or [])
+
+    new_id = None
+    if content is not None and ch is not None:
+        for i in range(max(1, attempts)):
+            try:
+                msg = await ch.send(
+                    content=content,
+                    allowed_mentions=mentions or discord.AllowedMentions.none())
+                new_id = msg.id
+                break
+            except discord.Forbidden:
+                break
+            except Exception as e:
+                logger.warning(f"Attempt {i+1} to post announcement for '{event.get('name')}' failed: {e}")
+                if i + 1 < attempts:
+                    await asyncio.sleep(1)
+
+    # Record the new id and clear the legacy trackers BEFORE deleting the old messages, so
+    # a crash mid-delete can't lose the new id or resurrect the old ones.
+    event["announcement_message_id"] = new_id
+    event["early_access_message_id"] = None
+    event["countdown_message_id"] = None
+    event["ping_message_ids"] = []
+    save_event(db_id, event, user_assignments)
+
+    if ch is not None:
+        for mid in old_ids:
+            if mid == new_id:
+                continue
+            try:
+                await (await ch.fetch_message(mid)).delete()
+            except Exception:
+                pass
 
 
 async def _maybe_spawn_recurrence(old_event: dict, guild_id: int, channel_id: int, lang: str):
@@ -4164,6 +5209,8 @@ async def check_events_loop():
                     if ch:
                         caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
                         await send_event_details(ch, event, db_id, lang, caster_enabled)
+                        # The "register now" announcement is stale now the event has started.
+                        await _set_channel_announcement(ch, event, db_id, user_assignments, content=None)
 
                 # ── End-of-event handling ──
                 if end_dt and now > end_dt:
@@ -4216,9 +5263,10 @@ async def check_events_loop():
                                     h_str = t("time.hour", lang) if hours == 1 else t("time.hours", lang, n=hours)
                                     remaining = f"{h_str} {t('time.minutes', lang, n=mins)}" if mins else h_str
                                 content = f"{ping_text}" + t("reg.opens_soon", lang, name=event["name"], ts=ts, remaining=remaining)
-                                countdown_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True))
-                                event["countdown_message_id"] = countdown_msg.id
-                                save_event(db_id, event, user_assignments)
+                                # Replaces the early-access ping (if any) with the countdown.
+                                await _set_channel_announcement(
+                                    ch, event, db_id, user_assignments, content=content,
+                                    mentions=discord.AllowedMentions(roles=True))
 
                 # ── Open registration (only if NOT closed) ──
                 if not is_open and not is_closed:
@@ -4234,41 +5282,21 @@ async def check_events_loop():
                             except Exception:
                                 ch = None
                         if ch:
-                            # PRIORITY 1: Send ping immediately
+                            # PRIORITY 1: Replace the announcement with the "now open" ping —
+                            # this also deletes the stale countdown / early-access announcement.
+                            # When ping_on_open is off, still clear the stale pre-open announcement.
+                            content = None
                             if event.get("ping_on_open", False):
                                 ping_text = _build_ping_text(event)
                                 if ping_text:
                                     content = f"{ping_text}" + t("reg.opened_announcement", lang, name=event["name"])
-                                    ping_msg = None
-                                    for attempt in range(2):
-                                        try:
-                                            ping_msg = await ch.send(content=content, allowed_mentions=discord.AllowedMentions(roles=True, users=True))
-                                            break
-                                        except Exception as e:
-                                            logger.warning(f"Attempt {attempt+1} to send open announcement for '{event['name']}' failed: {e}")
-                                            if attempt == 0:
-                                                await asyncio.sleep(1)
-                                    if ping_msg:
-                                        event.setdefault("ping_message_ids", []).append(ping_msg.id)
-                                        save_event(db_id, event, user_assignments)
-                                    else:
-                                        logger.error(f"Failed to send open announcement for '{event['name']}' after 2 attempts")
+                            await _set_channel_announcement(
+                                ch, event, db_id, user_assignments, content=content,
+                                mentions=discord.AllowedMentions(roles=True, users=True), attempts=2)
 
                             # PRIORITY 2: Send/update event embed
                             caster_enabled = settings.get("caster_registration_enabled", True) and event.get("max_caster_slots", 2) > 0
                             await send_event_details(ch, event, db_id, lang, caster_enabled)
-
-                            # LOW PRIORITY: Cleanup & log in background
-                            countdown_msg_id = event.pop("countdown_message_id", None)
-                            if countdown_msg_id:
-                                save_event(db_id, event, user_assignments)
-                                async def _delete_countdown(_ch, _msg_id):
-                                    try:
-                                        old_msg = await _ch.fetch_message(_msg_id)
-                                        await old_msg.delete()
-                                    except Exception:
-                                        pass
-                                bot.loop.create_task(_delete_countdown(ch, countdown_msg_id))
 
                         bot.loop.create_task(
                             send_to_log_channel(t("log.reg_opened", lang, name=event["name"]), guild_id=guild_id)
@@ -4595,7 +5623,7 @@ async def settings_command(interaction: discord.Interaction):
     app_commands.Choice(name="Register as representative (squad rep)", value="rep"),
     app_commands.Choice(name="Register as player (individual)", value="player"),
 ])
-async def event_command(interaction: discord.Interaction, mode: str = "rep"):
+async def event_command(interaction: discord.Interaction, mode: str):
     if not await check_organizer(interaction):
         return
     lang = _lang(interaction)
@@ -4713,8 +5741,8 @@ _ROLE_KEYS = [
 @app_commands.choices(role_type=[
     app_commands.Choice(name="All roles", value="all"),
     app_commands.Choice(name="Ping roles", value="ping_role_ids"),
-    app_commands.Choice(name="Squad rep roles", value="squad_rep_role_ids"),
-    app_commands.Choice(name="Community rep roles (early access)", value="community_rep_role_ids"),
+    app_commands.Choice(name="Roles allowed to register", value="squad_rep_role_ids"),
+    app_commands.Choice(name="Roles with early access", value="community_rep_role_ids"),
     app_commands.Choice(name="Caster roles", value="caster_role_ids"),
     app_commands.Choice(name="Caster community roles (early access)", value="caster_community_role_ids"),
 ])

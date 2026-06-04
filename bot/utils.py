@@ -21,7 +21,7 @@ import discord
 from discord import Embed
 
 from i18n import t
-from config import ADMIN_IDS
+from config import ADMIN_IDS, EVENT_TIMEZONE
 
 logger = logging.getLogger("event_bot")
 
@@ -85,9 +85,12 @@ def has_organizer_role(user, organizer_role_id: int) -> bool:
 
 
 def has_role(user, role_id: int) -> bool:
-    """Check if user has a specific role by ID."""
-    if hasattr(user, "id") and str(user.id) in ADMIN_IDS:
-        return True
+    """Check if user has a specific role by ID.
+
+    Literal role membership — bot-level admins (ADMIN_IDS) are NOT bypassed here,
+    so they're subject to the registration role gate like everyone else. Admin
+    powers come from has_organizer_role / is_guild_admin instead.
+    """
     if not hasattr(user, "roles"):
         return False
     return any(role.id == role_id for role in user.roles)
@@ -112,20 +115,6 @@ def parse_date(date_str: str) -> Optional[datetime]:
         return datetime.strptime(date_str, "%d.%m.%Y")
     except ValueError:
         return None
-
-
-def compute_expiry_date(date_str: str, time_str: str = None) -> Optional[datetime]:
-    """Compute event expiry: 24 hours after event start."""
-    event_dt = parse_date(date_str)
-    if not event_dt:
-        return None
-    if time_str:
-        try:
-            hours, minutes = map(int, time_str.split(":"))
-            event_dt = event_dt.replace(hour=hours, minute=minutes)
-        except (ValueError, AttributeError):
-            pass
-    return event_dt + timedelta(days=1)
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +398,39 @@ def _player_unregister(event: dict, user_assignments: dict, user_id) -> tuple:
         promoted = _promote_player_waitlist(event, user_assignments, squad_type)
 
     return True, squad_name, promoted
+
+
+def _player_waitlist_type(event: dict, user_id) -> Optional[str]:
+    """Return the squad_type a user is currently waitlisted under, or None.
+
+    Non-destructive lookup mirroring _player_remove_from_waitlist's matching —
+    used to decide whether a waitlisted player may open the self-unregister
+    confirmation dialog.
+    """
+    uid = str(user_id)
+    for st in _SQUAD_TYPES:
+        for entry in event.get(_waitlist_key(st), []):
+            if isinstance(entry, (tuple, list)) and len(entry) > 4 and str(entry[4]) == uid:
+                return st
+    return None
+
+
+def _player_self_unregister(event: dict, user_assignments: dict, user_id) -> tuple:
+    """Self-service player removal: drop from a squad if seated, otherwise from
+    the waitlist.
+
+    Returns (status, name_or_type, promoted):
+      - ("squad", squad_name, promoted_list) when removed from a squad,
+      - ("waitlist", squad_type, []) when removed from a waitlist,
+      - (None, None, []) when the user was neither seated nor waitlisted.
+    """
+    ok, squad_name, promoted = _player_unregister(event, user_assignments, user_id)
+    if ok:
+        return "squad", squad_name, promoted
+    wl_type = _player_remove_from_waitlist(event, user_id)
+    if wl_type is not None:
+        return "waitlist", wl_type, []
+    return None, None, []
 
 
 def compute_event_start(event: dict) -> Optional[datetime]:
@@ -919,7 +941,13 @@ def format_event_details(event: dict, lang: str = "de",
                         labels = [role_label(r, lang) for r in rls] or [none_label]
                         parts.append(f"**{m.get('name', '?')}** ({', '.join(labels)})")
                     names = ", ".join(parts) or "—"
-                    text += f"**{data.get('name', squad_id)}** ({filled}/{data.get('size', 0)}): {names}\n"
+                    # Auto squad names are stored canonically ("Infantry 1");
+                    # localize the label using the known type for display.
+                    raw_name = data.get('name', squad_id)
+                    number = raw_name.rsplit(" ", 1)[-1]
+                    squad_label = (f"{t('squad.label_' + type_key, lang)} {number}"
+                                   if number.isdigit() else raw_name)
+                    text += f"**{squad_label}** ({filled}/{data.get('size', 0)}): {names}\n"
                 else:
                     playstyle = data.get("playstyle", "Normal")
                     sq_size = data.get("size", 0)
@@ -1028,7 +1056,11 @@ def clear_log_file() -> bool:
 # ICS (iCalendar) export
 # ---------------------------------------------------------------------------
 
-_ICS_TZ = ZoneInfo("Europe/Berlin")
+try:
+    _ICS_TZ = ZoneInfo(EVENT_TIMEZONE)
+except Exception:
+    logger.warning("Invalid EVENT_TIMEZONE %r; falling back to Europe/Berlin", EVENT_TIMEZONE)
+    _ICS_TZ = ZoneInfo("Europe/Berlin")
 _ICS_DATE_FMT = "%d.%m.%Y %H:%M"
 
 
@@ -1089,7 +1121,7 @@ def build_event_ics(
     """Build the ICS file for an event.
 
     Returns UTF-8 encoded bytes with CRLF line endings. Times are converted
-    from the bot's local timezone (Europe/Berlin) to UTC.
+    from the configured timezone (EVENT_TIMEZONE, default Europe/Berlin) to UTC.
     """
     date_str = event.get("date", "")
     time_str = event.get("time", "20:00")
