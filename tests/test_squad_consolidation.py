@@ -171,6 +171,27 @@ class ConsolidateTest(unittest.TestCase):
         self.assertEqual(removed, 0)
         self.assertEqual(len(event["squads"]["Infantry 1"]["members"]), 3)
 
+    def test_consolidation_follows_numeric_order_not_dict_order(self):
+        # Squads stored out of numeric order (e.g. a middle squad removed then
+        # recreated, appended at the end). Consolidation must still keep the
+        # numerically-first squad (Infantry 1), not whatever happens to be first
+        # in dict-iteration order.
+        squads = {
+            "Infantry 3": {"type": "infantry", "size": 6, "members": [_m("u3", "C")]},
+            "Infantry 1": {"type": "infantry", "size": 6, "members": [
+                _m("u1a", "A1"), _m("u1b", "A2"), _m("u1c", "A3")]},
+            "Infantry 2": {"type": "infantry", "size": 6, "members": [_m("u2", "B")]},
+        }
+        event = _event(squads)
+        ua = _ua(squads)
+
+        removed = utils.consolidate_all_player_squads(event, ua)
+
+        # 3 + 1 + 1 = 5 members fit into one squad.
+        self.assertEqual(removed, 2)
+        self.assertEqual(set(event["squads"]), {"Infantry 1"})
+        self.assertEqual(len(event["squads"]["Infantry 1"]["members"]), 5)
+
     def test_trailing_empty_squad_dropped(self):
         squads = {
             "Infantry 1": {"type": "infantry", "size": 6, "members": [

@@ -275,12 +275,26 @@ def _player_register(event: dict, user_assignments: dict, user_id, display_name:
     return None, "waitlisted"
 
 
+def _squad_number_key(name: str):
+    """Sort key for auto-named squads ("Infantry 1", "Infantry 2", ...) by their
+    numeric suffix. Names without a numeric suffix sort last, deterministically.
+    """
+    tail = name.rsplit(" ", 1)[-1]
+    return (0, int(tail)) if tail.isdigit() else (1, 0)
+
+
 def _compact_player_squads(event: dict, user_assignments: dict, squad_type: str):
     """Pull last-registered members from later squads into earlier partial
     squads of the same type. Drop trailing empty squads.
+
+    Squads are processed in numeric order (Infantry 1, 2, 3, ...) rather than
+    dict-insertion order, so consolidation deterministically keeps the
+    lowest-numbered squads regardless of how the dict was built.
     """
     squads = event.get("squads", {})
-    type_names = [n for n, s in squads.items() if s.get("type") == squad_type]
+    type_names = sorted(
+        (n for n, s in squads.items() if s.get("type") == squad_type),
+        key=_squad_number_key)
 
     for i, name in enumerate(type_names):
         squad = squads[name]
