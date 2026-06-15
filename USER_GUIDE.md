@@ -25,7 +25,7 @@ Use this mode when squad leads coordinate their own teams and the organizer need
 
 ### Player Mode
 
-Each registration is a **single player** — just the user themselves. The bot auto-assigns individuals to squads in arrival order: the first 6 Infantry sign-ups form "Infantry 1", the next 6 form "Infantry 2", and so on. Each player can also pick an **optional in-squad role** (Squad Leader, Medic, Pilot, …) — the role appears next to their name in the event embed, and Squad Leaders sort to the top of their squad. No playstyle, no squad name, no caster role. **One user = one registration.**
+Each registration is a **single player** — just the user themselves. The bot auto-assigns individuals to squads in arrival order: the first 6 Infantry sign-ups form "Infantry 1", the next 6 form "Infantry 2", and so on. When the event starts — or at any time manually via the admin panel — the bot merges partially-filled squads and removes empty ones so the overview stays compact. Each player can also pick an **optional in-squad role** (Squad Leader, Medic, Pilot, …) — the role appears next to their name in the event embed, and Squad Leaders sort to the top of their squad. No playstyle, no squad name, no caster role. **One user = one registration.**
 
 Use this mode for pick-up matches or community seat-filling events where individuals sign up and organizers don't care about squad composition.
 
@@ -235,7 +235,7 @@ You can configure an event to automatically spawn a follow-up. Set this up via D
 
 **How the lifecycle works:**
 
-- At `start` — registration automatically closes. New signups / unregistrations / squad swaps are rejected.
+- At `start` — registration automatically closes. New signups / unregistrations / squad swaps are rejected. In player mode, partially-filled squads are automatically consolidated at this point.
 - At `start + duration` — for **non-recurring** events, the summary is logged to the log channel and the embed is deleted. Done.
 - At `start + duration` — for **recurring** events, nothing visible happens yet. The embed stays in the channel as a read-only snapshot of the final state.
 - At `start + duration + spawn delay` — for **recurring** events, the old summary is logged, the embed is deleted, and a fresh event is created and posted automatically. The new event inherits all configuration (name, slot sizes, role pings, recurrence, duration, spawn delay) and resets runtime state.
@@ -259,7 +259,7 @@ When adding a squad as admin, the selected representative user counts toward the
 
 ### Admin Panel — Player Mode
 
-In player mode the admin panel has 6 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
+In player mode the admin panel has 7 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
 
 | Row | Button | Description |
 |---|---|---|
@@ -267,6 +267,7 @@ In player mode the admin panel has 6 buttons in 3 rows — the Squad and Caster 
 | Player | **Remove Player** | Pick one or more players (multi-select) — from current squad members **and** from any waitlist (waitlist entries are prefixed `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`). The action is gated behind a red "Unregister" confirm button. |
 | Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
 | Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt |
+| Registration | **Consolidate Squads** | Merge partially-filled squads and drop empty ones — gated behind a confirmation prompt. Also happens automatically when the event starts. Player mode only. |
 | Event | **Edit Event** | Opens DM-based editing session |
 | Event | **Delete Event** | Delete the event with confirmation |
 

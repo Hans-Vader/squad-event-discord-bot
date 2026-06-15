@@ -25,7 +25,7 @@ Dieser Modus passt, wenn Squad-Leads ihre eigenen Teams koordinieren und der Org
 
 ### Spieler-Modus
 
-Jede Anmeldung ist ein **einzelner Spieler** — nur der User selbst. Der Bot weist Spieler automatisch Squads zu, in der Reihenfolge der Anmeldung: Die ersten 6 Infanterie-Anmeldungen bilden „Infantry 1", die nächsten 6 „Infantry 2", usw. Jeder Spieler kann zusätzlich eine **optionale Rolle im Squad** (Squad Leader, Medic, Pilot, …) wählen — die Rolle erscheint hinter dem Namen im Event-Embed, und Squad Leader werden ans obere Ende ihres Squads sortiert. Kein Spielstil, kein Squad-Name, keine Caster-Rolle. **Ein User = eine Anmeldung.**
+Jede Anmeldung ist ein **einzelner Spieler** — nur der User selbst. Der Bot weist Spieler automatisch Squads zu, in der Reihenfolge der Anmeldung: Die ersten 6 Infanterie-Anmeldungen bilden „Infantry 1", die nächsten 6 „Infantry 2", usw. Beim Event-Start — oder jederzeit manuell durch die Orga über das Admin-Panel — legt der Bot teilweise gefüllte Squads zusammen und entfernt leere Squads, damit die Übersicht kompakt bleibt. Jeder Spieler kann zusätzlich eine **optionale Rolle im Squad** (Squad Leader, Medic, Pilot, …) wählen — die Rolle erscheint hinter dem Namen im Event-Embed, und Squad Leader werden ans obere Ende ihres Squads sortiert. Kein Spielstil, kein Squad-Name, keine Caster-Rolle. **Ein User = eine Anmeldung.**
 
 Dieser Modus eignet sich für Pick-up-Matches oder Community-Events, bei denen sich Einzelpersonen anmelden und die Squad-Zusammensetzung egal ist.
 
@@ -235,7 +235,7 @@ Du kannst festlegen, dass ein Event automatisch ein Folgeevent erstellt. Konfigu
 
 **Ablauf:**
 
-- Bei `Start` — die Anmeldung wird automatisch geschlossen. Neue Anmeldungen, Abmeldungen und Squad-Wechsel werden abgelehnt.
+- Bei `Start` — die Anmeldung wird automatisch geschlossen. Neue Anmeldungen, Abmeldungen und Squad-Wechsel werden abgelehnt. Im Spieler-Modus werden dabei teilweise gefüllte Squads automatisch zusammengelegt.
 - Bei `Start + Dauer` — für **nicht wiederkehrende** Events: Zusammenfassung wird in den Log-Kanal geschrieben, das Embed wird gelöscht. Fertig.
 - Bei `Start + Dauer` — für **wiederkehrende** Events: nichts Sichtbares passiert. Das Embed bleibt als schreibgeschützter Snapshot des Endstands im Kanal sichtbar.
 - Bei `Start + Dauer + Verzögerung` — für **wiederkehrende** Events: die Zusammenfassung wird geloggt, das alte Embed wird gelöscht, ein frisches Event wird erstellt und gepostet. Das neue Event übernimmt die komplette Konfiguration (Name, Slot-Größen, Rollen-Pings, Wiederholung, Dauer, Verzögerung) und setzt den Laufzeit-Zustand zurück.
@@ -259,7 +259,7 @@ Beim Hinzufügen eines Squads als Admin wird der ausgewählte Vertreter für das
 
 ### Admin-Panel — Spieler-Modus
 
-Im Spieler-Modus hat das Admin-Panel 6 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
+Im Spieler-Modus hat das Admin-Panel 7 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
@@ -267,6 +267,7 @@ Im Spieler-Modus hat das Admin-Panel 6 Buttons in 3 Reihen — die Squad- und Ca
 | Spieler | **Spieler entfernen** | Einen oder mehrere Spieler auswählen (Mehrfachauswahl) — aus aktuellen Squad-Mitgliedern **und** aus jeder Warteliste (Wartelisten-Einträge sind mit `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]` markiert). Die Aktion ist hinter einem roten „Abmelden"-Bestätigungsbutton abgesichert. |
 | Anmeldung | **Anmeldung öffnen** | Anmeldung manuell öffnen — hinter einer Bestätigungsabfrage abgesichert (beim Öffnen kann ein Ping an die konfigurierten Rollen gesendet werden) |
 | Anmeldung | **Anmeldung schließen** | Anmeldung manuell schließen — hinter einer Bestätigungsabfrage abgesichert |
+| Anmeldung | **Squads zusammenlegen** | Teilweise gefüllte Squads zusammenlegen und leere Squads entfernen — hinter einer Bestätigungsabfrage abgesichert. Passiert automatisch auch beim Event-Start. Nur im Spieler-Modus verfügbar. |
 | Event | **Event bearbeiten** | Öffnet DM-basierte Bearbeitungssitzung |
 | Event | **Event löschen** | Event mit Bestätigung löschen |
 

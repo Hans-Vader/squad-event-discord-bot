@@ -227,16 +227,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "🪖 Representative mode",
     },
     "event.mode_rep_desc": {
-        "de": "Die Orga meldet komplette Squads an – mit Squad-Name, Typ (Infanterie/Fahrzeug/Heli), Spielstil und einem Squad-Leiter als Vertreter. Mehrere Squads pro Person möglich, Caster können sich anmelden. (Klassischer Modus)",
-        "en": "Organizers register complete squads – with squad name, type (Infantry/Vehicle/Heli), playstyle and a squad lead as representative. Multiple squads per person possible, casters can register. (Classic mode)",
+        "de": "Ein Vertreter meldet komplette Squads an – mit Squad-Name, Typ (Infanterie/Fahrzeug/Heli) und Spielstil. Mehrere Squads pro Vertreter möglich, Caster können sich anmelden.",
+        "en": "A representative registers complete squads – with squad name, type (Infantry/Vehicle/Heli) and playstyle. Multiple squads per representative are possible, casters can register.",
     },
     "event.mode_player_name": {
         "de": "🎮 Spieler-Modus",
         "en": "🎮 Player mode",
     },
     "event.mode_player_desc": {
-        "de": "Spieler melden sich einzeln an und wählen nur ihren Squad-Typ (optional eine Rolle wie Squad-Leiter, Medic oder Pilot). Der Bot füllt die Squads automatisch in Anmelde-Reihenfolge (Infanterie 1, Infanterie 2 …). 1 Squad pro Person, keine Caster.",
-        "en": "Players sign up individually and only pick their squad type (optionally a role like Squad Leader, Medic or Pilot). The bot auto-fills squads in sign-up order (Infantry 1, Infantry 2 …). 1 squad per person, no casters.",
+        "de": "Spieler melden sich einzeln an und wählen nur ihren Squad-Typ (optional eine Rolle wie Squad-Leiter, Medic oder Pilot). Der Bot füllt die Squads automatisch in Anmelde-Reihenfolge (Infanterie 1, Infanterie 2 …) und legt beim Event-Start teilweise gefüllte Squads zusammen (auch manuell durch die Orga möglich). 1 Squad pro Person, keine Caster.",
+        "en": "Players sign up individually and only pick their squad type (optionally a role like Squad Leader, Medic or Pilot). The bot auto-fills squads in sign-up order (Infantry 1, Infantry 2 …) and merges partially-filled squads when the event starts (organizers can also trigger this manually). 1 squad per person, no casters.",
     },
     "event.mode_rep_button": {
         "de": "Vertreter-Modus",
