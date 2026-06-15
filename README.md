@@ -8,7 +8,7 @@ A Discord bot for managing squad-based events with interactive registration, wai
 
 ## Features
 
-- **Two event modes** — **Representative mode** (register a squad with a name, playstyle, and lead) or **Player mode** (register yourself individually with an optional in-squad role; the bot auto-forms squads from arrival order, no casters, one-user-one-registration). Picked at creation via `/create_event mode:…`.
+- **Two event modes** — **Representative mode** (register a squad with a name, playstyle, and lead) or **Player mode** (register yourself individually with an optional in-squad role; the bot auto-forms squads from arrival order, no casters, one-user-one-registration). Picked at creation: `/create_event` shows both modes side by side and you choose one with a button.
 - **Guided squad registration** — Step-by-step flow with dropdowns for squad type (Infantry/Vehicle/Heli) and playstyle (Casual/Normal/Focused) in rep mode; type + optional multi-role picker (Squad Leader, Medic, Pilot, …) in player mode. Squad Leaders sort to the top of their squad and are routed into squads without an existing SL when capacity allows.
 - **Three squad types** — Infantry, Vehicle, and Heli squads with independent size and count limits
 - **Server slot calculation** — Automatic distribution of server capacity across all squad types and casters

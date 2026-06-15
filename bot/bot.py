@@ -5072,6 +5072,30 @@ class EventCreationModal(ui.Modal):
             t("event.config_prompt", lang), view=bridge, ephemeral=True)
 
 
+class EventModeSelectView(BaseView):
+    """Schritt von /create_event: erklärt beide Anmelde-Modi und lässt die Orga
+    per Button einen wählen, der das EventCreationModal öffnet."""
+    def __init__(self, guild_id, channel_id):
+        super().__init__(timeout=300, title="Event Mode")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        lang = get_guild_language(guild_id)
+
+        rep_button = ui.Button(label=t("event.mode_rep_button", lang),
+                               style=discord.ButtonStyle.primary, emoji="🪖")
+        rep_button.callback = lambda i: self._open(i, "rep")
+        self.add_item(rep_button)
+
+        player_button = ui.Button(label=t("event.mode_player_button", lang),
+                                  style=discord.ButtonStyle.success, emoji="🎮")
+        player_button.callback = lambda i: self._open(i, "player")
+        self.add_item(player_button)
+
+    async def _open(self, interaction, mode):
+        modal = EventCreationModal(self.guild_id, self.channel_id, mode=mode)
+        await interaction.response.send_modal(modal)
+
+
 # ############################# #
 # BACKGROUND TASKS              #
 # ############################# #
@@ -5703,19 +5727,23 @@ async def settings_command(interaction: discord.Interaction):
 # ############################# #
 
 @bot.tree.command(name="create_event", description="Create a new event in this channel (organizer only)")
-@app_commands.choices(mode=[
-    app_commands.Choice(name="Register as representative (squad rep)", value="rep"),
-    app_commands.Choice(name="Register as player (individual)", value="player"),
-])
-async def event_command(interaction: discord.Interaction, mode: str):
+async def event_command(interaction: discord.Interaction):
     if not await check_organizer(interaction):
         return
     lang = _lang(interaction)
     if channel_has_active_event(interaction.guild.id, interaction.channel_id):
         await interaction.response.send_message(t("event.already_exists_in_channel", lang), ephemeral=True)
         return
-    modal = EventCreationModal(interaction.guild.id, interaction.channel_id, mode=mode)
-    await interaction.response.send_modal(modal)
+    embed = discord.Embed(
+        title=t("event.mode_select_title", lang),
+        description=t("event.mode_select_desc", lang),
+        color=discord.Color.blurple())
+    embed.add_field(name=t("event.mode_rep_name", lang),
+                    value=t("event.mode_rep_desc", lang), inline=False)
+    embed.add_field(name=t("event.mode_player_name", lang),
+                    value=t("event.mode_player_desc", lang), inline=False)
+    view = EventModeSelectView(interaction.guild.id, interaction.channel_id)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 @bot.tree.command(name="delete_event", description="Delete the event in this channel (organizer only)")

@@ -114,12 +114,12 @@ Mit `/settings` wird die aktuelle Serverkonfiguration angezeigt.
 
 ### Event erstellen
 
-Verwende `/create_event`, um ein Event zu erstellen. Der Command hat einen **erforderlichen Choice-Parameter** — du musst einen Modus wählen:
+Verwende `/create_event`, um ein Event zu erstellen. Der Bot antwortet mit einer Nachricht, die beide Modi nebeneinander erklärt; wähle einen per Button:
 
-- `mode: Register as representative (squad rep)` — durchläuft den vollen Wizard unten.
-- `mode: Register as player (individual)` — überspringt den Caster-Rollen-Schritt und den Max-Squads-pro-User-Schritt, setzt `max_caster_slots = 0` zwangsweise und beschriftet „Server Max Spieler" als „Plätze gesamt".
+- **🪖 Vertreter-Modus** — durchläuft den vollen Wizard unten.
+- **🎮 Spieler-Modus** — überspringt den Caster-Rollen-Schritt und den Max-Squads-pro-User-Schritt, setzt `max_caster_slots = 0` zwangsweise und beschriftet „Server Max Spieler" als „Plätze gesamt".
 
-Nach dem Command führt dich ein mehrstufiger Wizard durch:
+Nach der Modus-Wahl führt dich ein mehrstufiger Wizard durch:
 
 **Schritt 1 — Basis-Informationen (Modal):**
 - Event-Name, Datum, Uhrzeit, Beschreibung

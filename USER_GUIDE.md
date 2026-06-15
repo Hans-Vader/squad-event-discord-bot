@@ -114,12 +114,12 @@ Use `/settings` to view the current server configuration.
 
 ### Creating an Event
 
-Use `/create_event` to start event creation. The command takes one **required choice** parameter — you must pick a mode:
+Use `/create_event` to start event creation. The bot replies with a message that explains both modes side by side; pick one with a button:
 
-- `mode: Register as representative (squad rep)` — runs the full wizard below.
-- `mode: Register as player (individual)` — skips the caster-roles step and the max-squads-per-user step, forces `max_caster_slots = 0`, and relabels "Server max players" to "Total seats".
+- **🪖 Representative mode** — runs the full wizard below.
+- **🎮 Player mode** — skips the caster-roles step and the max-squads-per-user step, forces `max_caster_slots = 0`, and relabels "Server max players" to "Total seats".
 
-After the command, a multi-step wizard guides you through:
+After you pick a mode, a multi-step wizard guides you through:
 
 **Step 1 — Basic Info (Modal):**
 - Event name, date, time, description
