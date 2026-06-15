@@ -940,14 +940,18 @@ def format_event_details(event: dict, lang: str = "de",
                         rls = _get_member_roles(m)
                         labels = [role_label(r, lang) for r in rls] or [none_label]
                         parts.append(f"**{m.get('name', '?')}** ({', '.join(labels)})")
-                    names = ", ".join(parts) or "—"
+                    # One registered player per line for readability; roles of a
+                    # single player stay comma-joined on that player's line.
+                    names = "\n".join(parts) or "—"
                     # Auto squad names are stored canonically ("Infantry 1");
                     # localize the label using the known type for display.
                     raw_name = data.get('name', squad_id)
                     number = raw_name.rsplit(" ", 1)[-1]
                     squad_label = (f"{t('squad.label_' + type_key, lang)} {number}"
                                    if number.isdigit() else raw_name)
-                    text += f"**{squad_label}** ({filled}/{data.get('size', 0)}): {names}\n"
+                    # Header on its own line, members listed below it; blank
+                    # line between squads keeps the overview easy to scan.
+                    text += f"**{squad_label}** ({filled}/{data.get('size', 0)}):\n{names}\n\n"
                 else:
                     playstyle = data.get("playstyle", "Normal")
                     sq_size = data.get("size", 0)
@@ -955,7 +959,7 @@ def format_event_details(event: dict, lang: str = "de",
                     rep_suffix = f" — {rep}" if rep else ""
                     ps_prefix = f"[{playstyle}] " if playstyle_enabled else ""
                     text += f"{ps_prefix}**{data.get('name', squad_id)}** ({sq_size}){rep_suffix}\n"
-            embed.add_field(name=name, value=text, inline=False)
+            embed.add_field(name=name, value=text.rstrip("\n"), inline=False)
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
 
