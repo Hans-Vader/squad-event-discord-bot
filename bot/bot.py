@@ -3552,11 +3552,13 @@ class EditScalarModal(ui.Modal):
         self.db_id = db_id
         self.lang = lang
         self.prop = prop
+        is_long_text = vtype == "string_nullable"
         self.value_input = ui.TextInput(
             label=t("edit.input_label", lang)[:45],
             placeholder=_scalar_placeholder(vtype),
+            style=discord.TextStyle.paragraph if is_long_text else discord.TextStyle.short,
             required=vtype not in ("string_nullable", "reg_start"),
-            max_length=200,
+            max_length=1024 if is_long_text else 200,
         )
         self.add_item(self.value_input)
 
