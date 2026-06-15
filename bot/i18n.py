@@ -441,6 +441,32 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Close",
     },
 
+    # ── Squad consolidation (player mode) ─────────────────────────────────
+    "consolidate.confirm_title": {
+        "de": "Squads zusammenlegen?",
+        "en": "Consolidate squads?",
+    },
+    "consolidate.confirm": {
+        "de": "Teilweise gefüllte Squads von **{name}** werden zusammengelegt und leere Squads entfernt. Fortfahren?",
+        "en": "Partially-filled squads of **{name}** will be merged and emptied squads removed. Continue?",
+    },
+    "consolidate.confirm_button": {
+        "de": "Zusammenlegen",
+        "en": "Consolidate",
+    },
+    "consolidate.done": {
+        "de": "Squads zusammengelegt — {count} Squad(s) entfernt.",
+        "en": "Squads consolidated — {count} squad(s) removed.",
+    },
+    "consolidate.none": {
+        "de": "Es gibt nichts zusammenzulegen — alle Squads sind bereits kompakt.",
+        "en": "Nothing to consolidate — all squads are already compact.",
+    },
+    "consolidate.player_mode_only": {
+        "de": "Zusammenlegen ist nur im Spieler-Modus möglich.",
+        "en": "Consolidation is only available in player mode.",
+    },
+
     # ── Squad registration ────────────────────────────────────────────────
     "squad.register_title": {
         "de": "Squad anmelden",
@@ -944,6 +970,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Anmeldung schließen",
         "en": "Close registration",
     },
+    "admin.consolidate_squads": {
+        "de": "Squads zusammenlegen",
+        "en": "Consolidate squads",
+    },
     "admin.no_squads": {
         "de": "Keine Squads vorhanden.",
         "en": "No squads available.",
@@ -1025,6 +1055,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "log.reg_closed": {
         "de": "Event geschlossen: {user} hat die Anmeldungen für '{name}' geschlossen",
         "en": "Event closed: {user} closed registration for '{name}'",
+    },
+    "log.squads_consolidated": {
+        "de": "Squads für '{name}' zusammengelegt ({count} entfernt)",
+        "en": "Squads consolidated for '{name}' ({count} removed)",
     },
     "log.channel_set": {
         "de": "Event-Channel gesetzt: {user} hat Channel '#{channel}' festgelegt",

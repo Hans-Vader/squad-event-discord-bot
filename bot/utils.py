@@ -310,6 +310,21 @@ def _compact_player_squads(event: dict, user_assignments: dict, squad_type: str)
             break
 
 
+def consolidate_all_player_squads(event: dict, user_assignments: dict) -> int:
+    """Compact every player-mode squad type: pack members into the fewest
+    squads of each type and drop emptied ones. Reuses `_compact_player_squads`,
+    which also keeps `user_assignments` in sync for moved members.
+
+    Returns the number of squads removed (0 ⇒ already compact / nothing to do).
+    Idempotent: a second call on a compact layout is a no-op returning 0.
+    """
+    squads = event.get("squads", {})
+    before = len(squads)
+    for squad_type in _SQUAD_TYPES:
+        _compact_player_squads(event, user_assignments, squad_type)
+    return before - len(event.get("squads", {}))
+
+
 def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: str) -> list:
     """Pull entries off the waitlist and place them into squads while capacity
     allows. Uses the side-effect-free placement helper so failed placements

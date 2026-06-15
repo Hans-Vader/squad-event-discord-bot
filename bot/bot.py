@@ -43,6 +43,7 @@ from utils import (
     resolve_event_defaults, role_label,
     _player_register, _player_unregister, _player_remove_from_waitlist,
     _player_waitlist_type, _player_self_unregister,
+    consolidate_all_player_squads,
     build_event_ics, _ics_slug,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
@@ -1929,6 +1930,7 @@ class AdminActionView(BaseView):
                 ("admin.remove_player", discord.ButtonStyle.danger, "_remove_player", 0),
                 ("admin.open_registration", discord.ButtonStyle.success, "_open", 1),
                 ("admin.close_registration", discord.ButtonStyle.secondary, "_close", 1),
+                ("admin.consolidate_squads", discord.ButtonStyle.primary, "_consolidate", 1),
                 ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 2),
                 ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 2),
             ]
@@ -2008,6 +2010,27 @@ class AdminActionView(BaseView):
             description=t("reg.close_confirm", lang, name=event["name"]),
             color=discord.Color.orange())
         view = CloseConfirmationView(gid, cid)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    async def _consolidate(self, interaction):
+        gid = self.guild_id
+        cid = self.channel_id
+        lang = get_guild_language(gid)
+
+        event, _, _ = _get_channel_event(gid, cid)
+        if not event:
+            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+            return
+        if not is_player_mode(event):
+            await send_feedback(interaction, t("consolidate.player_mode_only", lang), ephemeral=True)
+            return
+
+        # Confirm first — consolidation rearranges squads and removes emptied ones.
+        embed = discord.Embed(
+            title=t("consolidate.confirm_title", lang),
+            description=t("consolidate.confirm", lang, name=event["name"]),
+            color=discord.Color.blurple())
+        view = ConsolidateConfirmationView(gid, cid)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _add_squad(self, interaction):
@@ -4011,6 +4034,57 @@ class CloseConfirmationView(BaseConfirmationView):
         await interaction.response.edit_message(content=t("general.cancelled", lang), embed=None, view=None)
 
 
+class ConsolidateConfirmationView(BaseConfirmationView):
+    """Confirm/Cancel before manually consolidating player-mode squads."""
+    def __init__(self, guild_id, channel_id):
+        super().__init__(title="Consolidate Squads")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        lang = get_guild_language(guild_id)
+
+        confirm_btn = ui.Button(label=t("consolidate.confirm_button", lang), style=discord.ButtonStyle.primary)
+        confirm_btn.callback = self._confirm
+        self.add_item(confirm_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _confirm(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        gid, cid = self.guild_id, self.channel_id
+        lang = get_guild_language(gid)
+
+        lock = _get_guild_lock(gid)
+        async with lock:
+            event, user_assignments, db_id = _get_channel_event(gid, cid)
+            if not event:
+                await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+                return
+            if not is_player_mode(event):
+                await send_feedback(interaction, t("consolidate.player_mode_only", lang), ephemeral=True)
+                return
+            removed = consolidate_all_player_squads(event, user_assignments)
+            if removed:
+                save_event(db_id, event, user_assignments)
+
+        if removed:
+            await send_feedback(interaction, t("consolidate.done", lang, count=removed), ephemeral=True)
+            await send_to_log_channel(
+                t("log.squads_consolidated", lang, name=event["name"], count=removed),
+                guild=interaction.guild)
+            await update_event_displays(gid, cid)
+        else:
+            await send_feedback(interaction, t("consolidate.none", lang), ephemeral=True)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), embed=None, view=None)
+
+
 # ############################# #
 # POST-CREATION ROLE WIZARD     #
 # ############################# #
@@ -5198,6 +5272,14 @@ async def check_events_loop():
                 if start_dt and now >= start_dt and not is_closed:
                     event["is_closed"] = True
                     is_closed = True
+                    # Consolidate partially-filled player squads once, as the event
+                    # begins, so the roster going in is compact.
+                    if is_player_mode(event):
+                        removed = consolidate_all_player_squads(event, user_assignments)
+                        if removed:
+                            bot.loop.create_task(send_to_log_channel(
+                                t("log.squads_consolidated", lang, name=event["name"], count=removed),
+                                guild_id=guild_id))
                     save_event(db_id, event, user_assignments)
 
                     ch = bot.get_channel(channel_id)
