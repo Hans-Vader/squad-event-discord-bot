@@ -275,12 +275,26 @@ def _player_register(event: dict, user_assignments: dict, user_id, display_name:
     return None, "waitlisted"
 
 
+def _squad_number_key(name: str):
+    """Sort key for auto-named squads ("Infantry 1", "Infantry 2", ...) by their
+    numeric suffix. Names without a numeric suffix sort last, deterministically.
+    """
+    tail = name.rsplit(" ", 1)[-1]
+    return (0, int(tail)) if tail.isdigit() else (1, 0)
+
+
 def _compact_player_squads(event: dict, user_assignments: dict, squad_type: str):
     """Pull last-registered members from later squads into earlier partial
     squads of the same type. Drop trailing empty squads.
+
+    Squads are processed in numeric order (Infantry 1, 2, 3, ...) rather than
+    dict-insertion order, so consolidation deterministically keeps the
+    lowest-numbered squads regardless of how the dict was built.
     """
     squads = event.get("squads", {})
-    type_names = [n for n, s in squads.items() if s.get("type") == squad_type]
+    type_names = sorted(
+        (n for n, s in squads.items() if s.get("type") == squad_type),
+        key=_squad_number_key)
 
     for i, name in enumerate(type_names):
         squad = squads[name]
@@ -308,6 +322,21 @@ def _compact_player_squads(event: dict, user_assignments: dict, squad_type: str)
             del squads[name]
         else:
             break
+
+
+def consolidate_all_player_squads(event: dict, user_assignments: dict) -> int:
+    """Compact every player-mode squad type: pack members into the fewest
+    squads of each type and drop emptied ones. Reuses `_compact_player_squads`,
+    which also keeps `user_assignments` in sync for moved members.
+
+    Returns the number of squads removed (0 ⇒ already compact / nothing to do).
+    Idempotent: a second call on a compact layout is a no-op returning 0.
+    """
+    squads = event.get("squads", {})
+    before = len(squads)
+    for squad_type in _SQUAD_TYPES:
+        _compact_player_squads(event, user_assignments, squad_type)
+    return before - len(event.get("squads", {}))
 
 
 def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: str) -> list:
@@ -940,14 +969,18 @@ def format_event_details(event: dict, lang: str = "de",
                         rls = _get_member_roles(m)
                         labels = [role_label(r, lang) for r in rls] or [none_label]
                         parts.append(f"**{m.get('name', '?')}** ({', '.join(labels)})")
-                    names = ", ".join(parts) or "—"
+                    # One registered player per line for readability; roles of a
+                    # single player stay comma-joined on that player's line.
+                    names = "\n".join(parts) or "—"
                     # Auto squad names are stored canonically ("Infantry 1");
                     # localize the label using the known type for display.
                     raw_name = data.get('name', squad_id)
                     number = raw_name.rsplit(" ", 1)[-1]
                     squad_label = (f"{t('squad.label_' + type_key, lang)} {number}"
                                    if number.isdigit() else raw_name)
-                    text += f"**{squad_label}** ({filled}/{data.get('size', 0)}): {names}\n"
+                    # Header on its own line, members listed below it; blank
+                    # line between squads keeps the overview easy to scan.
+                    text += f"**{squad_label}** ({filled}/{data.get('size', 0)}):\n{names}\n\n"
                 else:
                     playstyle = data.get("playstyle", "Normal")
                     sq_size = data.get("size", 0)
@@ -955,7 +988,7 @@ def format_event_details(event: dict, lang: str = "de",
                     rep_suffix = f" — {rep}" if rep else ""
                     ps_prefix = f"[{playstyle}] " if playstyle_enabled else ""
                     text += f"{ps_prefix}**{data.get('name', squad_id)}** ({sq_size}){rep_suffix}\n"
-            embed.add_field(name=name, value=text, inline=False)
+            embed.add_field(name=name, value=text.rstrip("\n"), inline=False)
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
 

@@ -214,6 +214,38 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Neues Event erstellen",
         "en": "Create new event",
     },
+    "event.mode_select_title": {
+        "de": "Event erstellen – Anmelde-Modus wählen",
+        "en": "Create event – choose a registration mode",
+    },
+    "event.mode_select_desc": {
+        "de": "Wähle, wie sich Teilnehmer für dieses Event anmelden:",
+        "en": "Choose how participants register for this event:",
+    },
+    "event.mode_rep_name": {
+        "de": "🪖 Vertreter-Modus",
+        "en": "🪖 Representative mode",
+    },
+    "event.mode_rep_desc": {
+        "de": "Ein Vertreter meldet komplette Squads an – mit Squad-Name, Typ (Infanterie/Fahrzeug/Heli) und Spielstil. Mehrere Squads pro Vertreter möglich, Caster können sich anmelden.",
+        "en": "A representative registers complete squads – with squad name, type (Infantry/Vehicle/Heli) and playstyle. Multiple squads per representative are possible, casters can register.",
+    },
+    "event.mode_player_name": {
+        "de": "🎮 Spieler-Modus",
+        "en": "🎮 Player mode",
+    },
+    "event.mode_player_desc": {
+        "de": "Spieler melden sich einzeln an und wählen nur ihren Squad-Typ (optional eine Rolle wie Squad-Leiter, Medic oder Pilot). Der Bot füllt die Squads automatisch in Anmelde-Reihenfolge (Infanterie 1, Infanterie 2 …) und legt beim Event-Start teilweise gefüllte Squads zusammen (auch manuell durch die Orga möglich). 1 Squad pro Person, keine Caster.",
+        "en": "Players sign up individually and only pick their squad type (optionally a role like Squad Leader, Medic or Pilot). The bot auto-fills squads in sign-up order (Infantry 1, Infantry 2 …) and merges partially-filled squads when the event starts (organizers can also trigger this manually). 1 squad per person, no casters.",
+    },
+    "event.mode_rep_button": {
+        "de": "Vertreter-Modus",
+        "en": "Representative mode",
+    },
+    "event.mode_player_button": {
+        "de": "Spieler-Modus",
+        "en": "Player mode",
+    },
     "event.config_title": {
         "de": "Server-Konfiguration",
         "en": "Server Configuration",
@@ -439,6 +471,32 @@ _STRINGS: dict[str, dict[str, str]] = {
     "reg.close_button": {
         "de": "Schließen",
         "en": "Close",
+    },
+
+    # ── Squad consolidation (player mode) ─────────────────────────────────
+    "consolidate.confirm_title": {
+        "de": "Squads zusammenlegen?",
+        "en": "Consolidate squads?",
+    },
+    "consolidate.confirm": {
+        "de": "Teilweise gefüllte Squads von **{name}** werden zusammengelegt und leere Squads entfernt. Fortfahren?",
+        "en": "Partially-filled squads of **{name}** will be merged and emptied squads removed. Continue?",
+    },
+    "consolidate.confirm_button": {
+        "de": "Zusammenlegen",
+        "en": "Consolidate",
+    },
+    "consolidate.done": {
+        "de": "Squads zusammengelegt — {count} Squad(s) entfernt.",
+        "en": "Squads consolidated — {count} squad(s) removed.",
+    },
+    "consolidate.none": {
+        "de": "Es gibt nichts zusammenzulegen — alle Squads sind bereits kompakt.",
+        "en": "Nothing to consolidate — all squads are already compact.",
+    },
+    "consolidate.player_mode_only": {
+        "de": "Zusammenlegen ist nur im Spieler-Modus möglich.",
+        "en": "Consolidation is only available in player mode.",
     },
 
     # ── Squad registration ────────────────────────────────────────────────
@@ -944,6 +1002,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Anmeldung schließen",
         "en": "Close registration",
     },
+    "admin.consolidate_squads": {
+        "de": "Squads zusammenlegen",
+        "en": "Consolidate squads",
+    },
     "admin.no_squads": {
         "de": "Keine Squads vorhanden.",
         "en": "No squads available.",
@@ -1025,6 +1087,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "log.reg_closed": {
         "de": "Event geschlossen: {user} hat die Anmeldungen für '{name}' geschlossen",
         "en": "Event closed: {user} closed registration for '{name}'",
+    },
+    "log.squads_consolidated": {
+        "de": "Squads für '{name}' zusammengelegt ({count} entfernt)",
+        "en": "Squads consolidated for '{name}' ({count} removed)",
     },
     "log.channel_set": {
         "de": "Event-Channel gesetzt: {user} hat Channel '#{channel}' festgelegt",
