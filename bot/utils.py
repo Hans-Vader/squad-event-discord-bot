@@ -152,6 +152,17 @@ def _get_member_roles(member: dict) -> list:
     return [single] if single else []
 
 
+def _format_role_suffix(roles, lang) -> str:
+    """Render a player's roles as a parenthetical suffix, or "" when none.
+
+    Returns the COMPLETE suffix including the surrounding parentheses (" (a, b)")
+    so callers append it directly to a name — a role-less player gets no empty
+    "()" tail and no "(Egal)" placeholder.
+    """
+    labels = [role_label(r, lang) for r in (roles or []) if r]
+    return f" ({', '.join(labels)})" if labels else ""
+
+
 def _waitlist_key(squad_type: str) -> str:
     return f"{squad_type}_waitlist"
 
@@ -444,14 +455,93 @@ def _player_waitlist_type(event: dict, user_id) -> Optional[str]:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Player-mode "tentative" (Vorläufig) sign-ups
+# ---------------------------------------------------------------------------
+# A tentative player signals "maybe" — they pick a squad type (+ optional role)
+# but occupy NO real squad seat. Stored in event["tentative"] as dicts mirroring
+# the member schema plus a "type": {"user_id","name","type","roles":[...]}.
+# Mutually exclusive with a firm seat / waitlist spot (enforced by the callers).
+
+
+def _player_tentative_entry(event: dict, user_id) -> Optional[dict]:
+    """Return the user's tentative entry, or None. Non-destructive."""
+    uid = str(user_id)
+    for entry in event.get("tentative", []):
+        if str(entry.get("user_id")) == uid:
+            return entry
+    return None
+
+
+def _player_tentative_type(event: dict, user_id) -> Optional[str]:
+    """Return the squad_type a user is tentatively signed up for, or None."""
+    entry = _player_tentative_entry(event, user_id)
+    return entry.get("type") if entry else None
+
+
+def _add_tentative(event: dict, user_id, display_name: str, squad_type: str,
+                   roles: Optional[list] = None) -> str:
+    """Add (or replace) a user's tentative sign-up. One entry per user.
+
+    Returns "tentative" on success, "invalid_type" for an unknown squad type.
+    Touches neither squads, player_slots_used nor the waitlists.
+    """
+    if squad_type not in _SQUAD_TYPES:
+        return "invalid_type"
+    uid = str(user_id)
+    tentative = event.setdefault("tentative", [])
+    tentative[:] = [e for e in tentative if str(e.get("user_id")) != uid]
+    tentative.append({
+        "user_id": uid, "name": display_name,
+        "type": squad_type, "roles": list(roles or []),
+    })
+    return "tentative"
+
+
+def _remove_tentative(event: dict, user_id) -> Optional[dict]:
+    """Remove and return the user's tentative entry, or None if absent."""
+    uid = str(user_id)
+    tentative = event.get("tentative", [])
+    for i, entry in enumerate(tentative):
+        if str(entry.get("user_id")) == uid:
+            return tentative.pop(i)
+    return None
+
+
+def _player_current_assignment(event: dict, user_assignments: dict, user_id) -> tuple:
+    """Return (squad_type, roles) for a seated or waitlisted player, else
+    (None, []). Used to carry a player's selection over when switching their
+    firm/waitlist sign-up to tentative."""
+    uid = str(user_id)
+    squad_names = (user_assignments or {}).get(uid, [])
+    if squad_names:
+        squad = event.get("squads", {}).get(squad_names[0])
+        if squad:
+            for m in squad.get("members", []):
+                if str(m.get("user_id")) == uid:
+                    return squad.get("type"), list(_get_member_roles(m))
+            return squad.get("type"), []
+    for st in _SQUAD_TYPES:
+        for entry in event.get(_waitlist_key(st), []):
+            if isinstance(entry, (tuple, list)) and len(entry) > 4 and str(entry[4]) == uid:
+                role_data = entry[6] if len(entry) > 6 else None
+                if isinstance(role_data, list):
+                    return st, list(role_data)
+                if isinstance(role_data, str) and role_data:
+                    return st, [role_data]
+                return st, []
+    return None, []
+
+
 def _player_self_unregister(event: dict, user_assignments: dict, user_id) -> tuple:
     """Self-service player removal: drop from a squad if seated, otherwise from
-    the waitlist.
+    the waitlist, otherwise from the tentative list.
 
     Returns (status, name_or_type, promoted):
       - ("squad", squad_name, promoted_list) when removed from a squad,
       - ("waitlist", squad_type, []) when removed from a waitlist,
-      - (None, None, []) when the user was neither seated nor waitlisted.
+      - ("tentative", squad_type, []) when removed from the tentative list,
+      - (None, None, []) when the user held none of the above.
     """
     ok, squad_name, promoted = _player_unregister(event, user_assignments, user_id)
     if ok:
@@ -459,6 +549,9 @@ def _player_self_unregister(event: dict, user_assignments: dict, user_id) -> tup
     wl_type = _player_remove_from_waitlist(event, user_id)
     if wl_type is not None:
         return "waitlist", wl_type, []
+    tent = _remove_tentative(event, user_id)
+    if tent is not None:
+        return "tentative", tent.get("type"), []
     return None, None, []
 
 
@@ -960,15 +1053,13 @@ def format_event_details(event: dict, lang: str = "de",
                 if is_player_mode:
                     members = data.get("members", [])
                     filled = len(members)
-                    none_label = t("player.role_dont_care", lang)
                     sorted_members = sorted(
                         members,
                         key=lambda m: 0 if "Squad Leader" in _get_member_roles(m) else 1)
                     parts = []
                     for m in sorted_members:
                         rls = _get_member_roles(m)
-                        labels = [role_label(r, lang) for r in rls] or [none_label]
-                        parts.append(f"**{m.get('name', '?')}** ({', '.join(labels)})")
+                        parts.append(f"**{m.get('name', '?')}**{_format_role_suffix(rls, lang)}")
                     # One registered player per line for readability; roles of a
                     # single player stay comma-joined on that player's line.
                     names = "\n".join(parts) or "—"
@@ -1007,8 +1098,7 @@ def format_event_details(event: dict, lang: str = "de",
                         wl_roles = [role_data]
                     else:
                         wl_roles = []
-                    wl_labels = [role_label(r, lang) for r in wl_roles] or [t("player.role_dont_care", lang)]
-                    wl_text += f"{i+1}. **{player_name}** ({', '.join(wl_labels)})\n"
+                    wl_text += f"{i+1}. **{player_name}**{_format_role_suffix(wl_roles, lang)}\n"
                 else:
                     squad_name, _squad_type, playstyle, sq_size, _squad_id, *_rest = entry
                     rep_name = _rest[0] if _rest else None
@@ -1037,6 +1127,22 @@ def format_event_details(event: dict, lang: str = "de",
         if caster_wl:
             cwl_text = "\n".join(f"{i+1}. **{name}**" for i, (_, name) in enumerate(caster_wl))
             embed.add_field(name=t("embed.caster_waitlist_label", lang, count=len(caster_wl)), value=cwl_text, inline=False)
+
+    # Tentative ("Vorläufig") players — one field per squad type at the very
+    # bottom. They hold no real seat, so they live below the full roster and
+    # waitlists; grouping by type keeps each field well under the 1024-char cap.
+    tentative = event.get("tentative", [])
+    if is_player_mode and tentative:
+        for type_key in _SQUAD_TYPES:
+            entries = [e for e in tentative if e.get("type") == type_key]
+            if not entries:
+                continue
+            lines = [f"**{e.get('name', '?')}**{_format_role_suffix(_get_member_roles(e), lang)}"
+                     for e in entries]
+            embed.add_field(
+                name=t("embed.tentative_label", lang,
+                       type=t(f"embed.type_{type_key}", lang), count=len(entries)),
+                value="\n".join(lines), inline=False)
 
     # Image
     embed_image_url = event.get("embed_image_url")
