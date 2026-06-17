@@ -2352,9 +2352,9 @@ class AdminActionView(BaseView):
             buttons = [
                 ("admin.add_player", discord.ButtonStyle.success, "_add_player", 0),
                 ("admin.remove_player", discord.ButtonStyle.danger, "_remove_player", 0),
-                ("button.notify_tentative", discord.ButtonStyle.secondary, "_notify_tentative", 0),
+                ("button.notify_tentative", discord.ButtonStyle.primary, "_notify_tentative", 0),
                 ("admin.open_registration", discord.ButtonStyle.success, "_open", 1),
-                ("admin.close_registration", discord.ButtonStyle.secondary, "_close", 1),
+                ("admin.close_registration", discord.ButtonStyle.danger, "_close", 1),
                 ("admin.consolidate_squads", discord.ButtonStyle.primary, "_consolidate", 1),
                 ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 2),
                 ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 2),
@@ -2366,7 +2366,7 @@ class AdminActionView(BaseView):
                 ("admin.add_caster", discord.ButtonStyle.success, "_add_caster", 1),
                 ("admin.remove_caster", discord.ButtonStyle.danger, "_remove_caster", 1),
                 ("admin.open_registration", discord.ButtonStyle.success, "_open", 2),
-                ("admin.close_registration", discord.ButtonStyle.secondary, "_close", 2),
+                ("admin.close_registration", discord.ButtonStyle.danger, "_close", 2),
                 ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 3),
                 ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 3),
             ]
