@@ -74,11 +74,10 @@ class EventBot(commands.Bot):
     async def setup_hook(self):
         try:
             self.add_view(EventActionView())
-            # Also register the player-mode layout so its extra custom_ids
-            # (event_tentative, event_notify_tentative) keep dispatching on
-            # persisted messages across restarts. Both views are stateless and
-            # route identically via interaction_check, so overlapping custom_ids
-            # are harmless.
+            # Also register the player-mode layout so its extra custom_id
+            # (event_tentative) keeps dispatching on persisted messages across
+            # restarts. Both views are stateless and route identically via
+            # interaction_check, so overlapping custom_ids are harmless.
             self.add_view(EventActionView(mode="player"))
             logger.info("Persistent EventActionView registered")
         except Exception as e:
@@ -1582,14 +1581,6 @@ class EventActionView(ui.View):
             label=t("button.admin", lang), style=discord.ButtonStyle.secondary,
             custom_id="event_admin", emoji="⚙️",
         ))
-        # Organizer-only action (player mode): ask the tentative players whether
-        # they'll join. Stays enabled regardless of registration state — its most
-        # useful moment is right before/at event start, to fill open seats.
-        if mode == "player":
-            self.add_item(ui.Button(
-                label=t("button.notify_tentative", lang), style=discord.ButtonStyle.secondary,
-                custom_id="event_notify_tentative", emoji="📨",
-            ))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         custom_id = interaction.data.get("custom_id", "")
@@ -1603,8 +1594,6 @@ class EventActionView(ui.View):
             await self._unregister(interaction)
         elif custom_id == "event_admin":
             await self._admin(interaction)
-        elif custom_id == "event_notify_tentative":
-            await self._notify_tentative(interaction)
         elif custom_id == "event_ics":
             await self._ics(interaction)
         return False
@@ -1690,32 +1679,6 @@ class EventActionView(ui.View):
             return
 
         await _dispatch_player_tentative(interaction, gid, cid, lang)
-
-    async def _notify_tentative(self, interaction: discord.Interaction):
-        """Player mode, organizer only: ask the tentative players whether they
-        will join — via a pinged thread or via DM."""
-        if not interaction.guild:
-            return
-        await interaction.response.defer(ephemeral=True)
-        gid = interaction.guild.id
-        cid = interaction.channel_id
-        settings = get_guild_settings(gid)
-        lang = _lang(interaction)
-        if not settings or not has_organizer_role(interaction.user, settings["organizer_role_id"]):
-            await interaction.followup.send(t("general.requires_organizer", lang), ephemeral=True)
-            return
-        event, _, _ = _get_channel_event(gid, cid)
-        if not event:
-            await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
-            return
-        if not is_player_mode(event):
-            await interaction.followup.send(t("player.not_player_mode", lang), ephemeral=True)
-            return
-        if not event.get("tentative"):
-            await interaction.followup.send(t("tentative.none", lang), ephemeral=True)
-            return
-        view = TentativeNotifyView(gid, cid)
-        await interaction.followup.send(t("tentative.notify_choose", lang), view=view, ephemeral=True)
 
     async def _register_caster(self, interaction: discord.Interaction):
         if not interaction.guild:
@@ -2150,8 +2113,104 @@ class PlayerTentativeSwitchConfirmView(BaseConfirmationView):
         await interaction.response.edit_message(content=t("general.cancelled", lang), embed=None, view=None)
 
 
+def _tentative_gather(guild_id, channel_id):
+    """Return (event, lang, [tentative entries]) or (None, lang, []) if gone."""
+    lang = get_guild_language(guild_id)
+    event, _, _ = _get_channel_event(guild_id, channel_id)
+    if not event:
+        return None, lang, []
+    return event, lang, list(event.get("tentative", []))
+
+
+async def _tentative_notify_thread(interaction, guild_id, channel_id, private: bool):
+    """Create a thread and ping all tentative players in it.
+
+    Public threads are attached directly to the event message; private threads
+    are created on the channel and the organizer who triggered this is added.
+    Mentioned tentative players are pulled into the thread by the mention.
+    """
+    event, lang, entries = _tentative_gather(guild_id, channel_id)
+    if not event:
+        await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
+        return
+    if not entries:
+        await interaction.followup.send(t("tentative.none", lang), ephemeral=True)
+        return
+    link = _build_event_message_link(event, channel_id, guild_id) or ""
+    mentions = " ".join(f"<@{e.get('user_id')}>" for e in entries if e.get("user_id"))
+    text = t("tentative.thread_text", lang, mentions=mentions, name=event.get("name", ""), url=link)
+    thread_name = t("tentative.thread_name", lang, name=event.get("name", ""))[:100]
+    try:
+        channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+        if private:
+            thread = await channel.create_thread(
+                name=thread_name, type=discord.ChannelType.private_thread)
+            # Add the organizer who triggered the notification to the private thread.
+            try:
+                await thread.add_user(interaction.user)
+            except Exception as e:
+                logger.info(f"Could not add organizer to private tentative thread: {e}")
+        else:
+            # Public thread attached to the event message when it still exists.
+            msg_id = event.get("event_message_id")
+            msg = None
+            if msg_id:
+                try:
+                    msg = await channel.fetch_message(int(msg_id))
+                except Exception:
+                    msg = None
+            if msg is not None:
+                thread = await msg.create_thread(name=thread_name)
+            else:
+                thread = await channel.create_thread(
+                    name=thread_name, type=discord.ChannelType.public_thread)
+        await thread.send(text, allowed_mentions=discord.AllowedMentions(users=True))
+    except Exception as e:
+        logger.warning(f"Tentative thread notify failed: {e}")
+        await interaction.followup.send(t("tentative.notify_error", lang, error=str(e)), ephemeral=True)
+        return
+    await interaction.followup.send(
+        t("tentative.notify_thread_done", lang, count=len(entries), thread=thread.mention),
+        ephemeral=True)
+    await send_to_log_channel(
+        t("log.tentative_notified_thread", lang, count=len(entries), name=event.get("name", "")),
+        guild=interaction.guild)
+
+
+async def _tentative_notify_dm(interaction, guild_id, channel_id):
+    """DM every tentative player, asking them to confirm via the event buttons."""
+    event, lang, entries = _tentative_gather(guild_id, channel_id)
+    if not event:
+        await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
+        return
+    if not entries:
+        await interaction.followup.send(t("tentative.none", lang), ephemeral=True)
+        return
+    link = _build_event_message_link(event, channel_id, guild_id) or ""
+    dm_text = t("tentative.dm_text", lang, name=event.get("name", ""), url=link)
+    ok = failed = 0
+    for entry in entries:
+        uid = entry.get("user_id")
+        if not uid:
+            continue
+        try:
+            target = await bot.fetch_user(int(uid))
+            await target.send(dm_text)
+            ok += 1
+        except Exception as e:
+            failed += 1
+            logger.info(f"Tentative DM to {uid} failed: {e}")
+    failed_suffix = t("tentative.notify_dm_failed_suffix", lang, n=failed) if failed else ""
+    await interaction.followup.send(
+        t("tentative.notify_dm_done", lang, ok=ok, failed_suffix=failed_suffix), ephemeral=True)
+    await send_to_log_channel(
+        t("log.tentative_notified_dm", lang, ok=ok, failed=failed, name=event.get("name", "")),
+        guild=interaction.guild)
+
+
 class TentativeNotifyView(BaseView):
-    """Organizer chooser: notify the tentative players via a pinged thread or DM."""
+    """Organizer chooser: notify the tentative players via a thread or via DM.
+    Picking "thread" opens a follow-up asking for a public or private thread."""
     def __init__(self, guild_id, channel_id):
         super().__init__(timeout=300, title="Notify tentatives")
         self.guild_id = guild_id
@@ -2160,7 +2219,7 @@ class TentativeNotifyView(BaseView):
 
         thread_btn = ui.Button(label=t("tentative.notify_thread_button", lang),
                                style=discord.ButtonStyle.primary)
-        thread_btn.callback = self._notify_thread
+        thread_btn.callback = self._choose_thread
         self.add_item(thread_btn)
         dm_btn = ui.Button(label=t("tentative.notify_dm_button", lang),
                            style=discord.ButtonStyle.secondary)
@@ -2170,77 +2229,56 @@ class TentativeNotifyView(BaseView):
         cancel_btn.callback = self._cancel
         self.add_item(cancel_btn)
 
-    def _gather(self):
-        """Return (event, lang, [tentative entries]) or (None, lang, []) if gone."""
+    async def _choose_thread(self, interaction):
         lang = get_guild_language(self.guild_id)
-        event, _, _ = _get_channel_event(self.guild_id, self.channel_id)
-        if not event:
-            return None, lang, []
-        return event, lang, list(event.get("tentative", []))
-
-    async def _notify_thread(self, interaction):
-        if self.check_response(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        event, lang, entries = self._gather()
-        if not event:
-            await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
-            return
-        if not entries:
-            await interaction.followup.send(t("tentative.none", lang), ephemeral=True)
-            return
-        link = _build_event_message_link(event, self.channel_id, self.guild_id) or ""
-        mentions = " ".join(f"<@{e.get('user_id')}>" for e in entries if e.get("user_id"))
-        text = t("tentative.thread_text", lang,
-                 mentions=mentions, name=event.get("name", ""), url=link)
-        try:
-            channel = bot.get_channel(self.channel_id) or await bot.fetch_channel(self.channel_id)
-            thread = await channel.create_thread(
-                name=t("tentative.thread_name", lang, name=event.get("name", ""))[:100],
-                type=discord.ChannelType.public_thread)
-            await thread.send(text, allowed_mentions=discord.AllowedMentions(users=True))
-        except Exception as e:
-            logger.warning(f"Tentative thread notify failed: {e}")
-            await interaction.followup.send(t("tentative.notify_error", lang, error=str(e)), ephemeral=True)
-            return
-        await interaction.followup.send(
-            t("tentative.notify_thread_done", lang, count=len(entries), thread=thread.mention),
-            ephemeral=True)
-        await send_to_log_channel(
-            t("log.tentative_notified_thread", lang, count=len(entries), name=event.get("name", "")),
-            guild=interaction.guild)
+        await interaction.response.edit_message(
+            content=t("tentative.thread_type_choose", lang),
+            view=TentativeThreadTypeView(self.guild_id, self.channel_id))
 
     async def _notify_dm(self, interaction):
         if self.check_response(interaction):
             return
         await interaction.response.defer(ephemeral=True)
-        event, lang, entries = self._gather()
-        if not event:
-            await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
+        await _tentative_notify_dm(interaction, self.guild_id, self.channel_id)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
             return
-        if not entries:
-            await interaction.followup.send(t("tentative.none", lang), ephemeral=True)
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
+
+
+class TentativeThreadTypeView(BaseView):
+    """Second step of the thread-notify flow: public or private thread."""
+    def __init__(self, guild_id, channel_id):
+        super().__init__(timeout=300, title="Thread type")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        lang = get_guild_language(guild_id)
+
+        public_btn = ui.Button(label=t("tentative.notify_thread_public_button", lang),
+                               style=discord.ButtonStyle.primary)
+        public_btn.callback = self._public
+        self.add_item(public_btn)
+        private_btn = ui.Button(label=t("tentative.notify_thread_private_button", lang),
+                                style=discord.ButtonStyle.secondary)
+        private_btn.callback = self._private
+        self.add_item(private_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _public(self, interaction):
+        if self.check_response(interaction):
             return
-        link = _build_event_message_link(event, self.channel_id, self.guild_id) or ""
-        dm_text = t("tentative.dm_text", lang, name=event.get("name", ""), url=link)
-        ok = failed = 0
-        for entry in entries:
-            uid = entry.get("user_id")
-            if not uid:
-                continue
-            try:
-                target = await bot.fetch_user(int(uid))
-                await target.send(dm_text)
-                ok += 1
-            except Exception as e:
-                failed += 1
-                logger.info(f"Tentative DM to {uid} failed: {e}")
-        failed_suffix = t("tentative.notify_dm_failed_suffix", lang, n=failed) if failed else ""
-        await interaction.followup.send(
-            t("tentative.notify_dm_done", lang, ok=ok, failed_suffix=failed_suffix), ephemeral=True)
-        await send_to_log_channel(
-            t("log.tentative_notified_dm", lang, ok=ok, failed=failed, name=event.get("name", "")),
-            guild=interaction.guild)
+        await interaction.response.defer(ephemeral=True)
+        await _tentative_notify_thread(interaction, self.guild_id, self.channel_id, private=False)
+
+    async def _private(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        await _tentative_notify_thread(interaction, self.guild_id, self.channel_id, private=True)
 
     async def _cancel(self, interaction):
         if self.check_response(interaction):
@@ -2314,6 +2352,7 @@ class AdminActionView(BaseView):
             buttons = [
                 ("admin.add_player", discord.ButtonStyle.success, "_add_player", 0),
                 ("admin.remove_player", discord.ButtonStyle.danger, "_remove_player", 0),
+                ("button.notify_tentative", discord.ButtonStyle.secondary, "_notify_tentative", 0),
                 ("admin.open_registration", discord.ButtonStyle.success, "_open", 1),
                 ("admin.close_registration", discord.ButtonStyle.secondary, "_close", 1),
                 ("admin.consolidate_squads", discord.ButtonStyle.primary, "_consolidate", 1),
@@ -2418,6 +2457,26 @@ class AdminActionView(BaseView):
             color=discord.Color.blurple())
         view = ConsolidateConfirmationView(gid, cid)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    async def _notify_tentative(self, interaction):
+        """Ask the tentative players whether they'll join — via a (public/private)
+        pinged thread or via DM. Reached from the admin panel, so already
+        organizer-gated by the Admin button."""
+        gid = self.guild_id
+        cid = self.channel_id
+        lang = get_guild_language(gid)
+        event, _, _ = _get_channel_event(gid, cid)
+        if not event:
+            await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
+            return
+        if not is_player_mode(event):
+            await interaction.response.send_message(t("player.not_player_mode", lang), ephemeral=True)
+            return
+        if not event.get("tentative"):
+            await interaction.response.send_message(t("tentative.none", lang), ephemeral=True)
+            return
+        view = TentativeNotifyView(gid, cid)
+        await interaction.response.send_message(t("tentative.notify_choose", lang), view=view, ephemeral=True)
 
     async def _add_squad(self, interaction):
         lang = get_guild_language(self.guild_id)

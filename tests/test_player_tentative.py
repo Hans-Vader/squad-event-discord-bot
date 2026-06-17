@@ -311,7 +311,9 @@ class I18nKeysTest(unittest.TestCase):
                     "player.tentative_registered", "player.tentative_switched",
                     "player.tentative_removed", "player.tentative_unregister_confirm",
                     "button.notify_tentative", "tentative.none",
-                    "tentative.dm_text", "tentative.thread_text"):
+                    "tentative.dm_text", "tentative.thread_text",
+                    "tentative.thread_type_choose", "tentative.notify_thread_public_button",
+                    "tentative.notify_thread_private_button"):
             for lang in ("de", "en"):
                 self.assertNotIn("missing", t(key, lang), f"{key}/{lang} missing")
 

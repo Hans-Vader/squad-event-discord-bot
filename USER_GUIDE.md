@@ -274,21 +274,20 @@ When adding a squad as admin, the selected representative user counts toward the
 
 ### Admin Panel — Player Mode
 
-In player mode the admin panel has 7 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
+In player mode the admin panel has 8 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
 
 | Row | Button | Description |
 |---|---|---|
 | Player | **Add Player** | Pick one or more Discord users (multi-select), a squad type, and (optionally) one or more in-squad roles applied to all picked users; then confirm. All picked users are registered in a single submit. If capacity is hit mid-batch, remaining users go to the waitlist. The chosen roles are stored for each user and shown next to their name in the event embed (no role → just the name). |
 | Player | **Remove Player** | Pick one or more players (multi-select) — from current squad members, from any waitlist (prefixed `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`), **and** from the tentative list (prefixed `[Vorl-Inf]` / `[Vorl-Veh]` / `[Vorl-Heli]`). The action is gated behind a red "Unregister" confirm button. |
+| Player | **Ask tentatives** (📨) | Ask the tentative players whether they'll join. You first choose **thread** or **DM**; for a thread you then choose **public** (created directly on the event message) or **private** (a private thread that also adds you, the organizer). The message pings/links all tentatives so they confirm via the existing **Join** / **Abmelden** buttons. Only shown when there are tentative players. |
 | Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
 | Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt |
 | Registration | **Consolidate Squads** | Merge partially-filled squads and drop empty ones — gated behind a confirmation prompt. Also happens automatically when the event starts. Player mode only. |
 | Event | **Edit Event** | Opens DM-based editing session |
 | Event | **Delete Event** | Delete the event with confirmation |
 
-Players removed from a squad trigger the waitlist promotion (DM + log channel notification for anyone moved up). Players removed from the waitlist just disappear from the queue.
-
-**Ask tentatives** (📨, player mode, organizers only): a separate button sits right after **Admin** (⚙️) on the event embed. It lets organizers ask the tentative players whether they'll join — either by creating a thread and pinging all of them, or by DMing each one. Both messages link back to the event so players confirm via the existing **Join** / **Abmelden** buttons. The button stays available even after registration closes (useful for filling open seats right before start); the tentative list is kept (not cleared) when the event starts.
+Players removed from a squad trigger the waitlist promotion (DM + log channel notification for anyone moved up). Players removed from the waitlist just disappear from the queue. The tentative list is kept (not cleared) when the event starts, so **Ask tentatives** remains useful for filling open seats right before start.
 
 ### Role Configuration
 

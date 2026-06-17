@@ -274,21 +274,20 @@ Beim Hinzufügen eines Squads als Admin wird der ausgewählte Vertreter für das
 
 ### Admin-Panel — Spieler-Modus
 
-Im Spieler-Modus hat das Admin-Panel 7 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
+Im Spieler-Modus hat das Admin-Panel 8 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
 | Spieler | **Spieler hinzufügen** | Mehrere Discord-User (Mehrfachauswahl), einen Squad-Typ und (optional) eine oder mehrere Rollen im Squad wählen, die für alle ausgewählten User gelten; dann bestätigen. Alle User werden in einem Submit angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, werden die restlichen auf die Warteliste gesetzt. Die gewählten Rollen werden für jeden User gespeichert und neben seinem Namen im Event-Embed angezeigt (ohne Rolle nur der Name). |
 | Spieler | **Spieler entfernen** | Einen oder mehrere Spieler auswählen (Mehrfachauswahl) — aus aktuellen Squad-Mitgliedern, aus jeder Warteliste (markiert mit `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`) **und** aus der Vorläufig-Liste (markiert mit `[Vorl-Inf]` / `[Vorl-Veh]` / `[Vorl-Heli]`). Die Aktion ist hinter einem roten „Abmelden"-Bestätigungsbutton abgesichert. |
+| Spieler | **Vorläufige fragen** (📨) | Fragt die vorläufig Angemeldeten, ob sie teilnehmen. Zuerst wählst du **Thread** oder **DM**; beim Thread danach **öffentlich** (direkt an der Event-Nachricht erstellt) oder **privat** (privater Thread, der zusätzlich dich als Orga hinzufügt). Die Nachricht pingt/verlinkt alle Vorläufigen, sodass sie über die vorhandenen **Beitreten** / **Abmelden**-Buttons bestätigen. Wird nur angezeigt, wenn es vorläufig Angemeldete gibt. |
 | Anmeldung | **Anmeldung öffnen** | Anmeldung manuell öffnen — hinter einer Bestätigungsabfrage abgesichert (beim Öffnen kann ein Ping an die konfigurierten Rollen gesendet werden) |
 | Anmeldung | **Anmeldung schließen** | Anmeldung manuell schließen — hinter einer Bestätigungsabfrage abgesichert |
 | Anmeldung | **Squads zusammenlegen** | Teilweise gefüllte Squads zusammenlegen und leere Squads entfernen — hinter einer Bestätigungsabfrage abgesichert. Passiert automatisch auch beim Event-Start. Nur im Spieler-Modus verfügbar. |
 | Event | **Event bearbeiten** | Öffnet DM-basierte Bearbeitungssitzung |
 | Event | **Event löschen** | Event mit Bestätigung löschen |
 
-Wenn ein Spieler aus einem Squad entfernt wird, wird die Warteliste-Beförderung ausgelöst (DM + Log-Channel-Eintrag für jeden nachgerückten Spieler). Spieler, die von der Warteliste entfernt werden, verschwinden einfach aus der Queue.
-
-**Vorläufige fragen** (📨, Spieler-Modus, nur Orga): ein eigener Button sitzt direkt hinter **Admin** (⚙️) im Event-Embed. Damit kann die Orga die vorläufig Angemeldeten fragen, ob sie teilnehmen — entweder per Thread mit Ping an alle, oder per DM an jeden einzeln. Beide Nachrichten verlinken zurück zum Event, sodass die Spieler über die vorhandenen **Beitreten** / **Abmelden**-Buttons bestätigen. Der Button bleibt auch nach Anmeldeschluss verfügbar (praktisch, um kurz vor Start offene Plätze zu füllen); die Vorläufig-Liste bleibt beim Event-Start erhalten (wird nicht geleert).
+Wenn ein Spieler aus einem Squad entfernt wird, wird die Warteliste-Beförderung ausgelöst (DM + Log-Channel-Eintrag für jeden nachgerückten Spieler). Spieler, die von der Warteliste entfernt werden, verschwinden einfach aus der Queue. Die Vorläufig-Liste bleibt beim Event-Start erhalten (wird nicht geleert), sodass **Vorläufige fragen** auch kurz vor Start zum Auffüllen offener Plätze nützlich bleibt.
 
 ### Rollen-Konfiguration
 

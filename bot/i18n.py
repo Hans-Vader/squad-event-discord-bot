@@ -954,6 +954,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "🧵 Im Thread fragen",
         "en": "🧵 Ask in a thread",
     },
+    "tentative.thread_type_choose": {
+        "de": "Öffentlicher oder privater Thread?",
+        "en": "Public or private thread?",
+    },
+    "tentative.notify_thread_public_button": {
+        "de": "🌐 Öffentlicher Thread",
+        "en": "🌐 Public thread",
+    },
+    "tentative.notify_thread_private_button": {
+        "de": "🔒 Privater Thread",
+        "en": "🔒 Private thread",
+    },
     "tentative.notify_dm_button": {
         "de": "✉️ Per DM fragen",
         "en": "✉️ Ask via DM",
