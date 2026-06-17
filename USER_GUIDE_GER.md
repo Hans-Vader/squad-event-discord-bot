@@ -65,7 +65,7 @@ Der Button heißt **Beitreten** (🪖) statt **Squad**. Der Ablauf:
 
 1. Klicke auf **Beitreten** (🪖) in der Event-Anzeige
 2. Wähle deinen Squad-Typ im Dropdown: Infanterie, Fahrzeug oder Heli
-3. Wähle **optional** eine oder mehrere Rollen im Squad — das Dropdown ist als „(optional)" gekennzeichnet, passt sich deinem Typ an und erlaubt Mehrfachauswahl:
+3. Wähle **optional** eine oder mehrere Rollen im Squad — *nur wenn der Event-Ersteller die Rollenauswahl aktiviert hat* (siehe Erstellung Schritt 7; ist sie deaktiviert, gibt es kein Rollen-Dropdown und es werden keine Rollen angezeigt). Das Dropdown ist als „(optional)" gekennzeichnet, passt sich deinem Typ an und erlaubt Mehrfachauswahl:
    - **Infanterie**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout, Logi-Fahrer, Mörser
    - **Fahrzeug**: Driver, Gunner, Commander
    - **Heli**: Pilot, Spotter, Gunner
@@ -171,9 +171,9 @@ Im Spieler-Modus wird nur das %-Limit für Vorab-Zugang angezeigt.
 - Event-Erinnerung — Benachrichtigung X Minuten vor Event-Start (0 = deaktiviert)
 - Countdown — Nachricht X Sekunden vor Anmeldungsstart (wird bei Öffnung automatisch gelöscht)
 
-**Schritt 7 — Spielstil & Squad-Limit (nur Vertreter-Modus — im Spieler-Modus übersprungen):**
-- Spielstil-Auswahl — ob Squads bei der Anmeldung einen Spielstil wählen
-- Max. Squads pro Spieler (1–20) — wird hier nur gefragt, wenn **keine** Anmelde-Rolle gesetzt ist; mit Rollen-Gate wird dies in Schritt 4 (Slot-Limits) festgelegt
+**Schritt 7 — Spielstil & Squad-Limit (Vertreter-Modus) / Rollen-Auswahl (Spieler-Modus):**
+- *Vertreter-Modus:* Spielstil-Auswahl — ob Squads bei der Anmeldung einen Spielstil wählen. Plus Max. Squads pro Spieler (1–20) — wird hier nur gefragt, wenn **keine** Anmelde-Rolle gesetzt ist; mit Rollen-Gate wird dies in Schritt 4 (Slot-Limits) festgelegt.
+- *Spieler-Modus:* Rollen-Auswahl — ob Spieler bei der Anmeldung eine Rolle im Squad (Squad Leader, Medic, Pilot, …) wählen können. **Ist sie deaktiviert, gibt es kein Rollen-Dropdown und im Embed werden keine Rollen angezeigt.** Standard: aktiviert. Kann später auch über den DM-Editor geändert werden.
 
 **Schritt 8 — Bestätigung:**
 - Zusammenfassungs-Embed mit allen Einstellungen inkl. ungenutzter Slots — Bestätigen oder Abbrechen

@@ -65,7 +65,7 @@ The button is labeled **Join** (🪖) instead of **Squad**. The flow:
 
 1. Click **Join** (🪖) in the event display
 2. Select your squad type from the dropdown: Infantry, Vehicle, or Heli
-3. **Optionally** pick one or more in-squad roles — the dropdown is marked "(optional)", adapts to your type and supports multi-select:
+3. **Optionally** pick one or more in-squad roles — *only if the event creator enabled role selection* (see creation Step 7; when disabled there is no role dropdown and no roles are shown). The dropdown is marked "(optional)", adapts to your type and supports multi-select:
    - **Infantry**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout, Logi driver, Mortar
    - **Vehicle**: Driver, Gunner, Commander
    - **Heli**: Pilot, Spotter, Gunner
@@ -171,9 +171,9 @@ Player mode shows only the early-access % cap.
 - Event reminder — Notification X minutes before event start (0 = disabled)
 - Registration countdown — Message sent X seconds before registration opens (auto-deleted when registration starts)
 
-**Step 7 — Playstyle & Squad Limit (rep mode only — skipped in player mode):**
-- Playstyle selection — whether squads pick a playstyle when registering
-- Max squads per user (1–20) — only asked here when **no** registration-role gate is set; when a gate is configured, this is set in Step 4 (Slot Limits) instead
+**Step 7 — Playstyle & Squad Limit (rep mode) / Role selection (player mode):**
+- *Rep mode:* Playstyle selection — whether squads pick a playstyle when registering. Plus max squads per user (1–20) — only asked here when **no** registration-role gate is set; when a gate is configured, this is set in Step 4 (Slot Limits) instead.
+- *Player mode:* Role selection — whether players may pick an in-squad role (Squad Leader, Medic, Pilot, …) when registering. **When disabled, there is no role dropdown and roles are not shown in the embed.** Default: enabled. Can also be changed later via the DM editor.
 
 **Step 8 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel

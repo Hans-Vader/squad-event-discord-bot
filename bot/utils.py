@@ -1022,6 +1022,9 @@ def format_event_details(event: dict, lang: str = "de",
 
     is_player_mode = event.get("mode") == "player"
     playstyle_enabled = event.get("playstyle_enabled", True)
+    # Player-mode in-squad roles are opt-out per event: when disabled, roles are
+    # never shown (even if stored on a member from before the toggle was flipped).
+    roles_enabled = event.get("player_roles_enabled", True)
 
     # Slot overview — compact inline grid (row 1: server, caster, max/player)
     overview_name_key = "embed.seats_overview" if is_player_mode else "embed.server_overview"
@@ -1058,7 +1061,7 @@ def format_event_details(event: dict, lang: str = "de",
                         key=lambda m: 0 if "Squad Leader" in _get_member_roles(m) else 1)
                     parts = []
                     for m in sorted_members:
-                        rls = _get_member_roles(m)
+                        rls = _get_member_roles(m) if roles_enabled else []
                         parts.append(f"**{m.get('name', '?')}**{_format_role_suffix(rls, lang)}")
                     # One registered player per line for readability; roles of a
                     # single player stay comma-joined on that player's line.
@@ -1098,7 +1101,7 @@ def format_event_details(event: dict, lang: str = "de",
                         wl_roles = [role_data]
                     else:
                         wl_roles = []
-                    wl_text += f"{i+1}. **{player_name}**{_format_role_suffix(wl_roles, lang)}\n"
+                    wl_text += f"{i+1}. **{player_name}**{_format_role_suffix(wl_roles if roles_enabled else [], lang)}\n"
                 else:
                     squad_name, _squad_type, playstyle, sq_size, _squad_id, *_rest = entry
                     rep_name = _rest[0] if _rest else None
@@ -1137,7 +1140,7 @@ def format_event_details(event: dict, lang: str = "de",
             entries = [e for e in tentative if e.get("type") == type_key]
             if not entries:
                 continue
-            lines = [f"**{e.get('name', '?')}**{_format_role_suffix(_get_member_roles(e), lang)}"
+            lines = [f"**{e.get('name', '?')}**{_format_role_suffix(_get_member_roles(e) if roles_enabled else [], lang)}"
                      for e in entries]
             embed.add_field(
                 name=t("embed.tentative_label", lang,

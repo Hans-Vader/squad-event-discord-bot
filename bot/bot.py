@@ -129,6 +129,7 @@ _EDIT_PROPERTIES = [
     (19, "playstyle_enabled",      "edit.property.playstyle_enabled","bool",           None),
     (20, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
     (21, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
+    (22, "player_roles_enabled",   "edit.property.player_roles_enabled","bool",         None),
 ]
 
 
@@ -305,6 +306,7 @@ def _ensure_event_keys(event: dict):
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "mode": "rep",
         "playstyle_enabled": True,
+        "player_roles_enabled": True,
         "community_rep_cap_percent": None,
         "early_access_squads_per_role": None,
     }
@@ -1862,9 +1864,12 @@ class PlayerTypePickerView(BaseView):
         self.channel_id = channel_id
         self.tentative = tentative
         self.selected_type = initial_type
-        self.selected_roles: list = list(initial_roles or [])
         lang = get_guild_language(guild_id)
         event, _, _ = _get_channel_event(guild_id, channel_id)
+        # In-squad roles are opt-out per event; when disabled there's no role
+        # dropdown and registrations carry no roles.
+        self.roles_enabled = bool(event.get("player_roles_enabled", True)) if event else True
+        self.selected_roles: list = list(initial_roles or []) if self.roles_enabled else []
 
         self.type_select = ui.Select(
             placeholder=t("squad.type_select", lang),
@@ -1873,14 +1878,16 @@ class PlayerTypePickerView(BaseView):
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
 
-        self.role_select = ui.Select(
-            placeholder=t("player.role_select_placeholder", lang),
-            options=[discord.SelectOption(label="—", value="__placeholder__")],
-            custom_id="player_role_select",
-            min_values=0, max_values=1,
-            disabled=True, row=1)
-        self.role_select.callback = self._on_role
-        self.add_item(self.role_select)
+        self.role_select = None
+        if self.roles_enabled:
+            self.role_select = ui.Select(
+                placeholder=t("player.role_select_placeholder", lang),
+                options=[discord.SelectOption(label="—", value="__placeholder__")],
+                custom_id="player_role_select",
+                min_values=0, max_values=1,
+                disabled=True, row=1)
+            self.role_select.callback = self._on_role
+            self.add_item(self.role_select)
 
         self.continue_button = ui.Button(
             label=t("squad.continue", lang),
@@ -1894,18 +1901,19 @@ class PlayerTypePickerView(BaseView):
 
     def _apply_type(self, lang):
         """Reflect `self.selected_type`/`self.selected_roles` onto the selects:
-        mark the chosen type, populate role options (pre-selecting chosen roles),
-        and enable the role dropdown + Continue button."""
+        mark the chosen type, populate role options (pre-selecting chosen roles)
+        when roles are enabled, and enable the Continue button."""
         for opt in self.type_select.options:
             opt.default = (opt.value == self.selected_type)
-        role_opts = [discord.SelectOption(label=role_label(r, lang), value=r,
-                                          default=(r in self.selected_roles))
-                     for r in ROLES_BY_TYPE.get(self.selected_type, [])]
-        self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
-        self.role_select.disabled = not role_opts
-        self.role_select.min_values = 0
-        self.role_select.max_values = max(1, len(role_opts))
-        self.role_select.placeholder = t("player.role_select_placeholder", lang)
+        if self.roles_enabled and self.role_select is not None:
+            role_opts = [discord.SelectOption(label=role_label(r, lang), value=r,
+                                              default=(r in self.selected_roles))
+                         for r in ROLES_BY_TYPE.get(self.selected_type, [])]
+            self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
+            self.role_select.disabled = not role_opts
+            self.role_select.min_values = 0
+            self.role_select.max_values = max(1, len(role_opts))
+            self.role_select.placeholder = t("player.role_select_placeholder", lang)
         self.continue_button.disabled = False
 
     async def _on_type(self, interaction: discord.Interaction):
@@ -2562,6 +2570,7 @@ class _AdminPlayerAddView(BaseView):
         self.add_item(self.user_select)
 
         event, _, _ = _get_channel_event(guild_id, channel_id)
+        self.roles_enabled = bool(event.get("player_roles_enabled", True)) if event else True
         sizes = _get_squad_sizes(event) if event else {"infantry": 6, "vehicle": 2, "heli": 1}
         self.type_select = ui.Select(
             placeholder=t("squad.type_select", lang),
@@ -2570,13 +2579,15 @@ class _AdminPlayerAddView(BaseView):
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
 
-        self.role_select = ui.Select(
-            placeholder=t("player.role_select_placeholder", lang),
-            options=[discord.SelectOption(label="—", value="__placeholder__")],
-            min_values=0, max_values=1,
-            disabled=True, row=2)
-        self.role_select.callback = self._on_role
-        self.add_item(self.role_select)
+        self.role_select = None
+        if self.roles_enabled:
+            self.role_select = ui.Select(
+                placeholder=t("player.role_select_placeholder", lang),
+                options=[discord.SelectOption(label="—", value="__placeholder__")],
+                min_values=0, max_values=1,
+                disabled=True, row=2)
+            self.role_select.callback = self._on_role
+            self.add_item(self.role_select)
 
         self.confirm_btn = ui.Button(
             label=t("general.confirm", lang), style=discord.ButtonStyle.success,
@@ -2598,13 +2609,14 @@ class _AdminPlayerAddView(BaseView):
         for opt in self.type_select.options:
             opt.default = (opt.value == self.selected_type)
         lang = get_guild_language(self.guild_id)
-        role_opts = [discord.SelectOption(label=role_label(r, lang), value=r)
-                     for r in ROLES_BY_TYPE.get(self.selected_type, [])]
-        self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
-        self.role_select.disabled = not role_opts
-        self.role_select.min_values = 0
-        self.role_select.max_values = max(1, len(role_opts))
-        self.role_select.placeholder = t("player.role_select_placeholder", lang)
+        if self.roles_enabled and self.role_select is not None:
+            role_opts = [discord.SelectOption(label=role_label(r, lang), value=r)
+                         for r in ROLES_BY_TYPE.get(self.selected_type, [])]
+            self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
+            self.role_select.disabled = not role_opts
+            self.role_select.min_values = 0
+            self.role_select.max_values = max(1, len(role_opts))
+            self.role_select.placeholder = t("player.role_select_placeholder", lang)
         self._update_confirm_state()
         await interaction.response.edit_message(view=self)
 
@@ -3372,11 +3384,13 @@ def _parse_int_list(text):
 def _visible_edit_properties(event):
     """Return the editable properties relevant to this event's mode.
 
-    Player-mode events never use playstyle, so the toggle is hidden there.
+    Player-mode events never use playstyle (rep concept); rep-mode events never
+    use the player-mode in-squad-role toggle. Each toggle is hidden in the other
+    mode.
     """
     if is_player_mode(event):
         return [p for p in _EDIT_PROPERTIES if p[1] != "playstyle_enabled"]
-    return list(_EDIT_PROPERTIES)
+    return [p for p in _EDIT_PROPERTIES if p[1] != "player_roles_enabled"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -4874,13 +4888,14 @@ class WizardTimingView(BaseView):
     async def _advance_after_timing(self, interaction):
         lang = get_guild_language(self.guild_id)
         if is_player_mode(self.event):
-            # Player mode: one user per registration, no squad-limit step.
+            # Player mode: one user per registration, no squad-limit step — but
+            # offer the in-squad-role toggle (player-mode analogue of playstyle).
             self.event["max_squads_per_user"] = 1
-            embed = _build_confirmation_embed(self.event, self.guild_id)
-            confirm_view = WizardConfirmationView(
+            next_view = WizardPlayerRolesView(
                 self.guild_id, self.channel_id, self.event, self.user_assignments,
                 self.settings, self.interaction_user)
-            await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
+            content = f"**{t('wizard.player_roles_step_title', lang)}**\n{t('wizard.player_roles_step_desc', lang)}"
+            await interaction.response.edit_message(content=content, embed=None, view=next_view)
             return
         default_limit = self.event.get("max_squads_per_user", 1)
         next_view = WizardSquadLimitView(self.guild_id, self.channel_id, self.event, self.user_assignments,
@@ -4984,6 +4999,67 @@ class WizardSquadLimitView(BaseView):
         await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
 
 
+class WizardPlayerRolesView(BaseView):
+    """Player-mode step: enable or disable the in-squad role selection (Squad
+    Leader, Medic, Pilot, …). Player-mode analogue of the rep-mode playstyle
+    toggle. When disabled, players can't pick a role and roles aren't shown."""
+
+    def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
+        super().__init__(timeout=300, title="Wizard Player Roles")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.event = event
+        self.user_assignments = user_assignments
+        self.settings = settings
+        self.interaction_user = interaction_user
+        lang = get_guild_language(guild_id)
+
+        roles_default = bool(event.get("player_roles_enabled", True))
+        self.roles_select = ui.Select(
+            placeholder=t("wizard.player_roles_select_placeholder", lang),
+            options=[
+                discord.SelectOption(label=t("wizard.player_roles_enabled", lang),
+                                     value="yes", default=roles_default),
+                discord.SelectOption(label=t("wizard.player_roles_disabled", lang),
+                                     value="no", default=not roles_default),
+            ],
+            min_values=1, max_values=1, row=0)
+        self.roles_select.callback = self._roles_selected
+        self.add_item(self.roles_select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=1)
+        skip_btn.callback = self._skip
+        self.add_item(skip_btn)
+
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=1)
+        continue_btn.callback = self._continue
+        self.add_item(continue_btn)
+
+        self._selected_roles_enabled = None
+
+    async def _roles_selected(self, interaction):
+        self._selected_roles_enabled = self.roles_select.values[0] == "yes"
+        await interaction.response.defer()
+
+    def _save_selections(self):
+        if self._selected_roles_enabled is not None:
+            self.event["player_roles_enabled"] = self._selected_roles_enabled
+
+    async def _to_confirmation(self, interaction):
+        self._save_selections()
+        embed = _build_confirmation_embed(self.event, self.guild_id)
+        confirm_view = WizardConfirmationView(
+            self.guild_id, self.channel_id, self.event, self.user_assignments,
+            self.settings, self.interaction_user)
+        await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
+
+    async def _continue(self, interaction):
+        await self._to_confirmation(interaction)
+
+    async def _skip(self, interaction):
+        await self._to_confirmation(interaction)
+
+
 # ############################# #
 # WIZARD CONFIRMATION            #
 # ############################# #
@@ -5039,6 +5115,11 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
                          if event.get("playstyle_enabled", True)
                          else t("wizard.summary_playstyle_no", lang))
         embed.add_field(name=t("wizard.summary_playstyle", lang), value=playstyle_val, inline=True)
+    else:
+        roles_val = (t("wizard.summary_player_roles_yes", lang)
+                     if event.get("player_roles_enabled", True)
+                     else t("wizard.summary_player_roles_no", lang))
+        embed.add_field(name=t("wizard.summary_player_roles", lang), value=roles_val, inline=True)
 
     if event.get("registration_start_time") is not None:
         cd_seconds = event.get("countdown_seconds")

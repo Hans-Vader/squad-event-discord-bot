@@ -265,6 +265,46 @@ class EmbedRenderingTest(unittest.TestCase):
             self.assertNotIn("Vorläufig", f.name)
 
 
+class RolesDisabledTest(unittest.TestCase):
+    """When the event creator disables in-squad roles (player_roles_enabled=False),
+    roles are not shown in the embed even if stored on a member/tentative entry."""
+
+    def _find_field(self, embed, needle):
+        for f in embed.fields:
+            if needle in f.name:
+                return f
+        return None
+
+    def test_member_role_hidden_when_roles_disabled(self):
+        event = _make_event()
+        event["player_roles_enabled"] = False
+        ua = {}
+        utils._player_register(event, ua, "u1", "Alice", "infantry", ["Squad Leader"])
+        embed = utils.format_event_details(event, "de")
+        field = self._find_field(embed, t("embed.type_infantry", "de"))
+        self.assertIn("Alice", field.value)
+        self.assertNotIn("Squad Leader", field.value)
+        self.assertNotIn("(", field.value.split("Alice", 1)[1][:3])
+
+    def test_member_role_shown_when_enabled_default(self):
+        event = _make_event()  # no flag → default enabled
+        ua = {}
+        utils._player_register(event, ua, "u1", "Alice", "infantry", ["Squad Leader"])
+        embed = utils.format_event_details(event, "de")
+        field = self._find_field(embed, t("embed.type_infantry", "de"))
+        self.assertIn("**Alice** (Squad Leader)", field.value)
+
+    def test_tentative_role_hidden_when_roles_disabled(self):
+        event = _make_event()
+        event["player_roles_enabled"] = False
+        utils._add_tentative(event, "u1", "Alice", "infantry", ["Medic"])
+        embed = utils.format_event_details(event, "de")
+        label = t("embed.tentative_label", "de", type=t("embed.type_infantry", "de"), count=1)
+        field = self._find_field(embed, label)
+        self.assertIn("Alice", field.value)
+        self.assertNotIn("Medic", field.value)
+
+
 class I18nKeysTest(unittest.TestCase):
     def test_new_keys_present(self):
         for key in ("button.tentative", "embed.tentative_label",
@@ -278,6 +318,15 @@ class I18nKeysTest(unittest.TestCase):
     def test_role_placeholder_marks_optional(self):
         self.assertIn("optional", t("player.role_select_placeholder", "de").lower())
         self.assertIn("optional", t("player.role_select_placeholder", "en").lower())
+
+    def test_player_roles_toggle_keys_present(self):
+        for key in ("wizard.player_roles_enabled", "wizard.player_roles_disabled",
+                    "wizard.player_roles_select_placeholder", "wizard.player_roles_step_title",
+                    "wizard.player_roles_step_desc", "wizard.summary_player_roles",
+                    "wizard.summary_player_roles_yes", "wizard.summary_player_roles_no",
+                    "edit.property.player_roles_enabled"):
+            for lang in ("de", "en"):
+                self.assertNotIn("missing", t(key, lang), f"{key}/{lang} missing")
 
 
 if __name__ == "__main__":

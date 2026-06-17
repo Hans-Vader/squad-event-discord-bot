@@ -1564,6 +1564,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "19. Spielstil-Auswahl bei Anmeldung",
         "en": "19. Playstyle selection at registration",
     },
+    "edit.property.player_roles_enabled": {
+        "de": "22. Rollenauswahl bei Anmeldung",
+        "en": "22. Role selection at registration",
+    },
     "edit.bool.enabled": {
         "de": "Aktiviert",
         "en": "Enabled",
@@ -1801,6 +1805,14 @@ _STRINGS: dict[str, dict[str, str]] = {
     "wizard.playstyle_step_desc": {
         "de": "Sollen Squads bei der Anmeldung einen Spielstil wählen?",
         "en": "Should squads pick a playstyle when registering?",
+    },
+    "wizard.player_roles_step_title": {
+        "de": "Rollen-Auswahl",
+        "en": "Role selection",
+    },
+    "wizard.player_roles_step_desc": {
+        "de": "Sollen Spieler bei der Anmeldung optional eine Rolle im Squad (z.B. Squad Leader, Medic, Pilot) wählen können?",
+        "en": "Should players be able to optionally pick an in-squad role (e.g. Squad Leader, Medic, Pilot) when registering?",
     },
     "edit.property.early_pct_cap": {
         "de": "20. Slot-Limit: Vorab-Zugang (%)",
@@ -2142,6 +2154,30 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Enabled",
     },
     "wizard.summary_playstyle_no": {
+        "de": "Deaktiviert",
+        "en": "Disabled",
+    },
+    "wizard.player_roles_select_placeholder": {
+        "de": "Rollenauswahl bei Anmeldung...",
+        "en": "Role selection at registration...",
+    },
+    "wizard.player_roles_enabled": {
+        "de": "Rollenauswahl aktivieren",
+        "en": "Enable role selection",
+    },
+    "wizard.player_roles_disabled": {
+        "de": "Rollenauswahl deaktivieren",
+        "en": "Disable role selection",
+    },
+    "wizard.summary_player_roles": {
+        "de": "Rollenauswahl",
+        "en": "Role selection",
+    },
+    "wizard.summary_player_roles_yes": {
+        "de": "Aktiviert",
+        "en": "Enabled",
+    },
+    "wizard.summary_player_roles_no": {
         "de": "Deaktiviert",
         "en": "Disabled",
     },
