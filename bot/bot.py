@@ -1551,7 +1551,7 @@ class EventActionView(ui.View):
                 disabled=reg_disabled,
             ))
             self.add_item(ui.Button(
-                label=t("button.tentative", lang), style=discord.ButtonStyle.secondary,
+                label=t("button.tentative", lang), style=discord.ButtonStyle.primary,
                 custom_id="event_tentative", emoji="🤔",
                 disabled=reg_disabled,
             ))
