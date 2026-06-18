@@ -950,6 +950,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Wie möchtest du die vorläufig angemeldeten Spieler fragen, ob sie teilnehmen?",
         "en": "How do you want to ask the tentative players whether they'll join?",
     },
+    "tentative.select_choose": {
+        "de": "Wen möchtest du fragen? Wähle einzelne Vorläufige aus – oder nutze „Alle fragen“.",
+        "en": "Whom do you want to ask? Pick individual tentatives – or use “Ask all”.",
+    },
+    "tentative.select_users_placeholder": {
+        "de": "Vorläufige auswählen…",
+        "en": "Select tentative players…",
+    },
+    "tentative.notify_all_button": {
+        "de": "Alle fragen",
+        "en": "Ask all",
+    },
     "tentative.notify_thread_button": {
         "de": "🧵 Im Thread fragen",
         "en": "🧵 Ask in a thread",

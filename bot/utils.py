@@ -508,6 +508,19 @@ def _remove_tentative(event: dict, user_id) -> Optional[dict]:
     return None
 
 
+def _select_tentative(entries, recipient_ids) -> list:
+    """Filter tentative entries to a chosen recipient set.
+
+    `recipient_ids is None` means "everyone" (returns a copy of all entries);
+    otherwise only entries whose user_id is in the set are kept. IDs are matched
+    as strings, so int/str ids interoperate. Unknown ids are ignored.
+    """
+    if recipient_ids is None:
+        return list(entries)
+    wanted = {str(x) for x in recipient_ids}
+    return [e for e in entries if str(e.get("user_id")) in wanted]
+
+
 def _player_current_assignment(event: dict, user_assignments: dict, user_id) -> tuple:
     """Return (squad_type, roles) for a seated or waitlisted player, else
     (None, []). Used to carry a player's selection over when switching their

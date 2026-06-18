@@ -203,6 +203,36 @@ class SwitchToTentativeCompositionTest(unittest.TestCase):
         self.assertEqual(tent["roles"], ["Medic"])
 
 
+class SelectTentativeTest(unittest.TestCase):
+    """Filtering tentative entries by a chosen recipient set (None = all)."""
+
+    def _entries(self):
+        return [
+            {"user_id": "1", "name": "A", "type": "infantry", "roles": []},
+            {"user_id": "2", "name": "B", "type": "vehicle", "roles": []},
+            {"user_id": "3", "name": "C", "type": "heli", "roles": []},
+        ]
+
+    def test_none_returns_all(self):
+        e = self._entries()
+        self.assertEqual(utils._select_tentative(e, None), e)
+
+    def test_subset_filters(self):
+        got = utils._select_tentative(self._entries(), ["1", "3"])
+        self.assertEqual([x["user_id"] for x in got], ["1", "3"])
+
+    def test_ids_coerced_to_str(self):
+        got = utils._select_tentative(self._entries(), [2])  # int id still matches "2"
+        self.assertEqual([x["user_id"] for x in got], ["2"])
+
+    def test_unknown_id_ignored(self):
+        got = utils._select_tentative(self._entries(), ["1", "999"])
+        self.assertEqual([x["user_id"] for x in got], ["1"])
+
+    def test_empty_selection_returns_empty(self):
+        self.assertEqual(utils._select_tentative(self._entries(), []), [])
+
+
 class FormatRoleSuffixTest(unittest.TestCase):
     def test_role_suffix_with_roles_has_parens(self):
         self.assertEqual(utils._format_role_suffix(["Squad Leader"], "de"), " (Squad Leader)")
@@ -313,7 +343,9 @@ class I18nKeysTest(unittest.TestCase):
                     "button.notify_tentative", "tentative.none",
                     "tentative.dm_text", "tentative.thread_text",
                     "tentative.thread_type_choose", "tentative.notify_thread_public_button",
-                    "tentative.notify_thread_private_button"):
+                    "tentative.notify_thread_private_button",
+                    "tentative.select_choose", "tentative.select_users_placeholder",
+                    "tentative.notify_all_button"):
             for lang in ("de", "en"):
                 self.assertNotIn("missing", t(key, lang), f"{key}/{lang} missing")
 
