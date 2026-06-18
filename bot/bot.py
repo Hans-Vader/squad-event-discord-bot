@@ -43,6 +43,8 @@ from utils import (
     resolve_event_defaults, role_label,
     _player_register, _player_unregister, _player_remove_from_waitlist,
     _player_waitlist_type, _player_self_unregister,
+    _add_tentative, _remove_tentative, _player_tentative_entry, _player_tentative_type,
+    _player_current_assignment, _select_tentative,
     consolidate_all_player_squads,
     build_event_ics, _ics_slug,
 )
@@ -72,6 +74,11 @@ class EventBot(commands.Bot):
     async def setup_hook(self):
         try:
             self.add_view(EventActionView())
+            # Also register the player-mode layout so its extra custom_id
+            # (event_tentative) keeps dispatching on persisted messages across
+            # restarts. Both views are stateless and route identically via
+            # interaction_check, so overlapping custom_ids are harmless.
+            self.add_view(EventActionView(mode="player"))
             logger.info("Persistent EventActionView registered")
         except Exception as e:
             logger.error(f"Failed to register persistent view: {e}", exc_info=True)
@@ -121,6 +128,7 @@ _EDIT_PROPERTIES = [
     (19, "playstyle_enabled",      "edit.property.playstyle_enabled","bool",           None),
     (20, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
     (21, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
+    (22, "player_roles_enabled",   "edit.property.player_roles_enabled","bool",         None),
 ]
 
 
@@ -137,8 +145,18 @@ def is_player_mode(event) -> bool:
 
 async def _dispatch_player_register(interaction, guild_id: int, channel_id: int, lang: str):
     """Send the player-mode type picker as an ephemeral response. Entry point
-    for the Squad button."""
-    view = PlayerTypePickerView(guild_id, channel_id)
+    for the Squad button. When the user is currently tentative, the picker is
+    pre-filled with their tentative type+role (carried over on the upgrade to a
+    firm registration); a successful register then clears the tentative entry."""
+    user_id = str(interaction.user.id)
+    event, _, _ = _get_channel_event(guild_id, channel_id)
+    tent = _player_tentative_entry(event, user_id) if event else None
+    if tent:
+        view = PlayerTypePickerView(guild_id, channel_id,
+                                    initial_type=tent.get("type"),
+                                    initial_roles=list(tent.get("roles", [])))
+    else:
+        view = PlayerTypePickerView(guild_id, channel_id)
     await interaction.response.send_message(
         f"**{t('player.pick_type_title', lang)}**\n{t('player.pick_type_desc', lang)}",
         view=view, ephemeral=True)
@@ -174,7 +192,62 @@ async def _dispatch_player_unregister(interaction, guild_id: int, channel_id: in
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         return
 
+    # Not seated or waitlisted — a tentative player can also withdraw.
+    if event and _player_tentative_type(event, user_id) is not None:
+        embed = discord.Embed(
+            title=t("player.unregister_confirm_title", lang),
+            description=t("player.tentative_unregister_confirm", lang),
+            color=discord.Color.red())
+        view = PlayerUnregisterConfirmView(guild_id, channel_id, None)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        return
+
     await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
+
+
+async def _dispatch_player_tentative(interaction, guild_id: int, channel_id: int, lang: str):
+    """Player-mode tentative entry point (Vorläufig button).
+
+    - Firmly seated → confirm switch (frees the seat, carries over type+role).
+    - On a waitlist → confirm switch (frees the waitlist spot).
+    - Already tentative → re-open the picker pre-filled to change the selection.
+    - Otherwise → fresh tentative type picker.
+    """
+    user_id = str(interaction.user.id)
+    event, user_assignments, _ = _get_channel_event(guild_id, channel_id)
+
+    if user_id in (user_assignments or {}):
+        squad_names = user_assignments.get(user_id, [])
+        squad_name = squad_names[0] if squad_names else "?"
+        embed = discord.Embed(
+            title=t("player.tentative_switch_title", lang),
+            description=t("player.tentative_switch_confirm", lang, squad=squad_name),
+            color=discord.Color.orange())
+        view = PlayerTentativeSwitchConfirmView(guild_id, channel_id)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        return
+
+    wl_type = _player_waitlist_type(event, user_id) if event else None
+    if wl_type is not None:
+        type_label = t(f"embed.type_{wl_type}", lang) if wl_type in SQUAD_TYPES else wl_type
+        embed = discord.Embed(
+            title=t("player.tentative_switch_title", lang),
+            description=t("player.tentative_switch_waitlist_confirm", lang, type=type_label),
+            color=discord.Color.orange())
+        view = PlayerTentativeSwitchConfirmView(guild_id, channel_id)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        return
+
+    tent = _player_tentative_entry(event, user_id) if event else None
+    if tent:
+        view = PlayerTypePickerView(guild_id, channel_id, tentative=True,
+                                    initial_type=tent.get("type"),
+                                    initial_roles=list(tent.get("roles", [])))
+    else:
+        view = PlayerTypePickerView(guild_id, channel_id, tentative=True)
+    await interaction.response.send_message(
+        f"**{t('player.pick_type_title', lang)}**\n{t('player.pick_type_desc', lang)}",
+        view=view, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +287,7 @@ def _ensure_event_keys(event: dict):
     defaults = {
         "squads": {}, "casters": {}, "waitlist": [],
         "infantry_waitlist": [], "vehicle_waitlist": [], "heli_waitlist": [],
-        "caster_waitlist": [],
+        "caster_waitlist": [], "tentative": [],
         "max_player_slots": 98, "player_slots_used": 0,
         "max_caster_slots": 2, "caster_slots_used": 0,
         "registration_open": False, "is_closed": False,
@@ -232,6 +305,7 @@ def _ensure_event_keys(event: dict):
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "mode": "rep",
         "playstyle_enabled": True,
+        "player_roles_enabled": True,
         "community_rep_cap_percent": None,
         "early_access_squads_per_role": None,
     }
@@ -1012,6 +1086,8 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
 
         squad_name, status = _player_register(event, user_assignments, user_id, display_name, squad_type, roles)
         if status in ("registered", "waitlisted"):
+            # A firm sign-up (or waitlist spot) supersedes any tentative entry.
+            _remove_tentative(event, user_id)
             save_event(db_id, event, user_assignments)
 
     type_label = t(f"embed.type_{squad_type}", lang) if squad_type in SQUAD_TYPES else squad_type
@@ -1041,9 +1117,85 @@ async def player_register(interaction, guild_id, channel_id, squad_type, target_
     return True
 
 
+async def player_register_tentative(interaction, guild_id, channel_id, squad_type, roles=None):
+    """Sign a player up tentatively ("Vorläufig"). No real seat is consumed and
+    seat-limit checks are skipped; exactly one tentative entry per user."""
+    lock = _get_guild_lock(guild_id)
+    lang = get_guild_language(guild_id)
+    user = interaction.user
+    user_id = str(user.id)
+    display_name = user.display_name
+
+    async with lock:
+        event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
+        if not event:
+            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+            return False
+        if not is_player_mode(event):
+            await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
+            return False
+        if _add_tentative(event, user_id, display_name, squad_type, roles) != "tentative":
+            await send_feedback(interaction, t("player.invalid_type", lang), ephemeral=True)
+            return False
+        save_event(db_id, event, user_assignments)
+
+    type_label = t(f"embed.type_{squad_type}", lang) if squad_type in SQUAD_TYPES else squad_type
+    role_labels = [role_label(r, lang) for r in (roles or [])]
+    role_suffix = (", " + ", ".join(role_labels)) if role_labels else ""
+    await send_feedback(interaction,
+        t("player.tentative_registered", lang, type=type_label, role_suffix=role_suffix), ephemeral=True)
+    await send_to_log_channel(
+        t("log.player_tentative", lang, user=user.name, type=type_label, role_suffix=role_suffix),
+        guild=interaction.guild)
+    await update_event_displays(guild_id, channel_id)
+    return True
+
+
+async def player_switch_to_tentative(interaction, guild_id, channel_id):
+    """Move a firmly-registered (or waitlisted) player to tentative: free their
+    seat / waitlist spot and re-add them as tentative, carrying over their squad
+    type and roles. Promotes any waitlisted player into the freed seat."""
+    lock = _get_guild_lock(guild_id)
+    lang = get_guild_language(guild_id)
+    user = interaction.user
+    user_id = str(user.id)
+    display_name = user.display_name
+
+    async with lock:
+        event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
+        if not event:
+            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+            return False
+        if not is_player_mode(event):
+            await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
+            return False
+
+        # Capture type + roles BEFORE removing the seat/waitlist entry.
+        squad_type, roles = _player_current_assignment(event, user_assignments, user_id)
+        if squad_type is None:
+            await send_feedback(interaction, t("player.not_registered", lang), ephemeral=True)
+            return False
+
+        _status, _name, promoted = _player_self_unregister(event, user_assignments, user_id)
+        _add_tentative(event, user_id, display_name, squad_type, roles)
+        save_event(db_id, event, user_assignments)
+
+    type_label = t(f"embed.type_{squad_type}", lang) if squad_type in SQUAD_TYPES else squad_type
+    role_labels = [role_label(r, lang) for r in (roles or [])]
+    role_suffix = (", " + ", ".join(role_labels)) if role_labels else ""
+    await send_feedback(interaction,
+        t("player.tentative_switched", lang, type=type_label, role_suffix=role_suffix), ephemeral=True)
+    await send_to_log_channel(
+        t("log.player_tentative", lang, user=user.name, type=type_label, role_suffix=role_suffix),
+        guild=interaction.guild)
+    await _notify_promoted_players(interaction.guild, guild_id, channel_id, lang, promoted, event)
+    await update_event_displays(guild_id, channel_id)
+    return True
+
+
 async def player_unregister(interaction, guild_id, channel_id, target_user=None):
-    """Unregister a single player (player mode) — from their squad or, if they
-    only hold a waitlist spot, from the waitlist."""
+    """Unregister a single player (player mode) — from their squad, their
+    waitlist spot, or their tentative sign-up."""
     lock = _get_guild_lock(guild_id)
     lang = get_guild_language(guild_id)
     user = target_user or interaction.user
@@ -1071,6 +1223,14 @@ async def player_unregister(interaction, guild_id, channel_id, target_user=None)
         await send_feedback(interaction, t("player.waitlist_unregistered", lang, type=type_label), ephemeral=True)
         await send_to_log_channel(
             t("log.player_waitlist_removed", lang, user=user.name, type=type_label),
+            guild=interaction.guild)
+        await update_event_displays(guild_id, channel_id)
+        return True
+
+    if status == "tentative":
+        await send_feedback(interaction, t("player.tentative_removed", lang), ephemeral=True)
+        await send_to_log_channel(
+            t("log.player_tentative_removed", lang, user=user.name),
             guild=interaction.guild)
         await update_event_displays(guild_id, channel_id)
         return True
@@ -1390,6 +1550,11 @@ class EventActionView(ui.View):
                 custom_id="event_register_squad", emoji="🪖",
                 disabled=reg_disabled,
             ))
+            self.add_item(ui.Button(
+                label=t("button.tentative", lang), style=discord.ButtonStyle.primary,
+                custom_id="event_tentative", emoji="🤔",
+                disabled=reg_disabled,
+            ))
         else:
             self.add_item(ui.Button(
                 label=t("button.register_squad", lang), style=discord.ButtonStyle.success,
@@ -1421,6 +1586,8 @@ class EventActionView(ui.View):
         custom_id = interaction.data.get("custom_id", "")
         if custom_id == "event_register_squad":
             await self._register_squad(interaction)
+        elif custom_id == "event_tentative":
+            await self._register_tentative(interaction)
         elif custom_id == "event_register_caster":
             await self._register_caster(interaction)
         elif custom_id == "event_unregister":
@@ -1483,6 +1650,35 @@ class EventActionView(ui.View):
         await interaction.response.send_message(
             f"**{t('squad.step_1_title', lang)}**\n{t(desc_key, lang)}",
             view=view, ephemeral=True)
+
+    async def _register_tentative(self, interaction: discord.Interaction):
+        """Player mode: sign up as tentative ("maybe"). Mirrors the squad-button
+        guards (registration open + role gate), but skips the seat-limit check
+        since a tentative player occupies no real seat."""
+        if not interaction.guild:
+            return
+        gid = interaction.guild.id
+        cid = interaction.channel_id
+        event, _, _ = _get_channel_event(gid, cid)
+        lang = _lang(interaction)
+        if not event:
+            await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
+            return
+        if not is_player_mode(event):
+            await interaction.response.send_message(t("player.not_player_mode", lang), ephemeral=True)
+            return
+
+        is_open, msg_key = check_registration_open(event, user=interaction.user, registration_type="squad")
+        if not is_open:
+            await interaction.response.send_message(_resolve_reg_message(msg_key, lang), ephemeral=True)
+            return
+
+        allowed, gate_key = check_role_gate(event, interaction.user, "squad")
+        if not allowed:
+            await interaction.response.send_message(t(gate_key, lang), ephemeral=True)
+            return
+
+        await _dispatch_player_tentative(interaction, gid, cid, lang)
 
     async def _register_caster(self, interaction: discord.Interaction):
         if not interaction.guild:
@@ -1617,17 +1813,26 @@ class EventActionView(ui.View):
 # ---------------------------------------------------------------------------
 
 class PlayerTypePickerView(BaseView):
-    """Player mode: type picker + optional multi-select role dropdown,
-    then a Continue button that submits the registration."""
-    def __init__(self, guild_id, channel_id):
+    """Player mode: type picker + optional multi-select role dropdown, then a
+    Continue button that submits the registration.
+
+    `tentative=True` submits a tentative ("Vorläufig") sign-up instead of a firm
+    one. `initial_type`/`initial_roles` pre-fill the picker — used to carry over
+    an existing tentative selection when switching tentative ↔ firm.
+    """
+    def __init__(self, guild_id, channel_id, *, tentative: bool = False,
+                 initial_type=None, initial_roles=None):
         super().__init__(timeout=300, title="Player Registration")
         self.guild_id = guild_id
         self.channel_id = channel_id
-        self.selected_type = None
-        self.selected_roles: list = []
+        self.tentative = tentative
+        self.selected_type = initial_type
         lang = get_guild_language(guild_id)
         event, _, _ = _get_channel_event(guild_id, channel_id)
-        sizes = _get_squad_sizes(event) if event else {"infantry": 6, "vehicle": 2, "heli": 1}
+        # In-squad roles are opt-out per event; when disabled there's no role
+        # dropdown and registrations carry no roles.
+        self.roles_enabled = bool(event.get("player_roles_enabled", True)) if event else True
+        self.selected_roles: list = list(initial_roles or []) if self.roles_enabled else []
 
         self.type_select = ui.Select(
             placeholder=t("squad.type_select", lang),
@@ -1636,14 +1841,16 @@ class PlayerTypePickerView(BaseView):
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
 
-        self.role_select = ui.Select(
-            placeholder=t("player.role_select_placeholder", lang),
-            options=[discord.SelectOption(label="—", value="__placeholder__")],
-            custom_id="player_role_select",
-            min_values=0, max_values=1,
-            disabled=True, row=1)
-        self.role_select.callback = self._on_role
-        self.add_item(self.role_select)
+        self.role_select = None
+        if self.roles_enabled:
+            self.role_select = ui.Select(
+                placeholder=t("player.role_select_placeholder", lang),
+                options=[discord.SelectOption(label="—", value="__placeholder__")],
+                custom_id="player_role_select",
+                min_values=0, max_values=1,
+                disabled=True, row=1)
+            self.role_select.callback = self._on_role
+            self.add_item(self.role_select)
 
         self.continue_button = ui.Button(
             label=t("squad.continue", lang),
@@ -1652,20 +1859,30 @@ class PlayerTypePickerView(BaseView):
         self.continue_button.callback = self._on_continue
         self.add_item(self.continue_button)
 
+        if self.selected_type:
+            self._apply_type(lang)
+
+    def _apply_type(self, lang):
+        """Reflect `self.selected_type`/`self.selected_roles` onto the selects:
+        mark the chosen type, populate role options (pre-selecting chosen roles)
+        when roles are enabled, and enable the Continue button."""
+        for opt in self.type_select.options:
+            opt.default = (opt.value == self.selected_type)
+        if self.roles_enabled and self.role_select is not None:
+            role_opts = [discord.SelectOption(label=role_label(r, lang), value=r,
+                                              default=(r in self.selected_roles))
+                         for r in ROLES_BY_TYPE.get(self.selected_type, [])]
+            self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
+            self.role_select.disabled = not role_opts
+            self.role_select.min_values = 0
+            self.role_select.max_values = max(1, len(role_opts))
+            self.role_select.placeholder = t("player.role_select_placeholder", lang)
+        self.continue_button.disabled = False
+
     async def _on_type(self, interaction: discord.Interaction):
         self.selected_type = self.type_select.values[0]
         self.selected_roles = []
-        for opt in self.type_select.options:
-            opt.default = (opt.value == self.selected_type)
-        lang = get_guild_language(self.guild_id)
-        role_opts = [discord.SelectOption(label=role_label(r, lang), value=r)
-                     for r in ROLES_BY_TYPE.get(self.selected_type, [])]
-        self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
-        self.role_select.disabled = not role_opts
-        self.role_select.min_values = 0
-        self.role_select.max_values = max(1, len(role_opts))
-        self.role_select.placeholder = t("player.role_select_placeholder", lang)
-        self.continue_button.disabled = False
+        self._apply_type(get_guild_language(self.guild_id))
         await interaction.response.edit_message(view=self)
 
     async def _on_role(self, interaction: discord.Interaction):
@@ -1677,8 +1894,12 @@ class PlayerTypePickerView(BaseView):
     async def _on_continue(self, interaction: discord.Interaction):
         if not self.selected_type:
             return
-        await player_register(interaction, self.guild_id, self.channel_id,
-                              self.selected_type, roles=self.selected_roles)
+        if self.tentative:
+            await player_register_tentative(interaction, self.guild_id, self.channel_id,
+                                            self.selected_type, roles=self.selected_roles)
+        else:
+            await player_register(interaction, self.guild_id, self.channel_id,
+                                  self.selected_type, roles=self.selected_roles)
 
 
 class SquadRegistrationView(BaseView):
@@ -1863,6 +2084,278 @@ class PlayerUnregisterConfirmView(BaseConfirmationView):
         await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
 
 
+class PlayerTentativeSwitchConfirmView(BaseConfirmationView):
+    """Confirm switching a firm / waitlisted player to tentative — their seat or
+    waitlist spot is freed; squad type and role are carried over."""
+    def __init__(self, guild_id, channel_id):
+        super().__init__(title="Switch to tentative")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        lang = get_guild_language(guild_id)
+
+        confirm_btn = ui.Button(label=t("general.confirm", lang), style=discord.ButtonStyle.primary)
+        confirm_btn.callback = self._confirm
+        self.add_item(confirm_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _confirm(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        await player_switch_to_tentative(interaction, self.guild_id, self.channel_id)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), embed=None, view=None)
+
+
+def _tentative_gather(guild_id, channel_id):
+    """Return (event, lang, [tentative entries]) or (None, lang, []) if gone."""
+    lang = get_guild_language(guild_id)
+    event, _, _ = _get_channel_event(guild_id, channel_id)
+    if not event:
+        return None, lang, []
+    return event, lang, list(event.get("tentative", []))
+
+
+async def _tentative_notify_thread(interaction, guild_id, channel_id, private: bool,
+                                   recipient_ids=None):
+    """Create a thread and ping the chosen tentative players in it.
+
+    `recipient_ids is None` notifies everyone; otherwise only those user ids.
+    Public threads are attached directly to the event message; private threads
+    are created on the channel and the organizer who triggered this is added.
+    Mentioned tentative players are pulled into the thread by the mention.
+    """
+    event, lang, entries = _tentative_gather(guild_id, channel_id)
+    if not event:
+        await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
+        return
+    entries = _select_tentative(entries, recipient_ids)
+    if not entries:
+        await interaction.followup.send(t("tentative.none", lang), ephemeral=True)
+        return
+    link = _build_event_message_link(event, channel_id, guild_id) or ""
+    mentions = " ".join(f"<@{e.get('user_id')}>" for e in entries if e.get("user_id"))
+    text = t("tentative.thread_text", lang, mentions=mentions, name=event.get("name", ""), url=link)
+    thread_name = t("tentative.thread_name", lang, name=event.get("name", ""))[:100]
+    try:
+        channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+        if private:
+            thread = await channel.create_thread(
+                name=thread_name, type=discord.ChannelType.private_thread)
+            # Add the organizer who triggered the notification to the private thread.
+            try:
+                await thread.add_user(interaction.user)
+            except Exception as e:
+                logger.info(f"Could not add organizer to private tentative thread: {e}")
+        else:
+            # Public thread attached to the event message when it still exists.
+            msg_id = event.get("event_message_id")
+            msg = None
+            if msg_id:
+                try:
+                    msg = await channel.fetch_message(int(msg_id))
+                except Exception:
+                    msg = None
+            if msg is not None:
+                thread = await msg.create_thread(name=thread_name)
+            else:
+                thread = await channel.create_thread(
+                    name=thread_name, type=discord.ChannelType.public_thread)
+        await thread.send(text, allowed_mentions=discord.AllowedMentions(users=True))
+    except Exception as e:
+        logger.warning(f"Tentative thread notify failed: {e}")
+        await interaction.followup.send(t("tentative.notify_error", lang, error=str(e)), ephemeral=True)
+        return
+    await interaction.followup.send(
+        t("tentative.notify_thread_done", lang, count=len(entries), thread=thread.mention),
+        ephemeral=True)
+    await send_to_log_channel(
+        t("log.tentative_notified_thread", lang, count=len(entries), name=event.get("name", "")),
+        guild=interaction.guild)
+
+
+async def _tentative_notify_dm(interaction, guild_id, channel_id, recipient_ids=None):
+    """DM the chosen tentative players, asking them to confirm via the event
+    buttons. `recipient_ids is None` DMs everyone; otherwise only those ids."""
+    event, lang, entries = _tentative_gather(guild_id, channel_id)
+    if not event:
+        await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
+        return
+    entries = _select_tentative(entries, recipient_ids)
+    if not entries:
+        await interaction.followup.send(t("tentative.none", lang), ephemeral=True)
+        return
+    link = _build_event_message_link(event, channel_id, guild_id) or ""
+    dm_text = t("tentative.dm_text", lang, name=event.get("name", ""), url=link)
+    ok = failed = 0
+    for entry in entries:
+        uid = entry.get("user_id")
+        if not uid:
+            continue
+        try:
+            target = await bot.fetch_user(int(uid))
+            await target.send(dm_text)
+            ok += 1
+        except Exception as e:
+            failed += 1
+            logger.info(f"Tentative DM to {uid} failed: {e}")
+    failed_suffix = t("tentative.notify_dm_failed_suffix", lang, n=failed) if failed else ""
+    await interaction.followup.send(
+        t("tentative.notify_dm_done", lang, ok=ok, failed_suffix=failed_suffix), ephemeral=True)
+    await send_to_log_channel(
+        t("log.tentative_notified_dm", lang, ok=ok, failed=failed, name=event.get("name", "")),
+        guild=interaction.guild)
+
+
+class TentativeSelectUsersView(BaseView):
+    """First step of the notify flow: pick which tentative players to ask — a
+    multi-select of the current tentatives, or an "Ask all" button."""
+    def __init__(self, guild_id, channel_id):
+        super().__init__(timeout=300, title="Select tentatives")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        lang = get_guild_language(guild_id)
+        event, _, _ = _get_channel_event(guild_id, channel_id)
+
+        type_abbrev = {"infantry": "Inf", "vehicle": "Veh", "heli": "Heli"}
+        options = []
+        for e in (event or {}).get("tentative", [])[:25]:
+            uid = str(e.get("user_id", ""))
+            if not uid:
+                continue
+            abbr = type_abbrev.get(e.get("type"), "?")
+            options.append(discord.SelectOption(
+                label=f"[{abbr}] {e.get('name', '?')}"[:100], value=uid))
+
+        # Defensive: the admin entry only opens this view when tentatives exist,
+        # but a select needs at least one option to be valid.
+        if options:
+            self.user_select = ui.Select(
+                placeholder=t("tentative.select_users_placeholder", lang),
+                options=options, min_values=1, max_values=len(options), row=0)
+            self.user_select.callback = self._on_select
+            self.add_item(self.user_select)
+
+        all_btn = ui.Button(label=t("tentative.notify_all_button", lang),
+                            style=discord.ButtonStyle.primary, row=1)
+        all_btn.callback = self._all
+        self.add_item(all_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang),
+                               style=discord.ButtonStyle.secondary, row=1)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _advance(self, interaction, recipient_ids):
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(
+            content=t("tentative.notify_choose", lang),
+            view=TentativeNotifyView(self.guild_id, self.channel_id, recipient_ids=recipient_ids))
+
+    async def _on_select(self, interaction):
+        await self._advance(interaction, list(self.user_select.values))
+
+    async def _all(self, interaction):
+        if self.check_response(interaction):
+            return
+        await self._advance(interaction, None)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
+
+
+class TentativeNotifyView(BaseView):
+    """Organizer chooser: notify the chosen tentative players via a thread or DM.
+    Picking "thread" opens a follow-up asking for a public or private thread.
+    `recipient_ids is None` means everyone; otherwise the selected user ids."""
+    def __init__(self, guild_id, channel_id, recipient_ids=None):
+        super().__init__(timeout=300, title="Notify tentatives")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.recipient_ids = recipient_ids
+        lang = get_guild_language(guild_id)
+
+        thread_btn = ui.Button(label=t("tentative.notify_thread_button", lang),
+                               style=discord.ButtonStyle.primary)
+        thread_btn.callback = self._choose_thread
+        self.add_item(thread_btn)
+        dm_btn = ui.Button(label=t("tentative.notify_dm_button", lang),
+                           style=discord.ButtonStyle.secondary)
+        dm_btn.callback = self._notify_dm
+        self.add_item(dm_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _choose_thread(self, interaction):
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(
+            content=t("tentative.thread_type_choose", lang),
+            view=TentativeThreadTypeView(self.guild_id, self.channel_id, self.recipient_ids))
+
+    async def _notify_dm(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        await _tentative_notify_dm(interaction, self.guild_id, self.channel_id, self.recipient_ids)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
+
+
+class TentativeThreadTypeView(BaseView):
+    """Second step of the thread-notify flow: public or private thread."""
+    def __init__(self, guild_id, channel_id, recipient_ids=None):
+        super().__init__(timeout=300, title="Thread type")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.recipient_ids = recipient_ids
+        lang = get_guild_language(guild_id)
+
+        public_btn = ui.Button(label=t("tentative.notify_thread_public_button", lang),
+                               style=discord.ButtonStyle.primary)
+        public_btn.callback = self._public
+        self.add_item(public_btn)
+        private_btn = ui.Button(label=t("tentative.notify_thread_private_button", lang),
+                                style=discord.ButtonStyle.secondary)
+        private_btn.callback = self._private
+        self.add_item(private_btn)
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
+
+    async def _public(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        await _tentative_notify_thread(interaction, self.guild_id, self.channel_id,
+                                       private=False, recipient_ids=self.recipient_ids)
+
+    async def _private(self, interaction):
+        if self.check_response(interaction):
+            return
+        await interaction.response.defer(ephemeral=True)
+        await _tentative_notify_thread(interaction, self.guild_id, self.channel_id,
+                                       private=True, recipient_ids=self.recipient_ids)
+
+    async def _cancel(self, interaction):
+        if self.check_response(interaction):
+            return
+        lang = get_guild_language(self.guild_id)
+        await interaction.response.edit_message(content=t("general.cancelled", lang), view=None)
+
+
 class CasterUnregisterConfirmView(BaseConfirmationView):
     def __init__(self, guild_id, channel_id):
         super().__init__(title="Unregister Caster")
@@ -1928,8 +2421,9 @@ class AdminActionView(BaseView):
             buttons = [
                 ("admin.add_player", discord.ButtonStyle.success, "_add_player", 0),
                 ("admin.remove_player", discord.ButtonStyle.danger, "_remove_player", 0),
+                ("button.notify_tentative", discord.ButtonStyle.primary, "_notify_tentative", 0),
                 ("admin.open_registration", discord.ButtonStyle.success, "_open", 1),
-                ("admin.close_registration", discord.ButtonStyle.secondary, "_close", 1),
+                ("admin.close_registration", discord.ButtonStyle.danger, "_close", 1),
                 ("admin.consolidate_squads", discord.ButtonStyle.primary, "_consolidate", 1),
                 ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 2),
                 ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 2),
@@ -1941,7 +2435,7 @@ class AdminActionView(BaseView):
                 ("admin.add_caster", discord.ButtonStyle.success, "_add_caster", 1),
                 ("admin.remove_caster", discord.ButtonStyle.danger, "_remove_caster", 1),
                 ("admin.open_registration", discord.ButtonStyle.success, "_open", 2),
-                ("admin.close_registration", discord.ButtonStyle.secondary, "_close", 2),
+                ("admin.close_registration", discord.ButtonStyle.danger, "_close", 2),
                 ("admin.edit_event", discord.ButtonStyle.primary, "_edit", 3),
                 ("admin.delete_event", discord.ButtonStyle.danger, "_delete", 3),
             ]
@@ -2033,6 +2527,26 @@ class AdminActionView(BaseView):
         view = ConsolidateConfirmationView(gid, cid)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+    async def _notify_tentative(self, interaction):
+        """Ask the tentative players whether they'll join — via a (public/private)
+        pinged thread or via DM. Reached from the admin panel, so already
+        organizer-gated by the Admin button."""
+        gid = self.guild_id
+        cid = self.channel_id
+        lang = get_guild_language(gid)
+        event, _, _ = _get_channel_event(gid, cid)
+        if not event:
+            await interaction.response.send_message(t("general.no_active_event", lang), ephemeral=True)
+            return
+        if not is_player_mode(event):
+            await interaction.response.send_message(t("player.not_player_mode", lang), ephemeral=True)
+            return
+        if not event.get("tentative"):
+            await interaction.response.send_message(t("tentative.none", lang), ephemeral=True)
+            return
+        view = TentativeSelectUsersView(gid, cid)
+        await interaction.response.send_message(t("tentative.select_choose", lang), view=view, ephemeral=True)
+
     async def _add_squad(self, interaction):
         lang = get_guild_language(self.guild_id)
         event, _, _ = _get_channel_event(self.guild_id, self.channel_id)
@@ -2079,6 +2593,16 @@ class AdminActionView(BaseView):
                     label=f"[WL-{abbr}] {player_name}",
                     value=uid,
                 ))
+        # Tentative ("Vorläufig") entries — prefixed [Vorl-Inf]/[Vorl-Veh]/[Vorl-Heli].
+        for entry in event.get("tentative", []):
+            abbr = type_abbrev.get(entry.get("type"), "?")
+            uid = str(entry.get("user_id", ""))
+            if not uid:
+                continue
+            opts.append(discord.SelectOption(
+                label=f"[Vorl-{abbr}] {entry.get('name', '?')}",
+                value=uid,
+            ))
         if not opts:
             await interaction.response.send_message(t("embed.no_entries", lang), ephemeral=True)
             return
@@ -2174,6 +2698,7 @@ class _AdminPlayerAddView(BaseView):
         self.add_item(self.user_select)
 
         event, _, _ = _get_channel_event(guild_id, channel_id)
+        self.roles_enabled = bool(event.get("player_roles_enabled", True)) if event else True
         sizes = _get_squad_sizes(event) if event else {"infantry": 6, "vehicle": 2, "heli": 1}
         self.type_select = ui.Select(
             placeholder=t("squad.type_select", lang),
@@ -2182,13 +2707,15 @@ class _AdminPlayerAddView(BaseView):
         self.type_select.callback = self._on_type
         self.add_item(self.type_select)
 
-        self.role_select = ui.Select(
-            placeholder=t("player.role_select_placeholder", lang),
-            options=[discord.SelectOption(label="—", value="__placeholder__")],
-            min_values=0, max_values=1,
-            disabled=True, row=2)
-        self.role_select.callback = self._on_role
-        self.add_item(self.role_select)
+        self.role_select = None
+        if self.roles_enabled:
+            self.role_select = ui.Select(
+                placeholder=t("player.role_select_placeholder", lang),
+                options=[discord.SelectOption(label="—", value="__placeholder__")],
+                min_values=0, max_values=1,
+                disabled=True, row=2)
+            self.role_select.callback = self._on_role
+            self.add_item(self.role_select)
 
         self.confirm_btn = ui.Button(
             label=t("general.confirm", lang), style=discord.ButtonStyle.success,
@@ -2210,13 +2737,14 @@ class _AdminPlayerAddView(BaseView):
         for opt in self.type_select.options:
             opt.default = (opt.value == self.selected_type)
         lang = get_guild_language(self.guild_id)
-        role_opts = [discord.SelectOption(label=role_label(r, lang), value=r)
-                     for r in ROLES_BY_TYPE.get(self.selected_type, [])]
-        self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
-        self.role_select.disabled = not role_opts
-        self.role_select.min_values = 0
-        self.role_select.max_values = max(1, len(role_opts))
-        self.role_select.placeholder = t("player.role_select_placeholder", lang)
+        if self.roles_enabled and self.role_select is not None:
+            role_opts = [discord.SelectOption(label=role_label(r, lang), value=r)
+                         for r in ROLES_BY_TYPE.get(self.selected_type, [])]
+            self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
+            self.role_select.disabled = not role_opts
+            self.role_select.min_values = 0
+            self.role_select.max_values = max(1, len(role_opts))
+            self.role_select.placeholder = t("player.role_select_placeholder", lang)
         self._update_confirm_state()
         await interaction.response.edit_message(view=self)
 
@@ -2336,6 +2864,7 @@ class _AdminPlayerRemoveView(BaseView):
 
         removed: list = []          # [(user_id, squad_name)]
         waitlist_removed: list = []  # [(user_id, squad_type)]
+        tentative_removed: list = []  # [user_id]
         missing: list = []
         all_promoted: list = []
         lock = _get_guild_lock(self.guild_id)
@@ -2355,6 +2884,10 @@ class _AdminPlayerRemoveView(BaseView):
                 wl_type = _player_remove_from_waitlist(event, user_id)
                 if wl_type is not None:
                     waitlist_removed.append((user_id, wl_type))
+                    continue
+                # Not waitlisted — try a tentative sign-up.
+                if _remove_tentative(event, user_id) is not None:
+                    tentative_removed.append(user_id)
                 else:
                     missing.append(user_id)
             save_event(db_id, event, user_assignments)
@@ -2364,6 +2897,8 @@ class _AdminPlayerRemoveView(BaseView):
             parts.append(t("admin.player_remove_count", lang, n=len(removed)))
         if waitlist_removed:
             parts.append(t("admin.player_remove_waitlist_count", lang, n=len(waitlist_removed)))
+        if tentative_removed:
+            parts.append(t("admin.player_remove_tentative_count", lang, n=len(tentative_removed)))
         if missing:
             parts.append(t("admin.player_remove_missing_count", lang, n=len(missing)))
         summary = "\n".join(parts) or t("embed.no_entries", lang)
@@ -2377,6 +2912,10 @@ class _AdminPlayerRemoveView(BaseView):
             type_label = t(f"embed.type_{squad_type}", lang) if squad_type in SQUAD_TYPES else squad_type
             await send_to_log_channel(
                 t("log.player_waitlist_removed", lang, user=user_id, type=type_label),
+                guild=interaction.guild)
+        for user_id in tentative_removed:
+            await send_to_log_channel(
+                t("log.player_tentative_removed", lang, user=user_id),
                 guild=interaction.guild)
 
         await _notify_promoted_players(
@@ -2973,11 +3512,13 @@ def _parse_int_list(text):
 def _visible_edit_properties(event):
     """Return the editable properties relevant to this event's mode.
 
-    Player-mode events never use playstyle, so the toggle is hidden there.
+    Player-mode events never use playstyle (rep concept); rep-mode events never
+    use the player-mode in-squad-role toggle. Each toggle is hidden in the other
+    mode.
     """
     if is_player_mode(event):
         return [p for p in _EDIT_PROPERTIES if p[1] != "playstyle_enabled"]
-    return list(_EDIT_PROPERTIES)
+    return [p for p in _EDIT_PROPERTIES if p[1] != "player_roles_enabled"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -4475,13 +5016,14 @@ class WizardTimingView(BaseView):
     async def _advance_after_timing(self, interaction):
         lang = get_guild_language(self.guild_id)
         if is_player_mode(self.event):
-            # Player mode: one user per registration, no squad-limit step.
+            # Player mode: one user per registration, no squad-limit step — but
+            # offer the in-squad-role toggle (player-mode analogue of playstyle).
             self.event["max_squads_per_user"] = 1
-            embed = _build_confirmation_embed(self.event, self.guild_id)
-            confirm_view = WizardConfirmationView(
+            next_view = WizardPlayerRolesView(
                 self.guild_id, self.channel_id, self.event, self.user_assignments,
                 self.settings, self.interaction_user)
-            await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
+            content = f"**{t('wizard.player_roles_step_title', lang)}**\n{t('wizard.player_roles_step_desc', lang)}"
+            await interaction.response.edit_message(content=content, embed=None, view=next_view)
             return
         default_limit = self.event.get("max_squads_per_user", 1)
         next_view = WizardSquadLimitView(self.guild_id, self.channel_id, self.event, self.user_assignments,
@@ -4585,6 +5127,67 @@ class WizardSquadLimitView(BaseView):
         await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
 
 
+class WizardPlayerRolesView(BaseView):
+    """Player-mode step: enable or disable the in-squad role selection (Squad
+    Leader, Medic, Pilot, …). Player-mode analogue of the rep-mode playstyle
+    toggle. When disabled, players can't pick a role and roles aren't shown."""
+
+    def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
+        super().__init__(timeout=300, title="Wizard Player Roles")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.event = event
+        self.user_assignments = user_assignments
+        self.settings = settings
+        self.interaction_user = interaction_user
+        lang = get_guild_language(guild_id)
+
+        roles_default = bool(event.get("player_roles_enabled", True))
+        self.roles_select = ui.Select(
+            placeholder=t("wizard.player_roles_select_placeholder", lang),
+            options=[
+                discord.SelectOption(label=t("wizard.player_roles_enabled", lang),
+                                     value="yes", default=roles_default),
+                discord.SelectOption(label=t("wizard.player_roles_disabled", lang),
+                                     value="no", default=not roles_default),
+            ],
+            min_values=1, max_values=1, row=0)
+        self.roles_select.callback = self._roles_selected
+        self.add_item(self.roles_select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=1)
+        skip_btn.callback = self._skip
+        self.add_item(skip_btn)
+
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=1)
+        continue_btn.callback = self._continue
+        self.add_item(continue_btn)
+
+        self._selected_roles_enabled = None
+
+    async def _roles_selected(self, interaction):
+        self._selected_roles_enabled = self.roles_select.values[0] == "yes"
+        await interaction.response.defer()
+
+    def _save_selections(self):
+        if self._selected_roles_enabled is not None:
+            self.event["player_roles_enabled"] = self._selected_roles_enabled
+
+    async def _to_confirmation(self, interaction):
+        self._save_selections()
+        embed = _build_confirmation_embed(self.event, self.guild_id)
+        confirm_view = WizardConfirmationView(
+            self.guild_id, self.channel_id, self.event, self.user_assignments,
+            self.settings, self.interaction_user)
+        await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
+
+    async def _continue(self, interaction):
+        await self._to_confirmation(interaction)
+
+    async def _skip(self, interaction):
+        await self._to_confirmation(interaction)
+
+
 # ############################# #
 # WIZARD CONFIRMATION            #
 # ############################# #
@@ -4640,6 +5243,11 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
                          if event.get("playstyle_enabled", True)
                          else t("wizard.summary_playstyle_no", lang))
         embed.add_field(name=t("wizard.summary_playstyle", lang), value=playstyle_val, inline=True)
+    else:
+        roles_val = (t("wizard.summary_player_roles_yes", lang)
+                     if event.get("player_roles_enabled", True)
+                     else t("wizard.summary_player_roles_no", lang))
+        embed.add_field(name=t("wizard.summary_player_roles", lang), value=roles_val, inline=True)
 
     if event.get("registration_start_time") is not None:
         cd_seconds = event.get("countdown_seconds")

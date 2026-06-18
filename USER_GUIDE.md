@@ -65,17 +65,32 @@ The button is labeled **Join** (🪖) instead of **Squad**. The flow:
 
 1. Click **Join** (🪖) in the event display
 2. Select your squad type from the dropdown: Infantry, Vehicle, or Heli
-3. Optionally pick one or more in-squad roles — the dropdown adapts to your type and supports multi-select:
+3. **Optionally** pick one or more in-squad roles — *only if the event creator enabled role selection* (see creation Step 7; when disabled there is no role dropdown and no roles are shown). The dropdown is marked "(optional)", adapts to your type and supports multi-select:
    - **Infantry**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout, Logi driver, Mortar
    - **Vehicle**: Driver, Gunner, Commander
    - **Heli**: Pilot, Spotter, Gunner
 
-   Select nothing if you have no preference — you'll be listed as **I don't care**.
+   The role selection is optional — pick nothing and only your name is shown (no parenthetical tag).
 4. Click **Continue** — the bot auto-assigns you to the first non-full squad of that type (creating a new squad if none has free slots), or places you on the waitlist if all slots are full. Your Discord display name is used; there's no name modal to fill in.
 
-Your role(s) are shown in parentheses next to your name in the event embed, e.g. `Infantry 1 (3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol (I don't care)`. **Squad Leaders always sort to the top of their squad.** Picking **Squad Leader** (alone or alongside other kits) also influences placement: the bot prefers squads without an existing SL and opens a new squad if every current squad already has one.
+Your role(s) are shown in parentheses next to your name in the event embed; with no role only your name is shown, e.g. `Infantry 1 (3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol`. **Squad Leaders always sort to the top of their squad.** Picking **Squad Leader** (alone or alongside other kits) also influences placement: the bot prefers squads without an existing SL and opens a new squad if every current squad already has one.
 
 **One user, one registration.** If you try to register again while already registered, the bot reports that you're already signed up.
+
+### Tentative Sign-up — Player Mode
+
+Not sure yet whether you'll play? The **Tentative** (🤔) button lets you signal that you *might* join.
+
+1. Click **Tentative** (🤔) in the event display
+2. Pick your **squad type** and – optionally – your role (same picker as Join)
+3. Click **Continue**
+
+Tentative players **do not occupy a real squad seat**. They are listed at the very bottom of the event embed in their own field per squad type (e.g. "🤔 Tentative – Infantry"), with the optionally chosen role.
+
+**Switching:**
+- If you are already **firmly** registered and click **Tentative**, a confirmation dialog appears — on confirm your squad seat is freed (waitlisted players are promoted into it) and your squad type and role are **carried over**.
+- If you are **tentative** and click **Join** (🪖), the picker opens pre-filled with your type and role; after **Continue** you are firmly registered and the tentative sign-up is dropped.
+- **Abmelden** (❌) also removes a tentative-only sign-up (with a confirmation dialog).
 
 ### Registering as Caster
 
@@ -156,9 +171,9 @@ Player mode shows only the early-access % cap.
 - Event reminder — Notification X minutes before event start (0 = disabled)
 - Registration countdown — Message sent X seconds before registration opens (auto-deleted when registration starts)
 
-**Step 7 — Playstyle & Squad Limit (rep mode only — skipped in player mode):**
-- Playstyle selection — whether squads pick a playstyle when registering
-- Max squads per user (1–20) — only asked here when **no** registration-role gate is set; when a gate is configured, this is set in Step 4 (Slot Limits) instead
+**Step 7 — Playstyle & Squad Limit (rep mode) / Role selection (player mode):**
+- *Rep mode:* Playstyle selection — whether squads pick a playstyle when registering. Plus max squads per user (1–20) — only asked here when **no** registration-role gate is set; when a gate is configured, this is set in Step 4 (Slot Limits) instead.
+- *Player mode:* Role selection — whether players may pick an in-squad role (Squad Leader, Medic, Pilot, …) when registering. **When disabled, there is no role dropdown and roles are not shown in the embed.** Default: enabled. Can also be changed later via the DM editor.
 
 **Step 8 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel
@@ -259,19 +274,20 @@ When adding a squad as admin, the selected representative user counts toward the
 
 ### Admin Panel — Player Mode
 
-In player mode the admin panel has 7 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
+In player mode the admin panel has 8 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
 
 | Row | Button | Description |
 |---|---|---|
-| Player | **Add Player** | Pick one or more Discord users (multi-select), a squad type, and (optionally) one or more in-squad roles applied to all picked users; then confirm. All picked users are registered in a single submit. If capacity is hit mid-batch, remaining users go to the waitlist. The chosen roles (or **I don't care** if none selected) are stored for each user and shown next to their name in the event embed. |
-| Player | **Remove Player** | Pick one or more players (multi-select) — from current squad members **and** from any waitlist (waitlist entries are prefixed `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`). The action is gated behind a red "Unregister" confirm button. |
+| Player | **Add Player** | Pick one or more Discord users (multi-select), a squad type, and (optionally) one or more in-squad roles applied to all picked users; then confirm. All picked users are registered in a single submit. If capacity is hit mid-batch, remaining users go to the waitlist. The chosen roles are stored for each user and shown next to their name in the event embed (no role → just the name). |
+| Player | **Remove Player** | Pick one or more players (multi-select) — from current squad members, from any waitlist (prefixed `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`), **and** from the tentative list (prefixed `[Vorl-Inf]` / `[Vorl-Veh]` / `[Vorl-Heli]`). The action is gated behind a red "Unregister" confirm button. |
+| Player | **Ask tentatives** (📨) | Ask the tentative players whether they'll join. You first pick **which** tentatives to ask (a multi-select dropdown) or press **Ask all**. Then you choose **thread** or **DM**; for a thread you then choose **public** (created directly on the event message) or **private** (a private thread that also adds you, the organizer). The message pings/links the chosen tentatives so they confirm via the existing **Join** / **Abmelden** buttons. Only shown when there are tentative players. |
 | Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
 | Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt |
 | Registration | **Consolidate Squads** | Merge partially-filled squads and drop empty ones — gated behind a confirmation prompt. Also happens automatically when the event starts. Player mode only. |
 | Event | **Edit Event** | Opens DM-based editing session |
 | Event | **Delete Event** | Delete the event with confirmation |
 
-Players removed from a squad trigger the waitlist promotion (DM + log channel notification for anyone moved up). Players removed from the waitlist just disappear from the queue.
+Players removed from a squad trigger the waitlist promotion (DM + log channel notification for anyone moved up). Players removed from the waitlist just disappear from the queue. The tentative list is kept (not cleared) when the event starts, so **Ask tentatives** remains useful for filling open seats right before start.
 
 ### Role Configuration
 

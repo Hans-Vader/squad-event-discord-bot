@@ -9,7 +9,8 @@ A Discord bot for managing squad-based events with interactive registration, wai
 ## Features
 
 - **Two event modes** — **Representative mode** (register a squad with a name, playstyle, and lead) or **Player mode** (register yourself individually with an optional in-squad role; the bot auto-forms squads from arrival order, no casters, one-user-one-registration). Picked at creation: `/create_event` shows both modes side by side and you choose one with a button.
-- **Guided squad registration** — Step-by-step flow with dropdowns for squad type (Infantry/Vehicle/Heli) and playstyle (Casual/Normal/Focused) in rep mode; type + optional multi-role picker (Squad Leader, Medic, Pilot, …) in player mode. Squad Leaders sort to the top of their squad and are routed into squads without an existing SL when capacity allows.
+- **Tentative ("maybe") sign-ups (player mode)** — players can sign up as tentative with the **Tentative** (🤔) button: they pick a squad type (+ optional role) but take no real seat and are listed separately at the bottom of the embed, one field per squad type. Mutually exclusive with a firm sign-up (switching either way carries the type+role over, freeing/promoting seats as needed). Organizers can nudge tentatives to commit via the **Ask tentatives** (📨) button in the admin panel — picking specific tentatives (or all), then pinging them in a public or private thread, or DMing each one.
+- **Guided squad registration** — Step-by-step flow with dropdowns for squad type (Infantry/Vehicle/Heli) and playstyle (Casual/Normal/Focused) in rep mode; type + optional multi-role picker (Squad Leader, Medic, Pilot, …) in player mode. The role picker is itself toggleable by the event creator (like playstyle) — disable it and players pick no role and no roles show in the embed. Squad Leaders sort to the top of their squad and are routed into squads without an existing SL when capacity allows.
 - **Three squad types** — Infantry, Vehicle, and Heli squads with independent size and count limits
 - **Server slot calculation** — Automatic distribution of server capacity across all squad types and casters
 - **Multi-squad support** — Configurable number of squads per player (1–20)
@@ -48,8 +49,9 @@ All buttons are visible to every user. Permissions are checked on click.
 
 - **Squad** (🪖) — Rep mode: starts the guided registration (type → playstyle → name)
 - **Join** (🪖) — Player mode: pick type and optional in-squad role, then auto-assigned to a squad
+- **Tentative** (🤔) — Player mode: sign up as "maybe" (pick type + optional role) without taking a squad seat; switch to/from a firm sign-up at any time
 - **Caster** (🎙️) — Direct caster registration
-- **Abmelden** (❌) — Unregister squad/caster with confirmation
+- **Abmelden** (❌) — Unregister squad/caster/tentative with confirmation
 - **Admin** (⚙️) — Opens admin panel (organizer only)
 - **Calendar** (📅) — Download an `.ics` file to import the event into any calendar app
 
@@ -61,7 +63,8 @@ The admin panel opens via the **Admin** button and provides actions grouped per 
 |---|---|
 | Squad | Add Squad (with type, playstyle, and representative user selection) · Remove Squad |
 | Caster | Add Caster (user selector) · Remove Caster |
-| Registration | Open Registration · Close Registration |
+| Player (player mode) | Add Player · Remove Player · **Ask tentatives** (📨) — first pick which tentatives to ask (multi-select) or "Ask all", then ask them whether they'll join via a public/private thread ping or DM |
+| Registration | Open Registration · Close Registration (· Consolidate Squads in player mode) |
 | Event | Edit Event (via DM) · Delete Event |
 
 ### Organizer Commands

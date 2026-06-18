@@ -65,17 +65,32 @@ Der Button heißt **Beitreten** (🪖) statt **Squad**. Der Ablauf:
 
 1. Klicke auf **Beitreten** (🪖) in der Event-Anzeige
 2. Wähle deinen Squad-Typ im Dropdown: Infanterie, Fahrzeug oder Heli
-3. Wähle optional eine oder mehrere Rollen im Squad — das Dropdown passt sich deinem Typ an und erlaubt Mehrfachauswahl:
+3. Wähle **optional** eine oder mehrere Rollen im Squad — *nur wenn der Event-Ersteller die Rollenauswahl aktiviert hat* (siehe Erstellung Schritt 7; ist sie deaktiviert, gibt es kein Rollen-Dropdown und es werden keine Rollen angezeigt). Das Dropdown ist als „(optional)" gekennzeichnet, passt sich deinem Typ an und erlaubt Mehrfachauswahl:
    - **Infanterie**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout, Logi-Fahrer, Mörser
    - **Fahrzeug**: Driver, Gunner, Commander
    - **Heli**: Pilot, Spotter, Gunner
 
-   Wähle nichts aus, wenn dir die Rolle gleichgültig ist — du erscheinst als **Egal**.
+   Die Rollenauswahl ist freiwillig — wählst du nichts, erscheint nur dein Name (ohne Klammer-Zusatz).
 4. Klicke auf **Weiter** — der Bot weist dich automatisch dem ersten nicht vollen Squad dieses Typs zu (erstellt automatisch ein neues Squad, falls nötig) oder setzt dich auf die Warteliste, wenn alle Plätze belegt sind. Dein Discord-Anzeigename wird verwendet; es gibt kein Namensfeld.
 
-Deine gewählten Rollen werden in Klammern hinter deinem Namen im Event-Embed angezeigt, z.B. `Infantry 1 (3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol (Egal)`. **Squad Leader stehen immer ganz oben in ihrem Squad.** Wählst du **Squad Leader** (allein oder zusammen mit anderen Kits), beeinflusst das auch die Platzierung: Der Bot bevorzugt Squads ohne bestehenden SL und öffnet ein neues Squad, sobald alle aktuellen Squads bereits einen SL haben.
+Deine gewählten Rollen werden in Klammern hinter deinem Namen im Event-Embed angezeigt; ohne Rolle steht nur dein Name dort, z.B. `Infantry 1 (3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol`. **Squad Leader stehen immer ganz oben in ihrem Squad.** Wählst du **Squad Leader** (allein oder zusammen mit anderen Kits), beeinflusst das auch die Platzierung: Der Bot bevorzugt Squads ohne bestehenden SL und öffnet ein neues Squad, sobald alle aktuellen Squads bereits einen SL haben.
 
 **Ein User, eine Anmeldung.** Wenn du dich erneut anmeldest, obwohl du bereits registriert bist, meldet der Bot das zurück.
+
+### Vorläufig anmelden — Spieler-Modus
+
+Bist du dir noch nicht sicher, ob du mitspielst? Mit dem Button **Vorläufig** (🤔) gibst du an, dass du *vielleicht* dabei bist.
+
+1. Klicke auf **Vorläufig** (🤔) in der Event-Anzeige
+2. Wähle deinen **Squad-Typ** und – optional – deine Rolle (wie beim Beitreten)
+3. Klicke auf **Weiter**
+
+Vorläufig Angemeldete **belegen keinen echten Squad-Platz**. Sie werden ganz unten im Event-Embed in eigenen Feldern je Squad-Typ gelistet (z.B. „🤔 Vorläufig – Infanterie"), mit der optional gewählten Rolle.
+
+**Wechseln:**
+- Bist du bereits **fest** angemeldet und klickst auf **Vorläufig**, erscheint ein Bestätigungsdialog — bei Bestätigung wird dein Squad-Platz freigegeben (Nachrücker von der Warteliste rücken auf) und dein Squad-Typ samt Rolle **übernommen**.
+- Bist du **vorläufig** angemeldet und klickst auf **Beitreten** (🪖), öffnet sich die Auswahl bereits mit deinem Typ und deiner Rolle vorausgefüllt; nach **Weiter** bist du fest angemeldet und die vorläufige Anmeldung entfällt.
+- Mit **Abmelden** (❌) entfernst du auch eine rein vorläufige Anmeldung (mit Bestätigungsdialog).
 
 ### Als Caster anmelden
 
@@ -156,9 +171,9 @@ Im Spieler-Modus wird nur das %-Limit für Vorab-Zugang angezeigt.
 - Event-Erinnerung — Benachrichtigung X Minuten vor Event-Start (0 = deaktiviert)
 - Countdown — Nachricht X Sekunden vor Anmeldungsstart (wird bei Öffnung automatisch gelöscht)
 
-**Schritt 7 — Spielstil & Squad-Limit (nur Vertreter-Modus — im Spieler-Modus übersprungen):**
-- Spielstil-Auswahl — ob Squads bei der Anmeldung einen Spielstil wählen
-- Max. Squads pro Spieler (1–20) — wird hier nur gefragt, wenn **keine** Anmelde-Rolle gesetzt ist; mit Rollen-Gate wird dies in Schritt 4 (Slot-Limits) festgelegt
+**Schritt 7 — Spielstil & Squad-Limit (Vertreter-Modus) / Rollen-Auswahl (Spieler-Modus):**
+- *Vertreter-Modus:* Spielstil-Auswahl — ob Squads bei der Anmeldung einen Spielstil wählen. Plus Max. Squads pro Spieler (1–20) — wird hier nur gefragt, wenn **keine** Anmelde-Rolle gesetzt ist; mit Rollen-Gate wird dies in Schritt 4 (Slot-Limits) festgelegt.
+- *Spieler-Modus:* Rollen-Auswahl — ob Spieler bei der Anmeldung eine Rolle im Squad (Squad Leader, Medic, Pilot, …) wählen können. **Ist sie deaktiviert, gibt es kein Rollen-Dropdown und im Embed werden keine Rollen angezeigt.** Standard: aktiviert. Kann später auch über den DM-Editor geändert werden.
 
 **Schritt 8 — Bestätigung:**
 - Zusammenfassungs-Embed mit allen Einstellungen inkl. ungenutzter Slots — Bestätigen oder Abbrechen
@@ -259,19 +274,20 @@ Beim Hinzufügen eines Squads als Admin wird der ausgewählte Vertreter für das
 
 ### Admin-Panel — Spieler-Modus
 
-Im Spieler-Modus hat das Admin-Panel 7 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
+Im Spieler-Modus hat das Admin-Panel 8 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
-| Spieler | **Spieler hinzufügen** | Mehrere Discord-User (Mehrfachauswahl), einen Squad-Typ und (optional) eine oder mehrere Rollen im Squad wählen, die für alle ausgewählten User gelten; dann bestätigen. Alle User werden in einem Submit angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, werden die restlichen auf die Warteliste gesetzt. Die gewählten Rollen (oder **Egal**, falls keine ausgewählt) werden für jeden User gespeichert und neben seinem Namen im Event-Embed angezeigt. |
-| Spieler | **Spieler entfernen** | Einen oder mehrere Spieler auswählen (Mehrfachauswahl) — aus aktuellen Squad-Mitgliedern **und** aus jeder Warteliste (Wartelisten-Einträge sind mit `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]` markiert). Die Aktion ist hinter einem roten „Abmelden"-Bestätigungsbutton abgesichert. |
+| Spieler | **Spieler hinzufügen** | Mehrere Discord-User (Mehrfachauswahl), einen Squad-Typ und (optional) eine oder mehrere Rollen im Squad wählen, die für alle ausgewählten User gelten; dann bestätigen. Alle User werden in einem Submit angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, werden die restlichen auf die Warteliste gesetzt. Die gewählten Rollen werden für jeden User gespeichert und neben seinem Namen im Event-Embed angezeigt (ohne Rolle nur der Name). |
+| Spieler | **Spieler entfernen** | Einen oder mehrere Spieler auswählen (Mehrfachauswahl) — aus aktuellen Squad-Mitgliedern, aus jeder Warteliste (markiert mit `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`) **und** aus der Vorläufig-Liste (markiert mit `[Vorl-Inf]` / `[Vorl-Veh]` / `[Vorl-Heli]`). Die Aktion ist hinter einem roten „Abmelden"-Bestätigungsbutton abgesichert. |
+| Spieler | **Vorläufige fragen** (📨) | Fragt die vorläufig Angemeldeten, ob sie teilnehmen. Zuerst wählst du aus, **wen** du fragen willst (Mehrfach-Dropdown) oder drückst **Alle fragen**. Danach **Thread** oder **DM**; beim Thread dann **öffentlich** (direkt an der Event-Nachricht erstellt) oder **privat** (privater Thread, der zusätzlich dich als Orga hinzufügt). Die Nachricht pingt/verlinkt die gewählten Vorläufigen, sodass sie über die vorhandenen **Beitreten** / **Abmelden**-Buttons bestätigen. Wird nur angezeigt, wenn es vorläufig Angemeldete gibt. |
 | Anmeldung | **Anmeldung öffnen** | Anmeldung manuell öffnen — hinter einer Bestätigungsabfrage abgesichert (beim Öffnen kann ein Ping an die konfigurierten Rollen gesendet werden) |
 | Anmeldung | **Anmeldung schließen** | Anmeldung manuell schließen — hinter einer Bestätigungsabfrage abgesichert |
 | Anmeldung | **Squads zusammenlegen** | Teilweise gefüllte Squads zusammenlegen und leere Squads entfernen — hinter einer Bestätigungsabfrage abgesichert. Passiert automatisch auch beim Event-Start. Nur im Spieler-Modus verfügbar. |
 | Event | **Event bearbeiten** | Öffnet DM-basierte Bearbeitungssitzung |
 | Event | **Event löschen** | Event mit Bestätigung löschen |
 
-Wenn ein Spieler aus einem Squad entfernt wird, wird die Warteliste-Beförderung ausgelöst (DM + Log-Channel-Eintrag für jeden nachgerückten Spieler). Spieler, die von der Warteliste entfernt werden, verschwinden einfach aus der Queue.
+Wenn ein Spieler aus einem Squad entfernt wird, wird die Warteliste-Beförderung ausgelöst (DM + Log-Channel-Eintrag für jeden nachgerückten Spieler). Spieler, die von der Warteliste entfernt werden, verschwinden einfach aus der Queue. Die Vorläufig-Liste bleibt beim Event-Start erhalten (wird nicht geleert), sodass **Vorläufige fragen** auch kurz vor Start zum Auffüllen offener Plätze nützlich bleibt.
 
 ### Rollen-Konfiguration
 

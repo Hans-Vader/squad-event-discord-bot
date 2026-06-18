@@ -817,8 +817,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Pick your squad type and – optionally – your role. You will be auto-assigned to a fitting squad.",
     },
     "player.role_select_placeholder": {
-        "de": "Rolle(n) wählen...",
-        "en": "Choose role(s)...",
+        "de": "Rolle(n) wählen (optional)…",
+        "en": "Choose role(s) (optional)…",
     },
     "player.role_dont_care": {
         "de": "Egal",
@@ -891,6 +891,136 @@ _STRINGS: dict[str, dict[str, str]] = {
     "log.player_waitlist_removed": {
         "de": "Spieler von der {type}-Warteliste entfernt: {user}",
         "en": "Player removed from the {type} waitlist: {user}",
+    },
+    # ── Tentative ("Vorläufig") sign-ups ──
+    "button.tentative": {
+        "de": "Vorläufig",
+        "en": "Tentative",
+    },
+    "embed.tentative_label": {
+        "de": "🤔 Vorläufig – {type} ({count})",
+        "en": "🤔 Tentative – {type} ({count})",
+    },
+    "player.tentative_registered": {
+        "de": "🤔 Du bist **vorläufig** angemeldet ({type}{role_suffix}). Du kannst jederzeit fest zusagen (**Anmelden**) oder dich abmelden.",
+        "en": "🤔 You are signed up as **tentative** ({type}{role_suffix}). You can confirm any time (**Register**) or withdraw.",
+    },
+    "player.tentative_switched": {
+        "de": "🤔 Du bist jetzt **vorläufig** angemeldet ({type}{role_suffix}). Dein Squad-Platz wurde freigegeben.",
+        "en": "🤔 You are now **tentative** ({type}{role_suffix}). Your squad seat has been freed.",
+    },
+    "player.tentative_removed": {
+        "de": "✅ Deine vorläufige Anmeldung wurde entfernt.",
+        "en": "✅ Your tentative sign-up has been removed.",
+    },
+    "player.tentative_switch_title": {
+        "de": "Zu vorläufig wechseln",
+        "en": "Switch to tentative",
+    },
+    "player.tentative_switch_confirm": {
+        "de": "Du bist aktuell fest in **{squad}** angemeldet. Möchtest du zu **vorläufig** wechseln? Dein Squad-Platz wird freigegeben – Squad-Typ und Rolle werden übernommen.",
+        "en": "You are currently firmly registered in **{squad}**. Switch to **tentative**? Your squad seat will be freed – your squad type and role are carried over.",
+    },
+    "player.tentative_switch_waitlist_confirm": {
+        "de": "Du stehst aktuell auf der **{type}**-Warteliste. Möchtest du zu **vorläufig** wechseln? Dein Wartelistenplatz wird freigegeben.",
+        "en": "You are currently on the **{type}** waitlist. Switch to **tentative**? Your waitlist spot will be freed.",
+    },
+    "player.tentative_unregister_confirm": {
+        "de": "Möchtest du deine **vorläufige** Anmeldung wirklich entfernen?",
+        "en": "Do you really want to remove your **tentative** sign-up?",
+    },
+    "log.player_tentative": {
+        "de": "Spieler vorläufig angemeldet: {user} ({type}{role_suffix})",
+        "en": "Player signed up tentatively: {user} ({type}{role_suffix})",
+    },
+    "log.player_tentative_removed": {
+        "de": "Vorläufige Anmeldung entfernt: {user}",
+        "en": "Tentative sign-up removed: {user}",
+    },
+    "admin.player_remove_tentative_count": {
+        "de": "🤔 {n} vorläufige Anmeldung(en) entfernt.",
+        "en": "🤔 Removed {n} tentative sign-up(s).",
+    },
+    # ── Organizer: notify tentative players ──
+    "button.notify_tentative": {
+        "de": "Vorläufige fragen",
+        "en": "Ask tentatives",
+    },
+    "tentative.notify_choose": {
+        "de": "Wie möchtest du die vorläufig angemeldeten Spieler fragen, ob sie teilnehmen?",
+        "en": "How do you want to ask the tentative players whether they'll join?",
+    },
+    "tentative.select_choose": {
+        "de": "Wen möchtest du fragen? Wähle einzelne Vorläufige aus – oder nutze „Alle fragen“.",
+        "en": "Whom do you want to ask? Pick individual tentatives – or use “Ask all”.",
+    },
+    "tentative.select_users_placeholder": {
+        "de": "Vorläufige auswählen…",
+        "en": "Select tentative players…",
+    },
+    "tentative.notify_all_button": {
+        "de": "Alle fragen",
+        "en": "Ask all",
+    },
+    "tentative.notify_thread_button": {
+        "de": "🧵 Im Thread fragen",
+        "en": "🧵 Ask in a thread",
+    },
+    "tentative.thread_type_choose": {
+        "de": "Öffentlicher oder privater Thread?",
+        "en": "Public or private thread?",
+    },
+    "tentative.notify_thread_public_button": {
+        "de": "🌐 Öffentlicher Thread",
+        "en": "🌐 Public thread",
+    },
+    "tentative.notify_thread_private_button": {
+        "de": "🔒 Privater Thread",
+        "en": "🔒 Private thread",
+    },
+    "tentative.notify_dm_button": {
+        "de": "✉️ Per DM fragen",
+        "en": "✉️ Ask via DM",
+    },
+    "tentative.none": {
+        "de": "Es gibt aktuell keine vorläufig angemeldeten Spieler.",
+        "en": "There are currently no tentative players.",
+    },
+    "tentative.thread_name": {
+        "de": "Vorläufige – {name}",
+        "en": "Tentative – {name}",
+    },
+    "tentative.thread_text": {
+        "de": "{mentions}\nMöchtet ihr beim Event **{name}** nun fest teilnehmen? Bitte bestätigt eure Teilnahme über den **Anmelden**-Button am Event ({url}) – oder meldet euch mit **Abmelden** ab.",
+        "en": "{mentions}\nWould you like to firmly join **{name}**? Please confirm via the **Register** button on the event ({url}) – or withdraw with **Unregister**.",
+    },
+    "tentative.dm_text": {
+        "de": "Hi! Du bist beim Event **{name}** vorläufig angemeldet. Möchtest du nun fest teilnehmen? Bestätige über den **Anmelden**-Button am Event: {url}",
+        "en": "Hi! You are tentatively signed up for **{name}**. Would you like to firmly join? Confirm via the **Register** button on the event: {url}",
+    },
+    "tentative.notify_thread_done": {
+        "de": "✅ {count} vorläufige Spieler im Thread benachrichtigt: {thread}",
+        "en": "✅ Notified {count} tentative players in the thread: {thread}",
+    },
+    "tentative.notify_dm_done": {
+        "de": "✅ {ok} vorläufige Spieler per DM benachrichtigt{failed_suffix}.",
+        "en": "✅ Notified {ok} tentative players via DM{failed_suffix}.",
+    },
+    "tentative.notify_dm_failed_suffix": {
+        "de": " ({n} nicht erreichbar – DMs blockiert)",
+        "en": " ({n} unreachable – DMs blocked)",
+    },
+    "tentative.notify_error": {
+        "de": "⚠️ Konnte die Benachrichtigung nicht senden: {error}",
+        "en": "⚠️ Could not send the notification: {error}",
+    },
+    "log.tentative_notified_thread": {
+        "de": "Vorläufige im Thread benachrichtigt: {count} ({name})",
+        "en": "Tentative players notified in thread: {count} ({name})",
+    },
+    "log.tentative_notified_dm": {
+        "de": "Vorläufige per DM benachrichtigt: {ok} ok, {failed} fehlgeschlagen ({name})",
+        "en": "Tentative players notified via DM: {ok} ok, {failed} failed ({name})",
     },
     "button.unregister": {
         "de": "Abmelden",
@@ -1458,6 +1588,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "19. Spielstil-Auswahl bei Anmeldung",
         "en": "19. Playstyle selection at registration",
     },
+    "edit.property.player_roles_enabled": {
+        "de": "22. Rollenauswahl bei Anmeldung",
+        "en": "22. Role selection at registration",
+    },
     "edit.bool.enabled": {
         "de": "Aktiviert",
         "en": "Enabled",
@@ -1695,6 +1829,14 @@ _STRINGS: dict[str, dict[str, str]] = {
     "wizard.playstyle_step_desc": {
         "de": "Sollen Squads bei der Anmeldung einen Spielstil wählen?",
         "en": "Should squads pick a playstyle when registering?",
+    },
+    "wizard.player_roles_step_title": {
+        "de": "Rollen-Auswahl",
+        "en": "Role selection",
+    },
+    "wizard.player_roles_step_desc": {
+        "de": "Sollen Spieler bei der Anmeldung optional eine Rolle im Squad (z.B. Squad Leader, Medic, Pilot) wählen können?",
+        "en": "Should players be able to optionally pick an in-squad role (e.g. Squad Leader, Medic, Pilot) when registering?",
     },
     "edit.property.early_pct_cap": {
         "de": "20. Slot-Limit: Vorab-Zugang (%)",
@@ -2036,6 +2178,30 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Enabled",
     },
     "wizard.summary_playstyle_no": {
+        "de": "Deaktiviert",
+        "en": "Disabled",
+    },
+    "wizard.player_roles_select_placeholder": {
+        "de": "Rollenauswahl bei Anmeldung...",
+        "en": "Role selection at registration...",
+    },
+    "wizard.player_roles_enabled": {
+        "de": "Rollenauswahl aktivieren",
+        "en": "Enable role selection",
+    },
+    "wizard.player_roles_disabled": {
+        "de": "Rollenauswahl deaktivieren",
+        "en": "Disable role selection",
+    },
+    "wizard.summary_player_roles": {
+        "de": "Rollenauswahl",
+        "en": "Role selection",
+    },
+    "wizard.summary_player_roles_yes": {
+        "de": "Aktiviert",
+        "en": "Enabled",
+    },
+    "wizard.summary_player_roles_no": {
         "de": "Deaktiviert",
         "en": "Disabled",
     },
