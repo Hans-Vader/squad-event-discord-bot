@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Native git pre-commit hook — fires for EVERY commit (IDE, terminal, CLI).
 #
-# Aborts the commit when code is staged without touching the project docs
+# Warns (does not block) when code is staged without touching the project docs
 # (README.md / USER_GUIDE.md / USER_GUIDE_GER.md), so docs don't drift from
-# behavior. It is a reminder, not a wall — bypass a single commit with:
-#     git commit --no-verify
+# behavior. It always lets the commit through — it's a reminder, not a wall.
 #
 # Shared via the repo. Activate it once per clone with:
 #     git config core.hooksPath .githooks
@@ -20,17 +19,13 @@ if [ -n "$code" ] && [ -z "$docs" ]; then
   list=$(printf '%s' "$code" | tr '\n' ' ')
   cat >&2 <<EOF
 
-⚠  Doku-Check: Code geändert ohne Anpassung der Doku.
-   Geänderte Code-Dateien: ${list}
-   Prüfe, ob diese Dateien aktualisiert werden müssen:
+⚠  Docs check: code changed without updating the docs.
+   Changed code files: ${list}
+   Check whether these files need updating:
      - README.md
      - USER_GUIDE.md
      - USER_GUIDE_GER.md
-
-   Doku anpassen und erneut committen — oder diesen Commit bewusst überspringen:
-     git commit --no-verify
 EOF
-  exit 1
 fi
 
 exit 0
