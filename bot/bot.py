@@ -138,6 +138,115 @@ def _get_guild_lock(guild_id: int) -> asyncio.Lock:
     return _guild_locks[guild_id]
 
 
+# ---------------------------------------------------------------------------
+# Guild-defaults property table (used by GuildEditTarget / /config_defaults)
+# ---------------------------------------------------------------------------
+# (num, key, label_key, vtype, special)  — special always None for guild defaults
+_GUILD_EDIT_PROPERTIES = [
+    (1,  "server_max_players",             "config_defaults.prop.server_max_players",           "int",      None),
+    (2,  "max_caster_slots",               "config_defaults.prop.max_caster_slots",              "int_zero", None),
+    (3,  "max_vehicle_squads",             "config_defaults.prop.max_vehicle_squads",            "int_zero", None),
+    (4,  "max_heli_squads",                "config_defaults.prop.max_heli_squads",               "int_zero", None),
+    (5,  "infantry_squad_size",            "config_defaults.prop.infantry_squad_size",           "int",      None),
+    (6,  "vehicle_squad_size",             "config_defaults.prop.vehicle_squad_size",            "int",      None),
+    (7,  "heli_squad_size",                "config_defaults.prop.heli_squad_size",               "int",      None),
+    (8,  "max_squads_per_user",            "config_defaults.prop.max_squads_per_user",           "int",      None),
+    (9,  "caster_registration_enabled",    "config_defaults.prop.caster_registration_enabled",  "bool",     None),
+    (10, "registration_countdown_seconds", "config_defaults.prop.registration_countdown_seconds","int_zero", None),
+]
+
+
+# ---------------------------------------------------------------------------
+# EditTarget abstraction — makes the DM editor target-aware
+# ---------------------------------------------------------------------------
+
+class EditTarget:
+    """Abstract base for event vs. guild-defaults targets."""
+    kind = ""
+
+    def properties(self):
+        raise NotImplementedError
+
+    def load(self, guild_id, channel_id):
+        """Return the dict to display/edit, or None if unavailable."""
+        raise NotImplementedError
+
+    def overview_embed(self, obj, lang, updated_note=None):
+        raise NotImplementedError
+
+    async def persist(self, guild_id, channel_id, prop, new_value, lang, editor_name):
+        """Persist one edit. Returns ("ok", payload) | ("gone", None) | ("error", text)."""
+        raise NotImplementedError
+
+    def finish_text(self, guild_id, channel_id, lang):
+        """Return the Done-message text (may include a markdown link)."""
+        raise NotImplementedError
+
+
+class EventEditTarget(EditTarget):
+    """Delegates entirely to the existing event helpers — no logic moved."""
+    kind = "event"
+
+    def properties(self):
+        return _EDIT_PROPERTIES
+
+    def load(self, guild_id, channel_id):
+        event, _ua, _db = _get_channel_event(guild_id, channel_id)
+        return event
+
+    def overview_embed(self, obj, lang, updated_note=None):
+        return _build_edit_main_embed(obj, lang, updated_note=updated_note)
+
+    async def persist(self, guild_id, channel_id, prop, new_value, lang, editor_name):
+        return await _persist_event_edit(guild_id, channel_id, prop, new_value, lang, editor_name)
+
+    def finish_text(self, guild_id, channel_id, lang):
+        text = t("edit.finished", lang)
+        event, _ua, _db = _get_channel_event(guild_id, channel_id)
+        link = _build_event_message_link(event, channel_id, guild_id) if event else None
+        if link:
+            text = f"{text} [{t('edit.event_link', lang)}]({link})"
+        return text
+
+
+class GuildEditTarget(EditTarget):
+    """Targets guild-wide default settings."""
+    kind = "guild"
+
+    def properties(self):
+        return _GUILD_EDIT_PROPERTIES
+
+    def load(self, guild_id, channel_id):
+        return get_guild_settings(guild_id) or dict(DEFAULT_GUILD_SETTINGS)
+
+    def overview_embed(self, obj, lang, updated_note=None):
+        return _build_guild_main_embed(obj, lang, updated_note=updated_note)
+
+    async def persist(self, guild_id, channel_id, prop, new_value, lang, editor_name):
+        return await _persist_guild_edit(guild_id, prop, new_value, lang, editor_name)
+
+    def finish_text(self, guild_id, channel_id, lang):
+        text = t("config_defaults.finished", lang)
+        link = f"https://discord.com/channels/{guild_id}/{channel_id}"
+        text = f"{text} [{t('config_defaults.channel_link', lang)}]({link})"
+        return text
+
+
+_EVENT_TARGET = EventEditTarget()
+_GUILD_TARGET = GuildEditTarget()
+
+
+def _session_target(user_id):
+    """Return the EditTarget for this user's active session. Defaults to event target."""
+    s = _active_edit_sessions.get(user_id)
+    return (s.get("target") if s else None) or _EVENT_TARGET
+
+
+def _find_prop_in(table, key):
+    """Return the property tuple for `key` in the given table, or None."""
+    return next((p for p in table if p[1] == key), None)
+
+
 def is_player_mode(event) -> bool:
     """True if the given event dict is configured in player mode."""
     return bool(event) and event.get("mode") == "player"
@@ -3532,11 +3641,6 @@ def _visible_edit_properties(event):
 # _active_edit_sessions; every view's on_timeout tears the session down.
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _find_edit_property(key):
-    """Return the _EDIT_PROPERTIES tuple for a property key, or None."""
-    return next((p for p in _EDIT_PROPERTIES if p[1] == key), None)
-
-
 def _prop_short_label(label_key, lang):
     """Property label without the leading 'NN. ' numbering used in the embed."""
     return t(label_key, lang).split(". ", 1)[-1]
@@ -3780,14 +3884,62 @@ def _build_edit_main_embed(event, lang, updated_note=None):
     return embed
 
 
+def _build_guild_main_embed(settings, lang, updated_note=None):
+    """Property overview embed for the guild-defaults editor."""
+    embed = discord.Embed(
+        title=t("config_defaults.title", lang),
+        description=t("config_defaults.intro", lang),
+        color=discord.Color.blue(),
+    )
+    lines = []
+    for num, key, label_key, vtype, special in _GUILD_EDIT_PROPERTIES:
+        current = _format_property_value(settings, key, vtype, lang)
+        lines.append(f"`{num:>2}.` {_prop_short_label(label_key, lang)}:  `{current}`")
+    embed.add_field(name="​", value="\n".join(lines), inline=False)
+    if updated_note:
+        embed.add_field(name="​", value=f"✅ {updated_note}", inline=False)
+    embed.set_footer(text=t("config_defaults.footer", lang))
+    return embed
+
+
+async def _persist_guild_edit(guild_id, prop, new_value, lang, editor_name):
+    """Validate + save one guild-default edit under the guild lock.
+
+    Returns ("ok", None) | ("error", text). Never returns "gone".
+    Deliberately skips _apply_property_change and update_event_displays —
+    guild defaults are not event invariants.
+    """
+    num, key, label_key, vtype, special = prop
+    lock = _get_guild_lock(guild_id)
+    async with lock:
+        settings = get_guild_settings(guild_id) or dict(DEFAULT_GUILD_SETTINGS)
+        # Min-value validation (mirrors set_defaults_cmd logic)
+        if vtype == "int" and isinstance(new_value, int) and new_value < 1:
+            return "error", t("set.value_too_low", lang, min=1)
+        if vtype == "int_zero" and isinstance(new_value, int) and new_value < 0:
+            return "error", t("set.value_too_low", lang, min=0)
+        settings[key] = new_value
+        save_guild_settings(guild_id, settings)
+    guild = bot.get_guild(guild_id)
+    if guild:
+        await send_to_log_channel(
+            t("config_defaults.log_changed", lang,
+              user=editor_name,
+              property=t(label_key, lang),
+              value=str(new_value)),
+            guild=guild)
+    return "ok", None
+
+
 async def _refresh_main_view(interaction, user_id, guild_id, channel_id, db_id, lang,
                              updated_note=None, via_modal=False):
     """Re-render the overview (after an edit or cancel) on the session message."""
-    event, _ua, _db = _get_channel_event(guild_id, channel_id)
-    if not event:
+    target = _session_target(user_id)
+    obj = target.load(guild_id, channel_id)
+    if target.kind == "event" and not obj:
         await _notify_event_gone(interaction, user_id, lang, via_modal=via_modal)
         return
-    embed = _build_edit_main_embed(event, lang, updated_note=updated_note)
+    embed = target.overview_embed(obj, lang, updated_note=updated_note)
     view = EditMainView(user_id, guild_id, channel_id, db_id, lang)
     _set_active_view(user_id, view)
     if via_modal:
@@ -3810,13 +3962,16 @@ async def _reshow_overview_dm(user_id, guild_id, channel_id, db_id, lang, note=N
     """Edit the stored session DM message back to the overview (no interaction)."""
     session = _active_edit_sessions.get(user_id)
     dm_msg = session.get("dm_message") if session else None
-    event, _ua, _db = _get_channel_event(guild_id, channel_id)
-    if not event or dm_msg is None:
+    if dm_msg is None:
+        return
+    target = _session_target(user_id)
+    obj = target.load(guild_id, channel_id)
+    if target.kind == "event" and not obj:
         return
     view = EditMainView(user_id, guild_id, channel_id, db_id, lang)
     _set_active_view(user_id, view)
     try:
-        await dm_msg.edit(embed=_build_edit_main_embed(event, lang, updated_note=note),
+        await dm_msg.edit(embed=target.overview_embed(obj, lang, updated_note=note),
                           view=view)
     except discord.HTTPException:
         pass
@@ -3866,7 +4021,8 @@ def _edit_success_note(prop, lang, recalc_value):
 async def _apply_edit(interaction, user_id, guild_id, channel_id, db_id, lang,
                       prop, new_value, via_modal=False):
     """Persist an edit from a live interaction, then refresh or surface an error."""
-    status, payload = await _persist_event_edit(
+    target = _session_target(user_id)
+    status, payload = await target.persist(
         guild_id, channel_id, prop, new_value, lang, interaction.user.name)
     if status == "gone":
         await _notify_event_gone(interaction, user_id, lang, via_modal=via_modal)
@@ -3888,7 +4044,8 @@ async def _apply_edit(interaction, user_id, guild_id, channel_id, db_id, lang,
 async def _apply_edit_dm(user_id, guild_id, channel_id, db_id, lang, prop,
                          new_value, editor_name):
     """Persist an edit without a live interaction (image hybrid path)."""
-    status, payload = await _persist_event_edit(
+    target = _session_target(user_id)
+    status, payload = await target.persist(
         guild_id, channel_id, prop, new_value, lang, editor_name)
     if status == "gone":
         session = _active_edit_sessions.get(user_id)
@@ -3947,12 +4104,13 @@ def _preset_label(value, vtype, lang):
 async def _show_property_editor(interaction, user_id, guild_id, channel_id, db_id, lang, prop):
     """Swap the overview for the editor of a specific property."""
     num, key, label_key, vtype, special = prop
-    event, _ua, _db = _get_channel_event(guild_id, channel_id)
-    if not event:
+    target = _session_target(user_id)
+    obj = target.load(guild_id, channel_id)
+    if target.kind == "event" and not obj:
         await _notify_event_gone(interaction, user_id, lang)
         return
     label = _prop_short_label(label_key, lang)
-    current_display = _format_property_value(event, key, vtype, lang)
+    current_display = _format_property_value(obj, key, vtype, lang)
 
     def _editor_embed(extra=None):
         desc = t("edit.current_value", lang, value=current_display)
@@ -3961,7 +4119,7 @@ async def _show_property_editor(interaction, user_id, guild_id, channel_id, db_i
         return discord.Embed(title=label, description=desc, color=discord.Color.blurple())
 
     if vtype == "bool":
-        view = EditBoolView(user_id, guild_id, channel_id, db_id, lang, prop, bool(event.get(key)))
+        view = EditBoolView(user_id, guild_id, channel_id, db_id, lang, prop, bool(obj.get(key)))
         embed = _editor_embed()
     elif vtype in ("duration", "spawn_offset", "percent", "squad_count"):
         presets = {"duration": _DURATION_PRESETS, "spawn_offset": _SPAWN_PRESETS,
@@ -3969,7 +4127,7 @@ async def _show_property_editor(interaction, user_id, guild_id, channel_id, db_i
         view = EditPresetView(user_id, guild_id, channel_id, db_id, lang, prop, presets)
         embed = _editor_embed()
     elif vtype == "recurrence":
-        view = EditRecurrenceView(user_id, guild_id, channel_id, db_id, lang, prop, event)
+        view = EditRecurrenceView(user_id, guild_id, channel_id, db_id, lang, prop, obj)
         embed = _editor_embed()
     elif vtype == "image":
         view = EditImageView(user_id, guild_id, channel_id, db_id, lang, prop)
@@ -3993,8 +4151,12 @@ class EditMainView(ui.View):
         self.channel_id = channel_id
         self.db_id = db_id
         self.lang = lang
-        event, _ua, _db = _get_channel_event(guild_id, channel_id)
-        visible = _visible_edit_properties(event) if event else list(_EDIT_PROPERTIES)
+        target = _session_target(user_id)
+        if target.kind == "guild":
+            visible = list(_GUILD_EDIT_PROPERTIES)
+        else:
+            event, _ua, _db = _get_channel_event(guild_id, channel_id)
+            visible = _visible_edit_properties(event) if event else list(_EDIT_PROPERTIES)
         # Keep the leading "NN. " numbering so dropdown entries line up with the
         # numbered overview list above.
         options = [discord.SelectOption(label=t(p[2], lang)[:100], value=p[1])
@@ -4009,23 +4171,21 @@ class EditMainView(ui.View):
         self.add_item(done)
 
     async def _on_select(self, interaction):
-        prop = _find_edit_property(interaction.data["values"][0])
+        target = _session_target(self.user_id)
+        prop = _find_prop_in(target.properties(), interaction.data["values"][0])
         if not prop:
             return
         await _show_property_editor(interaction, self.user_id, self.guild_id,
                                     self.channel_id, self.db_id, self.lang, prop)
 
     async def _on_done(self, interaction):
+        target = _session_target(self.user_id)
+        text = target.finish_text(self.guild_id, self.channel_id, self.lang)
         _close_session(self.user_id)
         try:
             await interaction.response.edit_message(view=None)
         except discord.HTTPException:
             pass
-        text = t("edit.finished", self.lang)
-        event, _ua, _db = _get_channel_event(self.guild_id, self.channel_id)
-        link = _build_event_message_link(event, self.channel_id, self.guild_id) if event else None
-        if link:
-            text = f"{text} [{t('edit.event_link', self.lang)}]({link})"
         try:
             await interaction.channel.send(text)
         except discord.HTTPException:
@@ -4339,12 +4499,17 @@ class RecurrenceMonthDaysModal(_RecurrenceModal):
         await self._apply(interaction, {"type": "specific_month_days", "month_days": sorted(set(nums))})
 
 
-async def start_dm_edit_session(interaction, guild_id, channel_id, db_id, lang):
+async def start_dm_edit_session(interaction, guild_id, channel_id, db_id, lang,
+                               target=None):
     """Open (or reclaim) a view-based DM edit session for this event.
 
     The caller must have already deferred the interaction ephemerally; this
     replies via followup.
+
+    target: an EditTarget instance (defaults to _EVENT_TARGET when None).
     """
+    if target is None:
+        target = _EVENT_TARGET
     user = interaction.user
     existing = _active_edit_sessions.get(user.id)
     if existing is not None:
@@ -4363,18 +4528,19 @@ async def start_dm_edit_session(interaction, guild_id, channel_id, db_id, lang):
         "guild_id": guild_id, "channel_id": channel_id, "db_id": db_id,
         "lang": lang, "dm_message": None, "active_view": None,
         "last_activity": time.monotonic(),
+        "target": target,
     }
     _active_edit_sessions[user.id] = session
 
-    event, _ua, _db = _get_channel_event(guild_id, channel_id)
-    if not event:
+    obj = target.load(guild_id, channel_id)
+    if target.kind == "event" and not obj:
         _active_edit_sessions.pop(user.id, None)
         await interaction.followup.send(t("general.no_active_event", lang), ephemeral=True)
         return
 
     view = EditMainView(user.id, guild_id, channel_id, db_id, lang)
     try:
-        dm_msg = await dm.send(embed=_build_edit_main_embed(event, lang), view=view)
+        dm_msg = await dm.send(embed=target.overview_embed(obj, lang), view=view)
     except discord.Forbidden:
         _active_edit_sessions.pop(user.id, None)
         await interaction.followup.send(t("edit.dm_blocked", lang), ephemeral=True)
@@ -6226,108 +6392,15 @@ async def set_log_channel_cmd(interaction: discord.Interaction, channel: discord
     await interaction.response.send_message(t("set.log_channel", lang, channel=channel.name), ephemeral=True)
 
 
-@bot.tree.command(name="set_defaults", description="Set default event parameters (admin only)")
-@app_commands.describe(
-    server_max_players="Server player capacity",
-    infantry_squad_size="Infantry squad size",
-    vehicle_squad_size="Vehicle squad size",
-    heli_squad_size="Heli squad size",
-    max_vehicle_squads="Max vehicle squads",
-    max_heli_squads="Max heli squads",
-    max_caster_slots="Max caster slots",
-    max_squads_per_user="Max squads per user",
-    caster_registration="Enable caster registration",
-    countdown_seconds="Seconds before registration start for countdown",
-)
-async def set_defaults_cmd(interaction: discord.Interaction,
-                           server_max_players: int = None,
-                           infantry_squad_size: int = None,
-                           vehicle_squad_size: int = None,
-                           heli_squad_size: int = None,
-                           max_vehicle_squads: int = None,
-                           max_heli_squads: int = None,
-                           max_caster_slots: int = None,
-                           max_squads_per_user: int = None,
-                           caster_registration: bool = None,
-                           countdown_seconds: int = None):
-    if not await check_admin(interaction):
+@bot.tree.command(name="config_defaults",
+                  description="Edit the default event settings new events inherit (organizer only)")
+async def config_defaults_cmd(interaction: discord.Interaction):
+    if not await check_organizer(interaction):
         return
-
-    settings = get_guild_settings(interaction.guild.id)
-    if not settings:
-        settings = dict(DEFAULT_GUILD_SETTINGS)
-    lang = settings.get("language", "de")
-
-    changes = []
-    mapping = {
-        "server_max_players": (server_max_players, 1),
-        "infantry_squad_size": (infantry_squad_size, 1),
-        "vehicle_squad_size": (vehicle_squad_size, 1),
-        "heli_squad_size": (heli_squad_size, 1),
-        "max_vehicle_squads": (max_vehicle_squads, 0),
-        "max_heli_squads": (max_heli_squads, 0),
-        "max_caster_slots": (max_caster_slots, 0),
-        "max_squads_per_user": (max_squads_per_user, 1),
-        "registration_countdown_seconds": (countdown_seconds, 0),
-    }
-
-    for key, (val, min_val) in mapping.items():
-        if val is not None:
-            if val < min_val:
-                await interaction.response.send_message(t("set.value_too_low", lang, min=min_val), ephemeral=True)
-                return
-            settings[key] = val
-            changes.append(t(f"set.{key}", lang, value=val))
-
-    if caster_registration is not None:
-        settings["caster_registration_enabled"] = caster_registration
-        state = t("set.caster_enabled", lang) if caster_registration else t("set.caster_disabled", lang)
-        changes.append(t("set.caster_registration", lang, state=state))
-
-    if not changes:
-        # Show current settings
-        embed = discord.Embed(title=t("settings.title", lang), color=discord.Color.blue())
-        for key in DEFAULT_GUILD_SETTINGS:
-            if key in ("organizer_role_id", "log_channel_id", "language"):
-                continue
-            label = t(f"settings.{key}", lang)
-            embed.add_field(name=label, value=str(settings.get(key, "?")), inline=True)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-        return
-
-    save_guild_settings(interaction.guild.id, settings)
-    await interaction.response.send_message("\n".join(changes), ephemeral=True)
-
-
-@bot.tree.command(name="settings", description="Show current server settings")
-async def settings_command(interaction: discord.Interaction):
-    if not await check_guild_configured(interaction):
-        return
-    settings = get_guild_settings(interaction.guild.id)
-    lang = settings.get("language", "de")
-
-    embed = discord.Embed(title=t("settings.title", lang), color=discord.Color.blue())
-
-    orga_role = interaction.guild.get_role(settings.get("organizer_role_id", 0))
-    embed.add_field(name=t("settings.organizer_role", lang),
-                    value=orga_role.name if orga_role else t("settings.not_set", lang), inline=True)
-
-    log_ch_id = settings.get("log_channel_id")
-    log_ch = interaction.guild.get_channel(log_ch_id) if log_ch_id else None
-    embed.add_field(name=t("settings.log_channel", lang),
-                    value=f"#{log_ch.name}" if log_ch else t("settings.not_set", lang), inline=True)
-
-    embed.add_field(name=t("settings.language", lang), value=get_language_name(settings.get("language", "de")), inline=True)
-
-    for key in ["server_max_players", "infantry_squad_size", "vehicle_squad_size", "heli_squad_size",
-                "max_vehicle_squads", "max_heli_squads", "max_caster_slots", "max_squads_per_user"]:
-        embed.add_field(name=t(f"settings.{key}", lang), value=str(settings.get(key, "?")), inline=True)
-
-    enabled = settings.get("caster_registration_enabled", True)
-    embed.add_field(name=t("settings.caster_registration", lang),
-                    value=t("set.caster_enabled", lang) if enabled else t("set.caster_disabled", lang), inline=True)
-
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    lang = get_guild_language(interaction.guild.id)
+    await interaction.response.defer(ephemeral=True)
+    await start_dm_edit_session(interaction, interaction.guild.id,
+                                interaction.channel.id, 0, lang, target=_GUILD_TARGET)
 
 
 # ############################# #
@@ -6877,8 +6950,7 @@ async def help_command(interaction: discord.Interaction):
             "`/set_organizer_role` - Organisator-Rolle setzen\n"
             "`/set_language` - Sprache ändern\n"
             "`/set_log_channel` - Log-Kanal setzen\n"
-            "`/set_defaults` - Standard-Werte ändern\n"
-            "`/settings` - Aktuelle Einstellungen anzeigen\n"
+            "`/config_defaults` - Standard-Event-Einstellungen bearbeiten\n"
             "`/sync` - Slash-Commands synchronisieren\n"
             "`/test` - Test-Suite ausführen"
         ), inline=False)
@@ -6908,8 +6980,7 @@ async def help_command(interaction: discord.Interaction):
             "`/set_organizer_role` - Set organizer role\n"
             "`/set_language` - Change language\n"
             "`/set_log_channel` - Set log channel\n"
-            "`/set_defaults` - Change default values\n"
-            "`/settings` - Show current settings\n"
+            "`/config_defaults` - Edit default event settings\n"
             "`/sync` - Sync slash commands\n"
             "`/test` - Run test suite"
         ), inline=False)

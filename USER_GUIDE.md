@@ -123,9 +123,7 @@ Before creating events, an admin must run `/setup` to configure:
 - **Log channel** — where the bot logs all actions
 - **Language** — German (de) or English (en)
 
-Use `/set_defaults` to customize server-wide default values for event creation (server capacity, squad sizes, limits, countdown).
-
-Use `/settings` to view the current server configuration.
+Use `/config_defaults` to edit server-wide default values for event creation via an interactive DM dialog. The overview shows current values for all 10 editable defaults; pick a property from the dropdown to change it. Changes take effect for newly created events.
 
 ### Creating an Event
 
@@ -142,7 +140,7 @@ After you pick a mode, a multi-step wizard guides you through:
 
 **Step 2 — Server Configuration (Modal):**
 - Server max players (rep mode) or Total seats (player mode), max caster slots (0 = casters disabled, and forced to 0 in player mode — the field is hidden), squad sizes (Infantry / Vehicle / Heli), max vehicle squads, max heli squads
-- All pre-filled from server defaults (`/set_defaults`)
+- All pre-filled from server defaults (`/config_defaults`)
 
 **Step 3 — Registration Roles:**
 - Roles allowed to register — roles whose members may register squads / join (role gate, enforced during registration)
@@ -325,8 +323,7 @@ Open and close registration manually via the **⚙️ Admin** button on the even
 | `/set_organizer_role` | Set the organizer role |
 | `/set_language` | Set bot language (de/en) |
 | `/set_log_channel` | Set the log channel |
-| `/set_defaults` | Set server-wide default parameters |
-| `/settings` | Show current server settings |
+| `/config_defaults` | Edit server-wide default parameters via DM dialog |
 | `/sync` | Sync slash commands with Discord |
 
 ---
@@ -408,7 +405,7 @@ A: For non-recurring events, it's archived immediately at `end`. For recurring e
 A: The next occurrence would fire during the current event (or during the spawn delay window). Shorten the event duration, shorten the spawn delay, or pick a longer recurrence interval.
 
 **Q: How do I set up the bot for the first time?**
-A: An admin runs `/setup` to configure the organizer role, log channel, and language. Then use `/set_defaults` to set server capacity and squad sizes. After that, organizers can create events with `/create_event`.
+A: An admin runs `/setup` to configure the organizer role, log channel, and language. Then use `/config_defaults` to set server capacity and squad sizes via the DM editor. After that, organizers can create events with `/create_event`.
 
 **Q: Why aren't my slash commands showing up?**
 A: An administrator needs to run `/sync` to synchronize the commands with Discord.

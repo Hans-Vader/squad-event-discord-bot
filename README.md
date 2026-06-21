@@ -90,8 +90,7 @@ The admin panel opens via the **Admin** button and provides actions grouped per 
 | `/set_organizer_role` | Set the organizer role |
 | `/set_language` | Set bot language (de/en) |
 | `/set_log_channel` | Set the log channel |
-| `/set_defaults` | Set default event parameters (server capacity, squad sizes, limits) |
-| `/settings` | Show current server settings |
+| `/config_defaults` | Edit default event parameters via DM dialog (organizer only) |
 | `/sync` | Sync slash commands with Discord |
 
 ## Event Creation
@@ -104,7 +103,7 @@ Event creation uses a multi-step wizard:
 
 **Step 2 — Modal (Server Configuration):**
 - Server max players, max caster slots (0 = casters disabled), squad sizes (Infantry / Vehicle / Heli), max vehicle squads, max heli squads
-- All pre-filled from server defaults (`/set_defaults`)
+- All pre-filled from server defaults (`/config_defaults`)
 
 **Step 3 — Squad Roles:**
 - Squad-Rep roles/users — who can register squads (role gate)
@@ -126,7 +125,7 @@ Event creation uses a multi-step wizard:
 **Step 7 — Confirmation:**
 - Summary embed with all settings including unused slots — confirm or cancel
 
-Each step can be skipped. Server defaults from `/set_defaults` are used as starting values.
+Each step can be skipped. Server defaults from `/config_defaults` are used as starting values.
 
 Slot calculation example:
 ```
@@ -249,7 +248,7 @@ The bot does **not** need: Manage Roles, Manage Channels, Manage Server, Kick/Ba
 | `EVENT_TIMEZONE` | Timezone for ICS calendar export (must match the bot's local time); falls back to `TZ` | `Europe/Berlin` |
 | `PUID` / `PGID` | Host user/group ID for Docker file permissions | `1000` |
 
-### Per-Guild Settings (via `/setup` and `/set_defaults`)
+### Per-Guild Settings (via `/setup` and `/config_defaults`)
 
 | Setting | Default |
 |---|---|

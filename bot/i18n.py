@@ -138,58 +138,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Log-Kanal wurde auf **#{channel}** geändert.",
         "en": "Log channel changed to **#{channel}**.",
     },
-    "set.server_max_players": {
-        "de": "Server-Kapazität wurde auf **{value}** Spieler gesetzt.",
-        "en": "Server capacity set to **{value}** players.",
-    },
-    "set.infantry_squad_size": {
-        "de": "Infanterie-Squadgröße wurde auf **{value}** gesetzt.",
-        "en": "Infantry squad size set to **{value}**.",
-    },
-    "set.vehicle_squad_size": {
-        "de": "Fahrzeug-Squadgröße wurde auf **{value}** gesetzt.",
-        "en": "Vehicle squad size set to **{value}**.",
-    },
-    "set.heli_squad_size": {
-        "de": "Heli-Squadgröße wurde auf **{value}** gesetzt.",
-        "en": "Heli squad size set to **{value}**.",
-    },
-    "set.max_vehicle_squads": {
-        "de": "Max. Fahrzeug-Squads wurde auf **{value}** gesetzt.",
-        "en": "Max vehicle squads set to **{value}**.",
-    },
-    "set.max_heli_squads": {
-        "de": "Max. Heli-Squads wurde auf **{value}** gesetzt.",
-        "en": "Max heli squads set to **{value}**.",
-    },
-    "set.max_caster_slots": {
-        "de": "Max. Caster-Plätze wurde auf **{value}** gesetzt.",
-        "en": "Max caster slots set to **{value}**.",
-    },
-    "set.max_squads_per_user": {
-        "de": "Max. Squads pro Spieler wurde auf **{value}** gesetzt.",
-        "en": "Max squads per user set to **{value}**.",
-    },
-    "set.caster_registration": {
-        "de": "Caster-Registrierung wurde **{state}**.",
-        "en": "Caster registration has been **{state}**.",
-    },
-    "set.caster_enabled": {
-        "de": "aktiviert",
-        "en": "enabled",
-    },
-    "set.caster_disabled": {
-        "de": "deaktiviert",
-        "en": "disabled",
-    },
-    "set.countdown_seconds": {
-        "de": "Countdown vor Registrierungsstart wurde auf **{value}** Sekunden gesetzt.",
-        "en": "Countdown before registration start set to **{value}** seconds.",
-    },
-    "set.current_settings": {
-        "de": "**Aktuelle Server-Einstellungen**",
-        "en": "**Current server settings**",
-    },
     "set.value_too_low": {
         "de": "Der Wert muss mindestens {min} sein.",
         "en": "The value must be at least {min}.",
@@ -2248,23 +2196,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Admin commands for event management",
     },
 
-    # ── Settings display ──────────────────────────────────────────────────
-    "settings.title": {
-        "de": "Server-Einstellungen",
-        "en": "Server settings",
-    },
-    "settings.organizer_role": {
-        "de": "Organisator-Rolle",
-        "en": "Organizer role",
-    },
-    "settings.log_channel": {
-        "de": "Log-Kanal",
-        "en": "Log channel",
-    },
-    "settings.language": {
-        "de": "Sprache",
-        "en": "Language",
-    },
+    # ── Settings field labels (used in wizard summary + other views) ─────
     "settings.server_max_players": {
         "de": "Server-Kapazität",
         "en": "Server capacity",
@@ -2297,17 +2229,71 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Max. Squads pro Spieler",
         "en": "Max squads per user",
     },
-    "settings.caster_registration": {
-        "de": "Caster-Registrierung",
-        "en": "Caster registration",
+
+    # ── Config Defaults editor ────────────────────────────────────────────
+    "config_defaults.title": {
+        "de": "Standard-Event-Einstellungen bearbeiten",
+        "en": "Edit default event settings",
     },
-    "settings.countdown_seconds": {
-        "de": "Countdown-Sekunden",
-        "en": "Countdown seconds",
+    "config_defaults.intro": {
+        "de": "Wähle eine Eigenschaft aus dem Dropdown, um sie zu ändern.",
+        "en": "Choose a property from the dropdown below to change it.",
     },
-    "settings.not_set": {
-        "de": "Nicht gesetzt",
-        "en": "Not set",
+    "config_defaults.footer": {
+        "de": "Eigenschaft wählen · „Fertig“ zum Beenden",
+        "en": "Pick a property · “Done” to finish",
+    },
+    "config_defaults.finished": {
+        "de": "Standard-Einstellungen gespeichert.",
+        "en": "Default settings saved.",
+    },
+    "config_defaults.channel_link": {
+        "de": "Zurück zum Kanal",
+        "en": "Back to channel",
+    },
+    "config_defaults.log_changed": {
+        "de": "Standard-Einstellung geändert: {user} hat '{property}' auf '{value}' gesetzt.",
+        "en": "Default setting changed: {user} set '{property}' to '{value}'.",
+    },
+    "config_defaults.prop.server_max_players": {
+        "de": "1. Server-Kapazität (Spieler)",
+        "en": "1. Server capacity (players)",
+    },
+    "config_defaults.prop.max_caster_slots": {
+        "de": "2. Max. Caster-Plätze",
+        "en": "2. Max caster slots",
+    },
+    "config_defaults.prop.max_vehicle_squads": {
+        "de": "3. Max. Fahrzeug-Squads",
+        "en": "3. Max vehicle squads",
+    },
+    "config_defaults.prop.max_heli_squads": {
+        "de": "4. Max. Heli-Squads",
+        "en": "4. Max heli squads",
+    },
+    "config_defaults.prop.infantry_squad_size": {
+        "de": "5. Infanterie-Squadgröße",
+        "en": "5. Infantry squad size",
+    },
+    "config_defaults.prop.vehicle_squad_size": {
+        "de": "6. Fahrzeug-Squadgröße",
+        "en": "6. Vehicle squad size",
+    },
+    "config_defaults.prop.heli_squad_size": {
+        "de": "7. Heli-Squadgröße",
+        "en": "7. Heli squad size",
+    },
+    "config_defaults.prop.max_squads_per_user": {
+        "de": "8. Max. Squads pro Spieler",
+        "en": "8. Max squads per user",
+    },
+    "config_defaults.prop.caster_registration_enabled": {
+        "de": "9. Caster-Registrierung",
+        "en": "9. Caster registration",
+    },
+    "config_defaults.prop.registration_countdown_seconds": {
+        "de": "10. Countdown-Sekunden",
+        "en": "10. Countdown seconds",
     },
 
     # ── Reminder ─────────────────────────────────────────────────────────
