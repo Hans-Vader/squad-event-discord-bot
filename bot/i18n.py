@@ -1248,6 +1248,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Ich habe dir eine Direktnachricht geschickt. Bitte bearbeite das Event dort.",
         "en": "I sent you a direct message. Please edit the event there.",
     },
+    "edit.dm_open_link": {
+        "de": "Zum Bearbeitungsdialog springen",
+        "en": "Open the edit dialog",
+    },
     "edit.dm_blocked": {
         "de": "Ich kann dir keine Direktnachricht senden. Bitte aktiviere DMs von Server-Mitgliedern.",
         "en": "I cannot send you a direct message. Please enable DMs from server members.",

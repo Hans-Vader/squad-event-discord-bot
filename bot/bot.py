@@ -4547,7 +4547,8 @@ async def start_dm_edit_session(interaction, guild_id, channel_id, db_id, lang,
         return
     session["dm_message"] = dm_msg
     session["active_view"] = view
-    await interaction.followup.send(t("edit.dm_sent", lang), ephemeral=True)
+    link = f"\n[{t('edit.dm_open_link', lang)}]({dm_msg.jump_url})"
+    await interaction.followup.send(f"{t('edit.dm_sent', lang)}{link}", ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
