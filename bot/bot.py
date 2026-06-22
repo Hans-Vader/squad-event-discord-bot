@@ -537,13 +537,28 @@ async def check_admin(interaction: discord.Interaction) -> bool:
 # Helper: send feedback
 # ---------------------------------------------------------------------------
 async def send_feedback(interaction, message, ephemeral=True, embed=None, view=None):
+    done = False
     try:
-        done = False
-        try:
-            done = interaction.response.is_done()
-        except Exception:
-            pass
+        done = interaction.response.is_done()
+    except Exception:
+        pass
 
+    # Smooth transition: confirm dialogs opt in (set interaction.extras["edit_feedback"] = True in
+    # their _confirm callback) to have this success/error text REPLACE the dialog message in place
+    # instead of appending a new ephemeral. embed=None clears the red confirm embed, view=None drops
+    # the Confirm/Cancel buttons — collapsing "Are you sure?" → "✅ done" into a single message.
+    extras = getattr(interaction, "extras", None)
+    if isinstance(extras, dict) and extras.get("edit_feedback"):
+        try:
+            if done:  # _confirm defer()s first → deferred message update → edits the dialog message
+                await interaction.edit_original_response(content=message, embed=embed, view=view)
+            else:
+                await interaction.response.edit_message(content=message, embed=embed, view=view)
+            return True
+        except Exception as e:
+            logger.error(f"Error editing feedback, falling back to new message: {e}")
+
+    try:
         kwargs = {"ephemeral": ephemeral}
         if embed:
             kwargs["embed"] = embed
@@ -1646,6 +1661,16 @@ class BaseConfirmationView(BaseView):
     def __init__(self, timeout=3600, title="Confirmation"):
         super().__init__(timeout=timeout, title=title)
 
+    def _edit_in_place(self, interaction):
+        """Call at the top of a _confirm callback: make the result text REPLACE this dialog message
+        (send_feedback honours interaction.extras["edit_feedback"]) instead of appending a new
+        ephemeral, and stop() the view so on_timeout can't re-attach the buttons onto the result."""
+        try:
+            interaction.extras["edit_feedback"] = True
+        except Exception:
+            pass
+        self.stop()
+
 
 class EventActionView(ui.View):
     """Persistent view with event action buttons."""
@@ -2142,6 +2167,7 @@ class SquadUnregisterConfirmView(BaseConfirmationView):
     async def _confirm(self, interaction):
         if self.check_response(interaction):
             return
+        self._edit_in_place(interaction)
         await interaction.response.defer(ephemeral=True)
         await unregister_squad(interaction, self.guild_id, self.channel_id, self.squad_name)
 
@@ -2183,6 +2209,7 @@ class PlayerUnregisterConfirmView(BaseConfirmationView):
     async def _confirm(self, interaction):
         if self.check_response(interaction):
             return
+        self._edit_in_place(interaction)
         await interaction.response.defer(ephemeral=True)
         await player_unregister(interaction, self.guild_id, self.channel_id)
 
@@ -2212,6 +2239,7 @@ class PlayerTentativeSwitchConfirmView(BaseConfirmationView):
     async def _confirm(self, interaction):
         if self.check_response(interaction):
             return
+        self._edit_in_place(interaction)
         await interaction.response.defer(ephemeral=True)
         await player_switch_to_tentative(interaction, self.guild_id, self.channel_id)
 
@@ -2482,6 +2510,7 @@ class CasterUnregisterConfirmView(BaseConfirmationView):
     async def _confirm(self, interaction):
         if self.check_response(interaction):
             return
+        self._edit_in_place(interaction)
         await interaction.response.defer(ephemeral=True)
         await unregister_caster(interaction, self.guild_id, self.channel_id)
 
@@ -4572,12 +4601,13 @@ class DeleteConfirmationView(BaseConfirmationView):
     async def _confirm(self, interaction):
         if self.check_response(interaction):
             return
+        self._edit_in_place(interaction)
         await interaction.response.defer(ephemeral=True)
 
         lang = get_guild_language(self.guild_id)
         event, user_assignments, db_id = _get_channel_event(self.guild_id, self.channel_id)
         if not event:
-            await interaction.followup.send(t("event.nothing_to_delete", lang), ephemeral=True)
+            await send_feedback(interaction, t("event.nothing_to_delete", lang))
             return
 
         event_name = event["name"]
@@ -4604,7 +4634,7 @@ class DeleteConfirmationView(BaseConfirmationView):
         # 3. Soft-delete in DB
         delete_event(db_id)
 
-        await interaction.followup.send(t("event.deleted", lang, name=event_name), ephemeral=True)
+        await send_feedback(interaction, t("event.deleted", lang, name=event_name))
 
     async def _cancel(self, interaction):
         if self.check_response(interaction):
@@ -4646,6 +4676,7 @@ class OpenConfirmationView(BaseConfirmationView):
     async def _confirm(self, interaction):
         if self.check_response(interaction):
             return
+        self._edit_in_place(interaction)
         await interaction.response.defer(ephemeral=True)
         gid, cid = self.guild_id, self.channel_id
         lang = get_guild_language(gid)
@@ -4705,6 +4736,7 @@ class CloseConfirmationView(BaseConfirmationView):
     async def _confirm(self, interaction):
         if self.check_response(interaction):
             return
+        self._edit_in_place(interaction)
         await interaction.response.defer(ephemeral=True)
         gid, cid = self.guild_id, self.channel_id
         lang = get_guild_language(gid)
@@ -4762,6 +4794,7 @@ class ConsolidateConfirmationView(BaseConfirmationView):
     async def _confirm(self, interaction):
         if self.check_response(interaction):
             return
+        self._edit_in_place(interaction)
         await interaction.response.defer(ephemeral=True)
         gid, cid = self.guild_id, self.channel_id
         lang = get_guild_language(gid)
