@@ -5,10 +5,9 @@
 # "Code" = Python sources outside tests/.  "Docs" = README.md, USER_GUIDE.md,
 # USER_GUIDE_GER.md (the only docs we care about keeping in sync).
 #
-# When code is committed but none of the docs are, the hook emits a PreToolUse
-# "ask" decision so the commit is gated until you confirm it — a reminder to
-# verify the docs, not a hard block. Otherwise it stays silent and the commit
-# proceeds normally.
+# When code is committed but none of the docs are, the hook emits a non-blocking
+# reminder (systemMessage) to verify the docs — the commit always proceeds.
+# Otherwise it stays silent.
 
 input=$(cat)
 
@@ -30,9 +29,8 @@ docs=$(printf '%s\n' "$files" | grep -E '^(README|USER_GUIDE|USER_GUIDE_GER)\.md
 
 if [ -n "$code" ] && [ -z "$docs" ]; then
   list=$(printf '%s' "$code" | tr '\n' ' ')
-  reason="Code geändert (${list}) ohne Anpassung der Doku. Prüfe, ob README.md / USER_GUIDE.md / USER_GUIDE_GER.md aktualisiert werden müssen, bevor du committest."
-  jq -cn --arg r "$reason" \
-    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  reason="Code changed (${list}) without updating the docs. Check whether README.md / USER_GUIDE.md / USER_GUIDE_GER.md need updating."
+  jq -cn --arg m "⚠ Docs check: ${reason}" '{systemMessage:$m}'
 fi
 
 exit 0

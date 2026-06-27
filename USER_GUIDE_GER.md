@@ -123,9 +123,7 @@ Bevor Events erstellt werden können, muss ein Admin `/setup` ausführen:
 - **Log-Kanal** — wohin der Bot alle Aktionen protokolliert
 - **Sprache** — Deutsch (de) oder Englisch (en)
 
-Mit `/set_defaults` können die Standardwerte für Event-Erstellung angepasst werden (Serverkapazität, Squad-Größen, Limits, Countdown).
-
-Mit `/settings` wird die aktuelle Serverkonfiguration angezeigt.
+Mit `/config_defaults` können die Standardwerte für Event-Erstellung per DM-Dialog bearbeitet werden. Die Übersicht zeigt alle 10 bearbeitbaren Standardwerte mit aktuellen Werten; über das Dropdown kann eine Eigenschaft geändert werden. Änderungen wirken sich auf neu erstellte Events aus.
 
 ### Event erstellen
 
@@ -142,7 +140,7 @@ Nach der Modus-Wahl führt dich ein mehrstufiger Wizard durch:
 
 **Schritt 2 — Server-Konfiguration (Modal):**
 - Server Max Spieler (Vertreter-Modus) bzw. Plätze gesamt (Spieler-Modus), Max Caster (0 = Caster deaktiviert; im Spieler-Modus fest auf 0 gesetzt und ausgeblendet), Squad-Größen (Inf / Fahr / Heli), Max Fahrzeug-Squads, Max Heli-Squads
-- Alle Werte vorausgefüllt aus den Server-Standardwerten (`/set_defaults`)
+- Alle Werte vorausgefüllt aus den Server-Standardwerten (`/config_defaults`)
 
 **Schritt 3 — Anmelde-Rollen:**
 - Rollen mit Anmeldeberechtigung — Rollen, deren Mitglieder Squads anmelden dürfen / beitreten können (Rollen-Gate)
@@ -325,8 +323,7 @@ Anmeldung manuell öffnen oder schließen über den **⚙️ Admin**-Button im E
 | `/set_organizer_role` | Organisator-Rolle setzen |
 | `/set_language` | Bot-Sprache setzen (de/en) |
 | `/set_log_channel` | Log-Kanal setzen |
-| `/set_defaults` | Server-weite Standardwerte setzen |
-| `/settings` | Aktuelle Servereinstellungen anzeigen |
+| `/config_defaults` | Server-weite Standardwerte per DM-Dialog bearbeiten |
 | `/sync` | Slash-Commands mit Discord synchronisieren |
 
 ---
@@ -408,7 +405,7 @@ A: Bei nicht wiederkehrenden Events wird es direkt bei `Ende` archiviert. Bei wi
 A: Die nächste Wiederholung würde noch während des aktuellen Events (oder während der Verzögerungs-Phase) anstehen. Verkürze das Event, reduziere die Verzögerung oder wähle einen längeren Wiederholungsrhythmus.
 
 **F: Wie richte ich den Bot erstmalig ein?**
-A: Ein Admin führt `/setup` aus, um Organisator-Rolle, Log-Kanal und Sprache zu konfigurieren. Dann `/set_defaults` für Serverkapazität und Squad-Größen. Danach können Organisatoren Events mit `/create_event` erstellen.
+A: Ein Admin führt `/setup` aus, um Organisator-Rolle, Log-Kanal und Sprache zu konfigurieren. Dann `/config_defaults` für Serverkapazität und Squad-Größen per DM-Editor. Danach können Organisatoren Events mit `/create_event` erstellen.
 
 **F: Warum werden meine Slash-Befehle nicht angezeigt?**
 A: Ein Administrator muss `/sync` ausführen, um die Befehle mit Discord zu synchronisieren.
