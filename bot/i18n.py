@@ -668,6 +668,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "{minutes} Min. vor Start",
         "en": "{minutes} min before start",
     },
+    "embed.no_squad_leader": {
+        "de": "kein Squad Leader",
+        "en": "no Squad Leader",
+    },
     "embed.reminder_sent": {
         "de": "{minutes} Min. vorher (gesendet)",
         "en": "{minutes} min before (sent)",
