@@ -90,13 +90,13 @@ Tentative players **do not occupy a real squad seat**. They are listed at the ve
 **Switching:**
 - If you are already **firmly** registered and click **Tentative**, a confirmation dialog appears — on confirm your squad seat is freed (waitlisted players are promoted into it) and your squad type and role are **carried over**.
 - If you are **tentative** and click **Join** (🪖), the picker opens pre-filled with your type and role; after **Continue** you are firmly registered and the tentative sign-up is dropped.
-- **Abmelden** (❌) also removes a tentative-only sign-up (with a confirmation dialog).
+- **Decline** (❌) also removes a tentative-only sign-up (with a confirmation dialog).
 
 ### Declining ("Not attending") — Player Mode
 
-The **Abmelden** (❌) button has a second action in player mode. If you click it while you are **not** registered (no seat, no waitlist spot, no tentative sign-up), you are marked as **declined** — an explicit "I'm not coming". Declined players are shown in a **🚫 Abgemeldet** field as the **very last section** of the event embed. No confirmation dialog is shown, since nothing is removed.
+The **Decline** (❌) button has a second action in player mode. If you click it while you are **not** registered (no seat, no waitlist spot, no tentative sign-up), you are marked as **declined** — an explicit "I'm not coming". Declined players are shown in a **🚫 Abgemeldet** field as the **very last section** of the event embed. No confirmation dialog is shown, since nothing is removed.
 
-- Click **Abmelden** (❌) again to withdraw your decline (toggle off).
+- Click **Decline** (❌) again to withdraw your decline (toggle off).
 - If you later **Join** (🪖) or go **Tentative** (🤔), your declined mark is cleared automatically.
 
 ### Registering as Caster
@@ -109,11 +109,11 @@ Players can be registered as a caster **and** with squads at the same time.
 
 ### Unregistering
 
-- Click **Abmelden** (❌) in the event display
+- Click **Decline** (❌) in the event display
 
 A confirmation dialog is shown before the unregistration is processed in **both modes** — you'll see "Do you really want to unregister? You will lose your spot." and must click Unregister to confirm. You receive a confirmation message once complete.
 
-In **player mode**, if you click **Abmelden** while you have *no* registration at all, there is nothing to unregister — instead you're marked as declined (see [Declining](#declining-not-attending--player-mode) above).
+In **player mode**, if you click **Decline** while you have *no* registration at all, there is nothing to unregister — instead you're marked as declined (see [Declining](#declining-not-attending--player-mode) above).
 
 ### All Player Commands
 
@@ -287,7 +287,7 @@ In player mode the admin panel has 8 buttons in 3 rows — the Squad and Caster 
 |---|---|---|
 | Player | **Add Player** | Pick one or more Discord users (multi-select), a squad type, and (optionally) one or more in-squad roles applied to all picked users; then confirm. All picked users are registered in a single submit. If capacity is hit mid-batch, remaining users go to the waitlist. The chosen roles are stored for each user and shown next to their name in the event embed (no role → just the name). |
 | Player | **Remove Player** | Pick one or more players (multi-select) — from current squad members, from any waitlist (prefixed `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`), **and** from the tentative list (prefixed `[Vorl-Inf]` / `[Vorl-Veh]` / `[Vorl-Heli]`). The action is gated behind a red "Unregister" confirm button. |
-| Player | **Ask tentatives** (📨) | Ask the tentative players whether they'll join. You first pick **which** tentatives to ask (a multi-select dropdown) or press **Ask all**. Then you choose **thread** or **DM**; for a thread you then choose **public** (created directly on the event message) or **private** (a private thread that also adds you, the organizer). The message pings/links the chosen tentatives so they confirm via the existing **Join** / **Abmelden** buttons. Only shown when there are tentative players. |
+| Player | **Ask tentatives** (📨) | Ask the tentative players whether they'll join. You first pick **which** tentatives to ask (a multi-select dropdown) or press **Ask all**. Then you choose **thread** or **DM**; for a thread you then choose **public** (created directly on the event message) or **private** (a private thread that also adds you, the organizer). The message pings/links the chosen tentatives so they confirm via the existing **Join** / **Decline** buttons. Only shown when there are tentative players. |
 | Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
 | Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt |
 | Registration | **Consolidate Squads** | Merge partially-filled squads and drop empty ones — gated behind a confirmation prompt. Also happens automatically when the event starts. Player mode only. |
@@ -346,7 +346,7 @@ The event display contains the following buttons. All buttons are visible to eve
 | **Squad** (🪖) | Rep mode: starts the guided registration (type → playstyle → name) |
 | **Join** (🪖) | Player mode: pick type and optional in-squad role, then auto-assigned to a squad |
 | **Caster** (🎙️) | Direct caster registration |
-| **Abmelden** (❌) | Unregister squad/caster (with confirmation); in player mode, clicking while not registered toggles a "declined" mark instead |
+| **Decline** (❌) | Unregister squad/caster (with confirmation); in player mode, clicking while not registered toggles a "declined" mark instead |
 | **Admin** (⚙️) | Opens admin panel (organizer only) |
 | **Calendar** (📅) | Download an `.ics` file to import the event into your calendar app |
 

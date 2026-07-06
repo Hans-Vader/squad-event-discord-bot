@@ -895,7 +895,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     "player.declined_added": {
         "de": "🚫 Du wurdest als **abgemeldet** eingetragen. Klicke erneut auf **Abmelden**, um das rückgängig zu machen.",
-        "en": "🚫 You've been marked as **not attending**. Click **Unregister** again to undo.",
+        "en": "🚫 You've been marked as **not attending**. Click **Decline** again to undo.",
     },
     "player.declined_removed": {
         "de": "✅ Deine Abmeldung wurde zurückgenommen.",
@@ -964,7 +964,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     "tentative.thread_text": {
         "de": "{mentions}\nMöchtet ihr beim Event **{name}** nun fest teilnehmen? Bitte bestätigt eure Teilnahme über den **Anmelden**-Button am Event ({url}) – oder meldet euch mit **Abmelden** ab.",
-        "en": "{mentions}\nWould you like to firmly join **{name}**? Please confirm via the **Register** button on the event ({url}) – or withdraw with **Unregister**.",
+        "en": "{mentions}\nWould you like to firmly join **{name}**? Please confirm via the **Register** button on the event ({url}) – or withdraw with **Decline**.",
     },
     "tentative.dm_text": {
         "de": "Hi! Du bist beim Event **{name}** vorläufig angemeldet. Möchtest du nun fest teilnehmen? Bestätige über den **Anmelden**-Button am Event: {url}",
@@ -996,7 +996,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     "button.unregister": {
         "de": "Abmelden",
-        "en": "Unregister",
+        "en": "Decline",
     },
     "button.admin": {
         "de": "Admin",
