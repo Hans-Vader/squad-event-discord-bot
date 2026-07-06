@@ -92,6 +92,13 @@ Vorläufig Angemeldete **belegen keinen echten Squad-Platz**. Sie werden ganz un
 - Bist du **vorläufig** angemeldet und klickst auf **Beitreten** (🪖), öffnet sich die Auswahl bereits mit deinem Typ und deiner Rolle vorausgefüllt; nach **Weiter** bist du fest angemeldet und die vorläufige Anmeldung entfällt.
 - Mit **Abmelden** (❌) entfernst du auch eine rein vorläufige Anmeldung (mit Bestätigungsdialog).
 
+### Absagen („Kommt nicht") — Spieler-Modus
+
+Der Button **Abmelden** (❌) hat im Spieler-Modus eine zweite Aktion. Klickst du darauf, während du **nicht** angemeldet bist (kein Platz, keine Warteliste, keine vorläufige Anmeldung), wirst du als **abgemeldet** eingetragen — ein ausdrückliches „Ich komme nicht". Abgemeldete werden in einem Feld **🚫 Abgemeldet** als **allerletzter Abschnitt** des Event-Embeds angezeigt. Es erscheint kein Bestätigungsdialog, da nichts entfernt wird.
+
+- Klicke erneut auf **Abmelden** (❌), um deine Absage zurückzunehmen (Toggle).
+- Meldest du dich später fest an (**Beitreten** 🪖) oder **Vorläufig** (🤔), wird die Absage automatisch entfernt.
+
 ### Als Caster anmelden
 
 Nur im **Vertreter-Modus** verfügbar (Caster ist im Spieler-Modus deaktiviert).
@@ -105,6 +112,8 @@ Spieler können gleichzeitig als Caster **und** mit Squads angemeldet sein.
 - Klicke auf **Abmelden** (❌) in der Event-Anzeige
 
 In **beiden Modi** erscheint ein Bestätigungsdialog, bevor die Abmeldung durchgeführt wird — „Möchtest du dich wirklich abmelden? Du verlierst deinen Platz." Du musst auf Abmelden klicken, um zu bestätigen. Nach Abschluss erhältst du eine Bestätigungsnachricht.
+
+Im **Spieler-Modus** gilt: Klickst du auf **Abmelden**, obwohl du *gar keine* Anmeldung hast, gibt es nichts abzumelden — stattdessen wirst du als abgemeldet eingetragen (siehe „Absagen — Spieler-Modus" oben).
 
 ### Alle Spieler-Befehle
 
@@ -337,7 +346,7 @@ Die Event-Anzeige enthält folgende Buttons. Alle Buttons sind für jeden sichtb
 | **Squad** (🪖) | Vertreter-Modus: startet die geführte Anmeldung (Typ → Spielstil → Name) |
 | **Beitreten** (🪖) | Spieler-Modus: Typ und optionale Rolle im Squad wählen, dann automatische Zuweisung zu einem Squad |
 | **Caster** (🎙️) | Direkte Caster-Anmeldung |
-| **Abmelden** (❌) | Squad/Caster abmelden mit Bestätigung |
+| **Abmelden** (❌) | Squad/Caster abmelden (mit Bestätigung); im Spieler-Modus schaltet ein Klick ohne aktive Anmeldung stattdessen eine „abgemeldet"-Markierung um |
 | **Admin** (⚙️) | Öffnet Admin-Panel (nur Organisator) |
 | **Kalender** (📅) | Lädt eine `.ics`-Datei zum Import des Events in deinen Kalender herunter |
 
