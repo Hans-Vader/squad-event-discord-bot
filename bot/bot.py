@@ -7040,7 +7040,7 @@ async def help_command(interaction: discord.Interaction):
             "`/delete_event` - Delete event in channel\n"
             "Event management (open/close, edit, delete) → ⚙️ Admin button\n"
             "Register → 🪖 / 🎙️ buttons\n"
-            "Unregister → ❌ button\n"
+            "Decline → ❌ button\n"
             "Export calendar file (.ics) → 📅 Calendar button\n"
             "`/update` - Refresh event display\n"
             "`/export_csv` - Export squad list as CSV"
