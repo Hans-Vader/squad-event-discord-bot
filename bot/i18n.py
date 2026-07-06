@@ -885,6 +885,30 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Vorläufige Anmeldung entfernt: {user}",
         "en": "Tentative sign-up removed: {user}",
     },
+    "embed.declined_label": {
+        "de": "🚫 Abgemeldet ({count})",
+        "en": "🚫 Declined ({count})",
+    },
+    "embed.declined_more": {
+        "de": "+{count} weitere",
+        "en": "+{count} more",
+    },
+    "player.declined_added": {
+        "de": "🚫 Du wurdest als **abgemeldet** eingetragen. Klicke erneut auf **Abmelden**, um das rückgängig zu machen.",
+        "en": "🚫 You've been marked as **not attending**. Click **Unregister** again to undo.",
+    },
+    "player.declined_removed": {
+        "de": "✅ Deine Abmeldung wurde zurückgenommen.",
+        "en": "✅ Your decline has been withdrawn.",
+    },
+    "log.player_declined": {
+        "de": "🚫 {user} hat sich abgemeldet.",
+        "en": "🚫 {user} declined.",
+    },
+    "log.player_declined_removed": {
+        "de": "{user} hat die Abmeldung zurückgenommen.",
+        "en": "{user} withdrew their decline.",
+    },
     "admin.player_remove_tentative_count": {
         "de": "🤔 {n} vorläufige Anmeldung(en) entfernt.",
         "en": "🤔 Removed {n} tentative sign-up(s).",

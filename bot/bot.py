@@ -44,6 +44,7 @@ from utils import (
     _player_register, _player_unregister, _player_remove_from_waitlist,
     _player_waitlist_type, _player_self_unregister,
     _add_tentative, _remove_tentative, _player_tentative_entry, _player_tentative_type,
+    _add_declined, _remove_declined, _player_declined_entry,
     _player_current_assignment, _select_tentative,
     consolidate_all_player_squads,
     build_event_ics, _ics_slug,
@@ -311,7 +312,9 @@ async def _dispatch_player_unregister(interaction, guild_id: int, channel_id: in
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         return
 
-    await interaction.response.send_message(t("info.not_registered", lang), ephemeral=True)
+    # Not seated, waitlisted or tentative — the Unregister button's second action:
+    # toggle an explicit "declined" (not attending) mark.
+    await player_decline(interaction, guild_id, channel_id)
 
 
 async def _dispatch_player_tentative(interaction, guild_id: int, channel_id: int, lang: str):
@@ -396,7 +399,7 @@ def _ensure_event_keys(event: dict):
     defaults = {
         "squads": {}, "casters": {}, "waitlist": [],
         "infantry_waitlist": [], "vehicle_waitlist": [], "heli_waitlist": [],
-        "caster_waitlist": [], "tentative": [],
+        "caster_waitlist": [], "tentative": [], "declined": [],
         "max_player_slots": 98, "player_slots_used": 0,
         "max_caster_slots": 2, "caster_slots_used": 0,
         "registration_open": False, "is_closed": False,
@@ -1270,6 +1273,49 @@ async def player_register_tentative(interaction, guild_id, channel_id, squad_typ
         t("player.tentative_registered", lang, type=type_label, role_suffix=role_suffix), ephemeral=True)
     await send_to_log_channel(
         t("log.player_tentative", lang, user=user.name, type=type_label, role_suffix=role_suffix),
+        guild=interaction.guild)
+    await update_event_displays(guild_id, channel_id)
+    return True
+
+
+async def player_decline(interaction, guild_id, channel_id):
+    """Toggle the caller's "declined" (not attending) mark — the Unregister
+    button's second action, reached when the user holds no seat/waitlist/tentative
+    spot. First click marks them declined, a second click clears it. Non-destructive,
+    so no confirmation dialog."""
+    lock = _get_guild_lock(guild_id)
+    lang = get_guild_language(guild_id)
+    user = interaction.user
+    user_id = str(user.id)
+
+    async with lock:
+        event, user_assignments, db_id = _get_channel_event(guild_id, channel_id)
+        if not event:
+            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+            return False
+        if not is_player_mode(event):
+            await send_feedback(interaction, t("player.not_player_mode", lang), ephemeral=True)
+            return False
+
+        if _player_declined_entry(event, user_id):
+            _remove_declined(event, user_id)
+            removed = True
+        else:
+            # Guard against a TOCTOU: an admin may have seated the user between the
+            # button click and now — never leave them seated AND declined.
+            if (user_id in (user_assignments or {})
+                    or _player_waitlist_type(event, user_id) is not None
+                    or _player_tentative_entry(event, user_id)):
+                await send_feedback(interaction, t("player.already_registered", lang), ephemeral=True)
+                return False
+            _add_declined(event, user_id, user.display_name)
+            removed = False
+        save_event(db_id, event, user_assignments)
+
+    await send_feedback(interaction,
+        t("player.declined_removed" if removed else "player.declined_added", lang), ephemeral=True)
+    await send_to_log_channel(
+        t("log.player_declined_removed" if removed else "log.player_declined", lang, user=user.name),
         guild=interaction.guild)
     await update_event_displays(guild_id, channel_id)
     return True

@@ -92,6 +92,13 @@ Tentative players **do not occupy a real squad seat**. They are listed at the ve
 - If you are **tentative** and click **Join** (🪖), the picker opens pre-filled with your type and role; after **Continue** you are firmly registered and the tentative sign-up is dropped.
 - **Abmelden** (❌) also removes a tentative-only sign-up (with a confirmation dialog).
 
+### Declining ("Not attending") — Player Mode
+
+The **Abmelden** (❌) button has a second action in player mode. If you click it while you are **not** registered (no seat, no waitlist spot, no tentative sign-up), you are marked as **declined** — an explicit "I'm not coming". Declined players are shown in a **🚫 Abgemeldet** field as the **very last section** of the event embed. No confirmation dialog is shown, since nothing is removed.
+
+- Click **Abmelden** (❌) again to withdraw your decline (toggle off).
+- If you later **Join** (🪖) or go **Tentative** (🤔), your declined mark is cleared automatically.
+
 ### Registering as Caster
 
 Only available in **representative mode** (caster is disabled in player mode).
@@ -105,6 +112,8 @@ Players can be registered as a caster **and** with squads at the same time.
 - Click **Abmelden** (❌) in the event display
 
 A confirmation dialog is shown before the unregistration is processed in **both modes** — you'll see "Do you really want to unregister? You will lose your spot." and must click Unregister to confirm. You receive a confirmation message once complete.
+
+In **player mode**, if you click **Abmelden** while you have *no* registration at all, there is nothing to unregister — instead you're marked as declined (see [Declining](#declining-not-attending--player-mode) above).
 
 ### All Player Commands
 
@@ -337,7 +346,7 @@ The event display contains the following buttons. All buttons are visible to eve
 | **Squad** (🪖) | Rep mode: starts the guided registration (type → playstyle → name) |
 | **Join** (🪖) | Player mode: pick type and optional in-squad role, then auto-assigned to a squad |
 | **Caster** (🎙️) | Direct caster registration |
-| **Abmelden** (❌) | Unregister squad/caster with confirmation |
+| **Abmelden** (❌) | Unregister squad/caster (with confirmation); in player mode, clicking while not registered toggles a "declined" mark instead |
 | **Admin** (⚙️) | Opens admin panel (organizer only) |
 | **Calendar** (📅) | Download an `.ics` file to import the event into your calendar app |
 

@@ -277,6 +277,9 @@ def _player_register(event: dict, user_assignments: dict, user_id, display_name:
     if uid in user_assignments:
         return None, "already_registered"
 
+    # Ending up with a seat or waitlist spot supersedes any "declined" mark.
+    _remove_declined(event, uid)
+
     placed = _try_place_player(event, user_assignments, uid, display_name, squad_type, roles)
     if placed is not None:
         return placed, "registered"
@@ -495,6 +498,7 @@ def _add_tentative(event: dict, user_id, display_name: str, squad_type: str,
         "user_id": uid, "name": display_name,
         "type": squad_type, "roles": list(roles or []),
     })
+    _remove_declined(event, uid)  # going tentative supersedes a "declined" mark
     return "tentative"
 
 
@@ -505,6 +509,43 @@ def _remove_tentative(event: dict, user_id) -> Optional[dict]:
     for i, entry in enumerate(tentative):
         if str(entry.get("user_id")) == uid:
             return tentative.pop(i)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Player-mode "declined" (Abgemeldet) — explicit "not attending"
+# ---------------------------------------------------------------------------
+# A declined player actively signals "I'm not coming". They pick nothing and
+# hold no seat/waitlist/tentative spot, so entries are minimal: {"user_id","name"}.
+# Toggled via the Unregister button when the user holds no other status; gaining
+# any real/tentative status clears the mark (see _player_register / _add_tentative).
+
+
+def _player_declined_entry(event: dict, user_id) -> Optional[dict]:
+    """Return the user's declined entry, or None. Non-destructive."""
+    uid = str(user_id)
+    for entry in event.get("declined", []):
+        if str(entry.get("user_id")) == uid:
+            return entry
+    return None
+
+
+def _add_declined(event: dict, user_id, display_name: str) -> None:
+    """Mark a user as declined ("not attending"). One entry per user; touches no
+    squads, slots, waitlists nor the tentative list."""
+    uid = str(user_id)
+    declined = event.setdefault("declined", [])
+    declined[:] = [e for e in declined if str(e.get("user_id")) != uid]
+    declined.append({"user_id": uid, "name": display_name})
+
+
+def _remove_declined(event: dict, user_id) -> Optional[dict]:
+    """Remove and return the user's declined entry, or None if absent."""
+    uid = str(user_id)
+    declined = event.get("declined", [])
+    for i, entry in enumerate(declined):
+        if str(entry.get("user_id")) == uid:
+            return declined.pop(i)
     return None
 
 
@@ -1159,6 +1200,25 @@ def format_event_details(event: dict, lang: str = "de",
                 name=t("embed.tentative_label", lang,
                        type=t(f"embed.type_{type_key}", lang), count=len(entries)),
                 value="\n".join(lines), inline=False)
+
+    # Declined ("Abgemeldet") players — an explicit "not attending", rendered as
+    # the very last field. Flat list (a decliner picks no type), so it has no
+    # natural per-type split; cap the value to stay under Discord's 1024-char
+    # field limit, else the whole embed edit would be rejected.
+    declined = event.get("declined", [])
+    if is_player_mode and declined:
+        names = [f"**{d.get('name', '?')}**" for d in declined]
+        value, shown = "", 0
+        for n in names:  # ponytail: 1024-char field cap; overflow collapses to "+X weitere"
+            if len(value) + len(n) + 1 > 950:
+                break
+            value += ("\n" if value else "") + n
+            shown += 1
+        if shown < len(names):
+            value += "\n*" + t("embed.declined_more", lang, count=len(names) - shown) + "*"
+        embed.add_field(
+            name=t("embed.declined_label", lang, count=len(declined)),
+            value=value, inline=False)
 
     # Image
     embed_image_url = event.get("embed_image_url")
