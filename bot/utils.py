@@ -152,6 +152,11 @@ def _get_member_roles(member: dict) -> list:
     return [single] if single else []
 
 
+def _squad_has_sl(squad) -> bool:
+    """True if any member of the squad holds the "Squad Leader" role."""
+    return any("Squad Leader" in _get_member_roles(m) for m in squad.get("members", []))
+
+
 def _format_role_suffix(roles, lang) -> str:
     """Render a player's roles as a parenthetical suffix, or "" when none.
 
@@ -218,9 +223,6 @@ def _try_place_player(event: dict, user_assignments: dict, uid: str,
     roles = list(roles or [])
     is_sl = "Squad Leader" in roles
 
-    def _has_sl(squad):
-        return any("Squad Leader" in _get_member_roles(m) for m in squad.get("members", []))
-
     def _add_member(name, squad):
         members = squad.setdefault("members", [])
         entry = {"user_id": uid, "name": display_name}
@@ -236,7 +238,7 @@ def _try_place_player(event: dict, user_assignments: dict, uid: str,
             continue
         if len(squad.setdefault("members", [])) >= squad.get("size", 0):
             continue
-        if is_sl and _has_sl(squad):
+        if is_sl and _squad_has_sl(squad):
             continue
         return _add_member(name, squad)
 
@@ -440,7 +442,52 @@ def _player_unregister(event: dict, user_assignments: dict, user_id) -> tuple:
         _compact_player_squads(event, user_assignments, squad_type)
         promoted = _promote_player_waitlist(event, user_assignments, squad_type)
 
+    _rebalance_squad_leaders(event, user_assignments)
     return True, squad_name, promoted
+
+
+def _rebalance_squad_leaders(event: dict, user_assignments: dict) -> list:
+    """Move a spare Squad Leader into any infantry squad left without one.
+
+    For each infantry squad with 0 SLs, pull one SL from a squad that has a
+    surplus (2+). If the receiver is full, one of its non-SL members swaps back
+    into the donor (which just freed a seat) so both stay within `size`. Squads
+    with no spare SL available are left leaderless — the embed flags them with ⚠️.
+
+    Returns [(uid, name, target_squad), ...] for each moved leader (for logging).
+    ponytail: infantry-only — "Squad Leader" is an infantry-only role (ROLES_BY_TYPE).
+    """
+    squads = event.get("squads", {})
+    inf = [(n, s) for n, s in squads.items() if s.get("type") == "infantry"]
+    moved: list = []
+    for name, squad in inf:
+        if _squad_has_sl(squad):
+            continue
+        donor_name = donor = sl = None
+        for dn, ds in inf:
+            if dn == name:
+                continue
+            sls = [m for m in ds.get("members", []) if "Squad Leader" in _get_member_roles(m)]
+            if len(sls) >= 2:
+                donor_name, donor, sl = dn, ds, sls[-1]
+                break
+        if sl is None:
+            continue  # no spare SL anywhere → leave leaderless (embed warns)
+        donor["members"].remove(sl)
+        members = squad.setdefault("members", [])
+        if len(members) >= squad.get("size", 0):  # receiver full → swap a non-SL out
+            spare = next((m for m in members
+                          if "Squad Leader" not in _get_member_roles(m)), None)
+            if spare is not None:
+                members.remove(spare)
+                donor.setdefault("members", []).append(spare)
+                if spare.get("user_id"):
+                    user_assignments[spare["user_id"]] = [donor_name]
+        members.append(sl)
+        if sl.get("user_id"):
+            user_assignments[sl["user_id"]] = [name]
+        moved.append((sl.get("user_id"), sl.get("name"), name))
+    return moved
 
 
 def _player_waitlist_type(event: dict, user_id) -> Optional[str]:
@@ -1128,7 +1175,10 @@ def format_event_details(event: dict, lang: str = "de",
                                    if number.isdigit() else raw_name)
                     # Header on its own line, members listed below it; blank
                     # line between squads keeps the overview easy to scan.
-                    text += f"**{squad_label}** ({filled}/{data.get('size', 0)}):\n{names}\n\n"
+                    header = f"**{squad_label}** ({filled}/{data.get('size', 0)})"
+                    if type_key == "infantry" and roles_enabled and filled > 0 and not _squad_has_sl(data):
+                        header += f" ⚠️ {t('embed.no_squad_leader', lang)}"
+                    text += f"{header}:\n{names}\n\n"
                 else:
                     playstyle = data.get("playstyle", "Normal")
                     sq_size = data.get("size", 0)
