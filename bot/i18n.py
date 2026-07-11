@@ -998,6 +998,66 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Vorläufige per DM benachrichtigt: {ok} ok, {failed} fehlgeschlagen ({name})",
         "en": "Tentative players notified via DM: {ok} ok, {failed} failed ({name})",
     },
+    # Shared notify-wizard strings (used by both the tentative and the
+    # "confirm registered" flow). The recipient picker chunks entries into
+    # multiple 25-option selects, so it needs a confirm button + range label.
+    "tentative.notify_select_confirm": {
+        "de": "Weiter",
+        "en": "Continue",
+    },
+    "tentative.notify_select_empty": {
+        "de": "Bitte wähle zuerst mindestens einen Empfänger aus – oder nutze „Alle fragen“.",
+        "en": "Please select at least one recipient first – or use “Ask all”.",
+    },
+    "tentative.notify_select_range": {
+        "de": "Auswahl {a}–{b}",
+        "en": "Selection {a}–{b}",
+    },
+    # "Angemeldete fragen" — remind firmly-registered players to confirm/withdraw.
+    "button.notify_registered": {
+        "de": "Angemeldete fragen",
+        "en": "Ask registered",
+    },
+    "confirm.none": {
+        "de": "Es sind aktuell keine Spieler fest angemeldet.",
+        "en": "There are currently no registered players.",
+    },
+    "confirm.select_choose": {
+        "de": "Wen möchtest du erinnern? Wähle einzelne Angemeldete aus – oder nutze „Alle fragen“.",
+        "en": "Whom do you want to remind? Pick individual registered players – or use “Ask all”.",
+    },
+    "confirm.notify_choose": {
+        "de": "Wie möchtest du die angemeldeten Spieler an ihre Teilnahme erinnern?",
+        "en": "How do you want to remind the registered players about their attendance?",
+    },
+    "confirm.thread_name": {
+        "de": "Teilnahme-Check – {name}",
+        "en": "Attendance check – {name}",
+    },
+    "confirm.thread_text": {
+        "de": "{mentions}\nErinnerung: Ihr seid beim Event **{name}** angemeldet. Seid ihr wirklich dabei? Falls du doch nicht kannst, melde dich bitte über den **Abmelden**-Button am Event ({url}) ab.",
+        "en": "{mentions}\nReminder: you are registered for **{name}**. Are you really attending? If you can't make it, please withdraw via the **Decline** button on the event ({url}).",
+    },
+    "confirm.dm_text": {
+        "de": "Hi! Erinnerung: Du bist beim Event **{name}** angemeldet. Bist du wirklich dabei? Falls du doch nicht kannst, melde dich bitte über den **Abmelden**-Button am Event ab: {url}",
+        "en": "Hi! Reminder: you are registered for **{name}**. Are you really attending? If you can't make it, please withdraw via the **Decline** button on the event: {url}",
+    },
+    "confirm.notify_thread_done": {
+        "de": "✅ {count} angemeldete Spieler im Thread erinnert: {thread}",
+        "en": "✅ Reminded {count} registered players in the thread: {thread}",
+    },
+    "confirm.notify_dm_done": {
+        "de": "✅ {ok} angemeldete Spieler per DM erinnert{failed_suffix}.",
+        "en": "✅ Reminded {ok} registered players via DM{failed_suffix}.",
+    },
+    "log.confirm_notified_thread": {
+        "de": "Angemeldete im Thread erinnert: {count} ({name})",
+        "en": "Registered players reminded in thread: {count} ({name})",
+    },
+    "log.confirm_notified_dm": {
+        "de": "Angemeldete per DM erinnert: {ok} ok, {failed} fehlgeschlagen ({name})",
+        "en": "Registered players reminded via DM: {ok} ok, {failed} failed ({name})",
+    },
     "button.unregister": {
         "de": "Abmelden",
         "en": "Decline",

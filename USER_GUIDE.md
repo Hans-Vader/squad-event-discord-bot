@@ -264,7 +264,7 @@ You can configure an event to automatically spawn a follow-up. Set this up via D
 
 ### Admin Panel — Representative Mode
 
-Click the **Admin** (⚙️) button on the event embed to open the admin panel. In rep mode it contains 8 buttons in 4 rows:
+Click the **Admin** (⚙️) button on the event embed to open the admin panel. In rep mode it contains 9 buttons in 4 rows:
 
 | Row | Button | Description |
 |---|---|---|
@@ -274,6 +274,7 @@ Click the **Admin** (⚙️) button on the event embed to open the admin panel. 
 | Caster | **Remove Caster** | Select a caster to remove (includes waitlisted casters) |
 | Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
 | Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt. For rep/caster events this reverts the event to its early-access state (only early-access roles can register) |
+| Registration | **Ask registered** (📨) | Remind the firmly-registered representatives/casters to confirm their attendance — see the player-mode row below for the flow. Available in both modes. |
 | Event | **Edit Event** | Opens DM-based editing session (see above) |
 | Event | **Delete Event** | Delete the event with confirmation |
 
@@ -281,13 +282,14 @@ When adding a squad as admin, the selected representative user counts toward the
 
 ### Admin Panel — Player Mode
 
-In player mode the admin panel has 8 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
+In player mode the admin panel has 9 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
 
 | Row | Button | Description |
 |---|---|---|
 | Player | **Add Player** | Pick one or more Discord users (multi-select), a squad type, and (optionally) one or more in-squad roles applied to all picked users; then confirm. All picked users are registered in a single submit. If capacity is hit mid-batch, remaining users go to the waitlist. The chosen roles are stored for each user and shown next to their name in the event embed (no role → just the name). |
 | Player | **Remove Player** | Pick one or more players (multi-select) — from current squad members, from any waitlist (prefixed `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`), **and** from the tentative list (prefixed `[Vorl-Inf]` / `[Vorl-Veh]` / `[Vorl-Heli]`). The action is gated behind a red "Unregister" confirm button. |
-| Player | **Ask tentatives** (📨) | Ask the tentative players whether they'll join. You first pick **which** tentatives to ask (a multi-select dropdown) or press **Ask all**. Then you choose **thread** or **DM**; for a thread you then choose **public** (created directly on the event message) or **private** (a private thread that also adds you, the organizer). The message pings/links the chosen tentatives so they confirm via the existing **Join** / **Decline** buttons. Only shown when there are tentative players. |
+| Player | **Ask tentatives** (📨) | Ask the tentative players whether they'll join. You first pick **which** tentatives to ask (multi-select dropdowns — several appear when there are more than 25) and press **Continue**, or press **Ask all**. Then you choose **thread** or **DM**; for a thread you then choose **public** (created directly on the event message) or **private** (a private thread that also adds you, the organizer). The message pings/links the chosen tentatives so they confirm via the existing **Join** / **Decline** buttons. Only shown when there are tentative players. |
+| Player | **Ask registered** (📨) | Remind the **firmly-registered** players (seated in a squad or as caster — not waitlisted) to confirm their attendance. Same picker/delivery as *Ask tentatives* (pick recipients + **Continue**, or **Ask all**; then thread or DM). The reminder asks anyone who can't make it to withdraw via the **Decline** button — no active confirmation is tracked; the organizer simply sees who unregisters. If nobody is registered, clicking it just says so. |
 | Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
 | Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt |
 | Registration | **Consolidate Squads** | Merge partially-filled squads and drop empty ones — gated behind a confirmation prompt. Also happens automatically when the event starts. Player mode only. |

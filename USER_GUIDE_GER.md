@@ -264,7 +264,7 @@ Du kannst festlegen, dass ein Event automatisch ein Folgeevent erstellt. Konfigu
 
 ### Admin-Panel — Vertreter-Modus
 
-Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu öffnen. Im Vertreter-Modus enthält es 8 Buttons in 4 Reihen:
+Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu öffnen. Im Vertreter-Modus enthält es 9 Buttons in 4 Reihen:
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
@@ -274,6 +274,7 @@ Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu �
 | Caster | **Caster entfernen** | Caster zum Entfernen auswählen (inkl. Warteliste) |
 | Anmeldung | **Anmeldung öffnen** | Anmeldung manuell öffnen — hinter einer Bestätigungsabfrage abgesichert (beim Öffnen kann ein Ping an die konfigurierten Rollen gesendet werden) |
 | Anmeldung | **Anmeldung schließen** | Anmeldung manuell schließen — hinter einer Bestätigungsabfrage abgesichert. Bei Vertreter-/Caster-Events wird das Event in den Early-Access-Zustand zurückgesetzt (nur Early-Access-Rollen können sich anmelden) |
+| Anmeldung | **Angemeldete fragen** (📨) | Erinnert die fest angemeldeten Vertreter/Caster daran, ihre Teilnahme zu bestätigen — der Ablauf steht in der Spieler-Modus-Zeile weiter unten. In beiden Modi verfügbar. |
 | Event | **Event bearbeiten** | Öffnet DM-basierte Bearbeitungssitzung (siehe oben) |
 | Event | **Event löschen** | Event mit Bestätigung löschen |
 
@@ -281,13 +282,14 @@ Beim Hinzufügen eines Squads als Admin wird der ausgewählte Vertreter für das
 
 ### Admin-Panel — Spieler-Modus
 
-Im Spieler-Modus hat das Admin-Panel 8 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
+Im Spieler-Modus hat das Admin-Panel 9 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
 | Spieler | **Spieler hinzufügen** | Mehrere Discord-User (Mehrfachauswahl), einen Squad-Typ und (optional) eine oder mehrere Rollen im Squad wählen, die für alle ausgewählten User gelten; dann bestätigen. Alle User werden in einem Submit angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, werden die restlichen auf die Warteliste gesetzt. Die gewählten Rollen werden für jeden User gespeichert und neben seinem Namen im Event-Embed angezeigt (ohne Rolle nur der Name). |
 | Spieler | **Spieler entfernen** | Einen oder mehrere Spieler auswählen (Mehrfachauswahl) — aus aktuellen Squad-Mitgliedern, aus jeder Warteliste (markiert mit `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`) **und** aus der Vorläufig-Liste (markiert mit `[Vorl-Inf]` / `[Vorl-Veh]` / `[Vorl-Heli]`). Die Aktion ist hinter einem roten „Abmelden"-Bestätigungsbutton abgesichert. |
-| Spieler | **Vorläufige fragen** (📨) | Fragt die vorläufig Angemeldeten, ob sie teilnehmen. Zuerst wählst du aus, **wen** du fragen willst (Mehrfach-Dropdown) oder drückst **Alle fragen**. Danach **Thread** oder **DM**; beim Thread dann **öffentlich** (direkt an der Event-Nachricht erstellt) oder **privat** (privater Thread, der zusätzlich dich als Orga hinzufügt). Die Nachricht pingt/verlinkt die gewählten Vorläufigen, sodass sie über die vorhandenen **Beitreten** / **Abmelden**-Buttons bestätigen. Wird nur angezeigt, wenn es vorläufig Angemeldete gibt. |
+| Spieler | **Vorläufige fragen** (📨) | Fragt die vorläufig Angemeldeten, ob sie teilnehmen. Zuerst wählst du aus, **wen** du fragen willst (Mehrfach-Dropdowns — bei mehr als 25 erscheinen mehrere) und drückst **Weiter**, oder du drückst **Alle fragen**. Danach **Thread** oder **DM**; beim Thread dann **öffentlich** (direkt an der Event-Nachricht erstellt) oder **privat** (privater Thread, der zusätzlich dich als Orga hinzufügt). Die Nachricht pingt/verlinkt die gewählten Vorläufigen, sodass sie über die vorhandenen **Beitreten** / **Abmelden**-Buttons bestätigen. Wird nur angezeigt, wenn es vorläufig Angemeldete gibt. |
+| Spieler | **Angemeldete fragen** (📨) | Erinnert die **fest Angemeldeten** (mit Squad-Platz oder als Caster — nicht Warteliste) daran, ihre Teilnahme zu bestätigen. Gleicher Auswahl-/Versand-Ablauf wie *Vorläufige fragen* (Empfänger wählen + **Weiter**, oder **Alle fragen**; dann Thread oder DM). Die Erinnerung bittet alle, die doch nicht können, sich über den **Abmelden**-Button abzumelden — es wird keine aktive Bestätigung getrackt; die Orga sieht einfach, wer sich abmeldet. Gibt es keine Angemeldeten, meldet der Button das beim Klick. |
 | Anmeldung | **Anmeldung öffnen** | Anmeldung manuell öffnen — hinter einer Bestätigungsabfrage abgesichert (beim Öffnen kann ein Ping an die konfigurierten Rollen gesendet werden) |
 | Anmeldung | **Anmeldung schließen** | Anmeldung manuell schließen — hinter einer Bestätigungsabfrage abgesichert |
 | Anmeldung | **Squads zusammenlegen** | Teilweise gefüllte Squads zusammenlegen und leere Squads entfernen — hinter einer Bestätigungsabfrage abgesichert. Passiert automatisch auch beim Event-Start. Nur im Spieler-Modus verfügbar. |
