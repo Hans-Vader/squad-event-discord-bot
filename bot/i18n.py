@@ -476,6 +476,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "⚔️ Infanterie ({size} Spieler)",
         "en": "⚔️ Infantry ({size} players)",
     },
+    "squad.type_infantry_sized": {
+        "de": "⚔️ Infanterie ({size} Spieler) · {count}x",
+        "en": "⚔️ Infantry ({size} players) · {count}x",
+    },
+    "squad.waitlisted_mirror": {
+        "de": "Der letzte Squad-Slot ist für das Gegenstück eines übergroßen Squads reserviert. Squad **{name}** ({type}, {size} Spieler) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
+        "en": "The last squad slot is reserved for an oversized squad's mirror. Squad **{name}** ({type}, {size} players) has been waitlisted (position {pos}). {info}",
+    },
+    "squad.size_unavailable": {
+        "de": "Diese Squad-Größe ist nicht mehr verfügbar. Bitte öffne die Anmeldung erneut und wähle eine aktuelle Option.",
+        "en": "This squad size is no longer available. Please reopen the registration dialog and pick a current option.",
+    },
     "squad.type_vehicle": {
         "de": "🛺 Fahrzeug ({size} Spieler)",
         "en": "🛺 Vehicle ({size} players)",
@@ -687,6 +699,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "embed.server_overview_value": {
         "de": "{cap} Plätze ({free} frei)\nUngenutzt: {unused}",
         "en": "{cap} slots ({free} free)\nUnused: {unused}",
+    },
+    "embed.server_overview_value_no_unused": {
+        "de": "{cap} Plätze ({free} frei)",
+        "en": "{cap} slots ({free} free)",
     },
     "embed.max_per_user_label": {
         "de": "👤 Max Squads pro Spieler: {count}",
@@ -1572,6 +1588,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "22. Rollenauswahl bei Anmeldung",
         "en": "22. Role selection at registration",
     },
+    "edit.property.dont_waste_slots": {
+        "de": "23. Slots nicht verschwenden (größere Squads)",
+        "en": "23. Don't waste slots (bigger squads)",
+    },
     "edit.bool.enabled": {
         "de": "Aktiviert",
         "en": "Enabled",
@@ -2182,6 +2202,44 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Enabled",
     },
     "wizard.summary_player_roles_no": {
+        "de": "Deaktiviert",
+        "en": "Disabled",
+    },
+    "wizard.dont_waste_step_title": {
+        "de": "Slots nicht verschwenden",
+        "en": "Don't waste slots",
+    },
+    "wizard.dont_waste_step_desc": {
+        "de": ("Bei der aktuellen Konfiguration bleiben {unused} Plätze ungenutzt. "
+               "Wenn aktiviert, können Squads größer als die Standardgröße angemeldet werden — "
+               "immer in gleicher Anzahl pro Größe, damit beide Teams gespiegelt werden können. "
+               "Die erste Anmeldung einer Übergröße legt die Größe fest."),
+        "en": ("With the current configuration {unused} slots stay unused. "
+               "When enabled, squads bigger than the base size can register — "
+               "always in equal numbers per size so both teams can be mirrored. "
+               "The first oversized registration locks in the size."),
+    },
+    "wizard.dont_waste_select_placeholder": {
+        "de": "Ungenutzte Plätze verwenden...",
+        "en": "Use leftover slots...",
+    },
+    "wizard.dont_waste_enabled": {
+        "de": "Slots nicht verschwenden aktivieren",
+        "en": "Enable don't waste slots",
+    },
+    "wizard.dont_waste_disabled": {
+        "de": "Slots nicht verschwenden deaktivieren",
+        "en": "Disable don't waste slots",
+    },
+    "wizard.summary_dont_waste": {
+        "de": "Slots nicht verschwenden",
+        "en": "Don't waste slots",
+    },
+    "wizard.summary_dont_waste_yes": {
+        "de": "Aktiviert",
+        "en": "Enabled",
+    },
+    "wizard.summary_dont_waste_no": {
         "de": "Deaktiviert",
         "en": "Disabled",
     },
