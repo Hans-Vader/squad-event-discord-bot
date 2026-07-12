@@ -43,6 +43,7 @@ Use this mode for pick-up matches or community seat-filling events where individ
 | Registration UI | Squad name modal + playstyle picker | Type + optional role picker; Discord display name used |
 | Slot overview label | "🖥️ Server — 100 slots" | "📋 Seats — 17 slots" |
 | Admin-add | Add Squad (name + rep + playstyle) | Add Player (multi-select users + type + optional roles) |
+| Don't waste slots | Registrants pick an oversized squad size | Bot pre-plans squad capacities automatically |
 
 ---
 
@@ -148,7 +149,7 @@ After you pick a mode, a multi-step wizard guides you through:
 - Registration start time (date/time or "now"/"sofort" for immediately)
 
 **Step 2 — Server Configuration (Modal):**
-- Server max players (rep mode) or Total seats (player mode), max caster slots (0 = casters disabled, and forced to 0 in player mode — the field is hidden), squad sizes (Infantry / Vehicle / Heli), max vehicle squads, max heli squads
+- Server max players (rep mode) or Total seats (player mode), max caster slots (0 = casters disabled, and forced to 0 in player mode — the field is hidden), squad sizes (Infantry / Vehicle / Heli, each 1–9 — the in-game squad limit), max vehicle squads, max heli squads
 - All pre-filled from server defaults (`/config_defaults`)
 
 **Step 3 — Registration Roles:**
@@ -183,7 +184,7 @@ Player mode shows only the early-access % cap.
 - *Player mode:* Role selection — whether players may pick an in-squad role (Squad Leader, Medic, Pilot, …) when registering. **When disabled, there is no role dropdown and roles are not shown in the embed.** Default: enabled. Can also be changed later via the DM editor.
 
 **Step 8 — Don't waste slots** *(only shown when the slot math leaves at least 2 unused seats)*:
-- When enabled, the leftover infantry seats can be absorbed by **oversized squads**: with 4 unused seats and squad size 6, registrants may pick a 6-, 7- or 8-player squad. Oversized squads always come in **equal numbers per size** so organizers can mirror them across two teams — the first oversized registration locks in the size (e.g. either 4× 7-player or 2× 8-player), and the remaining count is shown next to each option. If an oversized squad unregisters, its size is re-offered until the pair is complete again; when all oversized squads are gone, the full choice resets. Leftover seats that can't form a pair stay unused. With the mode enabled the "Unused" counter disappears from the event embed. Default: disabled. Can also be changed later via the DM editor (property 23).
+- The number of infantry squads is **always kept even** so both teams get the same count (see slot calculation below). When this step is enabled, the unused seats — the remainder plus, with an odd raw cap, the dropped squad's seats — can be absorbed by **oversized squads**. Offered are always the sizes that use the free seats with **as few oversized squads as possible** (least waste first, then fewest squads, bigger squads preferred): with 4 unused seats and squad size 6 that's one 8er pair (not two 7er pairs); with 8 unused seats a 9er pair plus a 7er pair. Oversized squads never exceed **9 players** — the in-game squad limit. The creator can additionally **restrict which oversized sizes are allowed** (e.g. only 7-player squads, or 7 and 8 but no 9) via a second dropdown in this step; default is all possible sizes. Oversized squads always come in **equal numbers per size** so organizers can mirror them across two teams — each offered size's complete **pair** fits the remaining unused seats, with the remaining count shown next to each option (e.g. 8 leftover seats: after a 9-player pair, a 7-player pair is offered for the remaining 2). If an oversized squad unregisters, its size is re-offered until the pair is complete again. Leftover seats that can't form a pair anymore stay unused and reappear as the "Unused" counter. That counter is only shown when there actually are wasted slots ("Unused: 0" is never displayed), and every size is permanently visible in the infantry field header with its own registered/possible counter — e.g. `⚔️ Infantry (1/16) [(0/14) Size: 6 | (1/2) Size: 7]` — in addition to each squad row showing its own seat count. **Player mode:** the same toggle works there too — nobody picks sizes; instead the bot pre-plans the squad capacities (base squads first, the minimal oversized pairs as the last squads) and players simply fill them. Consolidation (event start / admin button) re-derives the cleanest paired layout from the actual player count (e.g. 88 players at size 6 → 12× 6 + one 8-player pair). Default: disabled. Can also be changed later via the DM editor (property 23) — enabling it there is rejected with an error while there are no unused slots, or only a single one (a lone slot can never form a pair). The wizard step itself only appears when at least 2 unused slots exist. Full details, worked examples, and guarantees: [docs/dont-waste-slots.md](docs/dont-waste-slots.md).
 
 **Step 9 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel
@@ -200,7 +201,7 @@ Server: 100 slots
 - Unused: 2 slots
 ```
 
-With **Don't waste slots** enabled, those 2 unused slots would instead allow one pair of 7-player infantry squads.
+The infantry squad count is always rounded down to an **even** number so both teams get the same count — if the raw math yields an odd cap (e.g. 15), the cap becomes 14 and the dropped squad's seats count as unused. With **Don't waste slots** enabled, unused slots are offered as oversized squads instead — in the example above, the 2 unused slots would allow one pair of 7-player infantry squads.
 
 ### Editing an Event via DM
 
@@ -234,6 +235,7 @@ Organizers can edit a running event via DM: Click **Edit Event** in the admin pa
 21. Max squads per early-access role
 22. Role selection at registration (player mode, on/off)
 23. Don't waste slots (bigger squads, on/off)
+24. Allowed oversized sizes (comma-separated, e.g. "7, 8"; empty = all)
 
 There's no separate confirm step — each edit applies as soon as you make it.
 
@@ -271,7 +273,7 @@ You can configure an event to automatically spawn a follow-up. Set this up via D
 
 ### Admin Panel — Representative Mode
 
-Click the **Admin** (⚙️) button on the event embed to open the admin panel. In rep mode it contains 8 buttons in 4 rows:
+Click the **Admin** (⚙️) button on the event embed to open the admin panel. In rep mode it contains 9 buttons in 4 rows:
 
 | Row | Button | Description |
 |---|---|---|
@@ -281,6 +283,7 @@ Click the **Admin** (⚙️) button on the event embed to open the admin panel. 
 | Caster | **Remove Caster** | Select a caster to remove (includes waitlisted casters) |
 | Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
 | Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt. For rep/caster events this reverts the event to its early-access state (only early-access roles can register) |
+| Registration | **Ask registered** (📨) | Remind the firmly-registered representatives/casters to confirm their attendance — see the player-mode row below for the flow. Available in both modes. |
 | Event | **Edit Event** | Opens DM-based editing session (see above) |
 | Event | **Delete Event** | Delete the event with confirmation |
 
@@ -288,13 +291,14 @@ When adding a squad as admin, the selected representative user counts toward the
 
 ### Admin Panel — Player Mode
 
-In player mode the admin panel has 8 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
+In player mode the admin panel has 9 buttons in 3 rows — the Squad and Caster rows are replaced with a single Player row:
 
 | Row | Button | Description |
 |---|---|---|
 | Player | **Add Player** | Pick one or more Discord users (multi-select), a squad type, and (optionally) one or more in-squad roles applied to all picked users; then confirm. All picked users are registered in a single submit. If capacity is hit mid-batch, remaining users go to the waitlist. The chosen roles are stored for each user and shown next to their name in the event embed (no role → just the name). |
 | Player | **Remove Player** | Pick one or more players (multi-select) — from current squad members, from any waitlist (prefixed `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`), **and** from the tentative list (prefixed `[Vorl-Inf]` / `[Vorl-Veh]` / `[Vorl-Heli]`). The action is gated behind a red "Unregister" confirm button. |
-| Player | **Ask tentatives** (📨) | Ask the tentative players whether they'll join. You first pick **which** tentatives to ask (a multi-select dropdown) or press **Ask all**. Then you choose **thread** or **DM**; for a thread you then choose **public** (created directly on the event message) or **private** (a private thread that also adds you, the organizer). The message pings/links the chosen tentatives so they confirm via the existing **Join** / **Decline** buttons. Only shown when there are tentative players. |
+| Player | **Ask tentatives** (📨) | Ask the tentative players whether they'll join. You first pick **which** tentatives to ask (multi-select dropdowns — several appear when there are more than 25) and press **Continue**, or press **Ask all**. Then you choose **thread** or **DM**; for a thread you then choose **public** (created directly on the event message) or **private** (a private thread that also adds you, the organizer). The message pings/links the chosen tentatives so they confirm via the existing **Join** / **Decline** buttons. Only shown when there are tentative players. |
+| Player | **Ask registered** (📨) | Remind the **firmly-registered** players (seated in a squad or as caster — not waitlisted) to confirm their attendance. Same picker/delivery as *Ask tentatives* (pick recipients + **Continue**, or **Ask all**; then thread or DM). The reminder asks anyone who can't make it to withdraw via the **Decline** button — no active confirmation is tracked; the organizer simply sees who unregisters. If nobody is registered, clicking it just says so. |
 | Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
 | Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt |
 | Registration | **Consolidate Squads** | Merge partially-filled squads and drop empty ones — gated behind a confirmation prompt. Also happens automatically when the event starts. Player mode only. |

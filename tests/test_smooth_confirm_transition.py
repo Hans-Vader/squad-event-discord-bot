@@ -74,6 +74,33 @@ class SendFeedbackEditModeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(inter.followup.calls), 1)
         self.assertEqual(inter.edit_original_calls, [], "no flag → no in-place edit")
 
+    async def test_squad_name_modal_replaces_select_message(self):
+        # SquadNameModal.on_submit opts into edit_feedback so the registration result
+        # replaces the type/playstyle select message instead of appending a new ephemeral.
+        modal = bot.SquadNameModal("1", "2", "infantry", "Normal")
+        modal.squad_name._value = "Alpha"
+        inter = _Interaction(done=False)
+        inter.response.defer_calls = []
+
+        async def _defer(**kw):
+            inter.response.defer_calls.append(kw)
+        inter.response.defer = _defer
+
+        calls = []
+        orig = bot.register_squad
+
+        async def _fake_register(*a, **kw):
+            calls.append((a, kw))
+        bot.register_squad = _fake_register
+        try:
+            await modal.on_submit(inter)
+        finally:
+            bot.register_squad = orig
+
+        self.assertTrue(inter.extras["edit_feedback"])
+        self.assertEqual(len(inter.response.defer_calls), 1)
+        self.assertEqual(len(calls), 1)
+
     async def test_edit_in_place_sets_flag_and_stops_view(self):
         view = bot.BaseConfirmationView()
         inter = _Interaction(done=False)

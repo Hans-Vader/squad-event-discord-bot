@@ -43,6 +43,7 @@ Dieser Modus eignet sich für Pick-up-Matches oder Community-Events, bei denen s
 | Anmelde-UI | Squad-Name-Modal + Spielstil | Typ + optionale Rolle, Discord-Anzeigename wird verwendet |
 | Slot-Übersicht-Label | „🖥️ Server — 100 Plätze" | „📋 Plätze — 17 Plätze" |
 | Admin-Hinzufügen | Squad hinzufügen (Name + Vertreter + Spielstil) | Spieler hinzufügen (Mehrfachauswahl Users + Typ + optionale Rollen) |
+| Slots nicht verschwenden | Anmelder wählen eine Übergröße | Bot plant die Squad-Kapazitäten automatisch |
 
 ---
 
@@ -148,7 +149,7 @@ Nach der Modus-Wahl führt dich ein mehrstufiger Wizard durch:
 - Anmeldezeitpunkt (Datum/Uhrzeit oder „sofort"/„jetzt" für sofortige Öffnung)
 
 **Schritt 2 — Server-Konfiguration (Modal):**
-- Server Max Spieler (Vertreter-Modus) bzw. Plätze gesamt (Spieler-Modus), Max Caster (0 = Caster deaktiviert; im Spieler-Modus fest auf 0 gesetzt und ausgeblendet), Squad-Größen (Inf / Fahr / Heli), Max Fahrzeug-Squads, Max Heli-Squads
+- Server Max Spieler (Vertreter-Modus) bzw. Plätze gesamt (Spieler-Modus), Max Caster (0 = Caster deaktiviert; im Spieler-Modus fest auf 0 gesetzt und ausgeblendet), Squad-Größen (Inf / Fahr / Heli, jeweils 1–9 — das Squad-Limit im Spiel), Max Fahrzeug-Squads, Max Heli-Squads
 - Alle Werte vorausgefüllt aus den Server-Standardwerten (`/config_defaults`)
 
 **Schritt 3 — Anmelde-Rollen:**
@@ -183,7 +184,7 @@ Im Spieler-Modus wird nur das %-Limit für Vorab-Zugang angezeigt.
 - *Spieler-Modus:* Rollen-Auswahl — ob Spieler bei der Anmeldung eine Rolle im Squad (Squad Leader, Medic, Pilot, …) wählen können. **Ist sie deaktiviert, gibt es kein Rollen-Dropdown und im Embed werden keine Rollen angezeigt.** Standard: aktiviert. Kann später auch über den DM-Editor geändert werden.
 
 **Schritt 8 — Slots nicht verschwenden** *(erscheint nur, wenn die Slot-Berechnung mindestens 2 ungenutzte Plätze übrig lässt)*:
-- Wenn aktiviert, können die übrigen Infanterie-Plätze durch **übergroße Squads** genutzt werden: bei 4 ungenutzten Plätzen und Squad-Größe 6 kann man ein 6er-, 7er- oder 8er-Squad anmelden. Übergroße Squads gibt es immer in **gleicher Anzahl pro Größe**, damit die Organisatoren beide Teams spiegeln können — die erste übergroße Anmeldung legt die Größe fest (z. B. entweder 4× 7er oder 2× 8er), die verbleibende Anzahl steht neben jeder Option. Meldet sich ein übergroßes Squad ab, wird seine Größe wieder angeboten, bis das Paar erneut vollständig ist; sind alle übergroßen Squads weg, gibt es wieder die volle Auswahl. Plätze, die kein Paar mehr ergeben, bleiben ungenutzt. Mit aktiviertem Modus verschwindet der „Ungenutzt"-Zähler aus dem Event-Embed. Standard: deaktiviert. Kann später auch über den DM-Editor geändert werden (Eigenschaft 23).
+- Die Anzahl der Infanterie-Squads ist **immer gerade**, damit beide Teams gleich viele Squads erhalten (siehe Slot-Berechnung unten). Wenn dieser Schritt aktiviert wird, können die ungenutzten Plätze — der Verschnitt plus bei ungerader Roh-Anzahl die Plätze des weggefallenen Squads — durch **übergroße Squads** genutzt werden. Angeboten werden immer die Größen, die die freien Plätze mit **möglichst wenigen übergroßen Squads** ausnutzen (erst geringste Verschwendung, dann wenigste Squads, größere bevorzugt): bei 4 ungenutzten Plätzen und Squad-Größe 6 also ein 8er-Paar (statt zwei 7er-Paaren); bei 8 ungenutzten Plätzen ein 9er-Paar plus ein 7er-Paar. Übergroße Squads haben nie mehr als **9 Spieler** — das Squad-Limit im Spiel. Der Ersteller kann zusätzlich **einschränken, welche Übergrößen erlaubt sind** (z. B. nur 7er-Squads, oder 7er und 8er, aber keine 9er) — über ein zweites Dropdown in diesem Schritt; Standard sind alle möglichen Größen. Übergroße Squads gibt es immer in **gleicher Anzahl pro Größe**, damit die Organisatoren beide Teams spiegeln können — das komplette **Paar** jeder angebotenen Größe passt in die verbleibenden freien Plätze, mit der verbleibenden Anzahl neben jeder Option (z. B. 8 freie Plätze: nach einem 9er-Paar wird für die restlichen 2 ein 7er-Paar angeboten). Meldet sich ein übergroßes Squad ab, wird seine Größe wieder angeboten, bis das Paar erneut vollständig ist. Plätze, die kein Paar mehr ergeben, bleiben ungenutzt und erscheinen wieder als „Ungenutzt"-Zähler. Dieser Zähler erscheint nur, wenn tatsächlich Plätze verschwendet werden („Ungenutzt: 0" wird nie angezeigt), und jede Größe ist dauerhaft im Infanterie-Feld-Header sichtbar, mit eigenem Belegt/Möglich-Zähler — z. B. `⚔️ Infanterie (1/16) [(0/14) Größe: 6 | (1/2) Größe: 7]` — jede Squad-Zeile zeigt weiterhin ihre eigene Platzzahl. **Spieler-Modus:** Derselbe Schalter funktioniert auch dort — niemand wählt Größen; stattdessen plant der Bot die Squad-Kapazitäten vor (erst Basis-Squads, die minimalen übergroßen Paare als letzte Squads) und die Spieler füllen sie einfach auf. Die Konsolidierung (Event-Start / Admin-Button) berechnet das sauberste gepaarte Layout aus der tatsächlichen Spielerzahl neu (z. B. 88 Spieler bei Größe 6 → 12× 6er + ein 8er-Paar). Standard: deaktiviert. Kann später auch über den DM-Editor geändert werden (Eigenschaft 23) — das Aktivieren wird dort mit einer Fehlermeldung abgelehnt, solange es keine ungenutzten Slots gibt oder nur ein einzelner ungenutzt ist (ein einzelner Slot kann nie ein Paar bilden). Der Wizard-Schritt selbst erscheint nur, wenn mindestens 2 Slots ungenutzt sind. Alle Details, Beispiele und Garantien: [docs/dont-waste-slots_GER.md](docs/dont-waste-slots_GER.md).
 
 **Schritt 9 — Bestätigung:**
 - Zusammenfassungs-Embed mit allen Einstellungen inkl. ungenutzter Slots — Bestätigen oder Abbrechen
@@ -200,7 +201,7 @@ Server: 100 Slots
 - Ungenutzt: 2 Slots
 ```
 
-Mit aktiviertem **Slots nicht verschwenden** würden diese 2 ungenutzten Slots stattdessen ein Paar 7er-Infanterie-Squads erlauben.
+Die Infanterie-Squad-Anzahl wird immer auf eine **gerade** Zahl abgerundet, damit beide Teams gleich viele Squads erhalten — ergäbe die Berechnung eine ungerade Anzahl (z. B. 15), wird auf 14 abgerundet und die Plätze des weggefallenen Squads zählen als ungenutzt. Mit aktiviertem **Slots nicht verschwenden** werden ungenutzte Slots stattdessen als übergroße Squads angeboten — im Beispiel oben würden die 2 ungenutzten Slots ein Paar 7er-Infanterie-Squads erlauben.
 
 ### Event per DM bearbeiten
 
@@ -234,6 +235,7 @@ Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Pan
 21. Max. Squads pro Vorab-Zugang-Rolle
 22. Rollenauswahl bei Anmeldung (Spieler-Modus, an/aus)
 23. Slots nicht verschwenden (größere Squads, an/aus)
+24. Erlaubte Übergrößen (kommagetrennt, z. B. „7, 8"; leer = alle)
 
 Es gibt keinen separaten Bestätigungsschritt — jede Änderung greift sofort.
 
@@ -271,7 +273,7 @@ Du kannst festlegen, dass ein Event automatisch ein Folgeevent erstellt. Konfigu
 
 ### Admin-Panel — Vertreter-Modus
 
-Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu öffnen. Im Vertreter-Modus enthält es 8 Buttons in 4 Reihen:
+Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu öffnen. Im Vertreter-Modus enthält es 9 Buttons in 4 Reihen:
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
@@ -281,6 +283,7 @@ Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu �
 | Caster | **Caster entfernen** | Caster zum Entfernen auswählen (inkl. Warteliste) |
 | Anmeldung | **Anmeldung öffnen** | Anmeldung manuell öffnen — hinter einer Bestätigungsabfrage abgesichert (beim Öffnen kann ein Ping an die konfigurierten Rollen gesendet werden) |
 | Anmeldung | **Anmeldung schließen** | Anmeldung manuell schließen — hinter einer Bestätigungsabfrage abgesichert. Bei Vertreter-/Caster-Events wird das Event in den Early-Access-Zustand zurückgesetzt (nur Early-Access-Rollen können sich anmelden) |
+| Anmeldung | **Angemeldete fragen** (📨) | Erinnert die fest angemeldeten Vertreter/Caster daran, ihre Teilnahme zu bestätigen — der Ablauf steht in der Spieler-Modus-Zeile weiter unten. In beiden Modi verfügbar. |
 | Event | **Event bearbeiten** | Öffnet DM-basierte Bearbeitungssitzung (siehe oben) |
 | Event | **Event löschen** | Event mit Bestätigung löschen |
 
@@ -288,13 +291,14 @@ Beim Hinzufügen eines Squads als Admin wird der ausgewählte Vertreter für das
 
 ### Admin-Panel — Spieler-Modus
 
-Im Spieler-Modus hat das Admin-Panel 8 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
+Im Spieler-Modus hat das Admin-Panel 9 Buttons in 3 Reihen — die Squad- und Caster-Reihen werden durch eine einzige Spieler-Reihe ersetzt:
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
 | Spieler | **Spieler hinzufügen** | Mehrere Discord-User (Mehrfachauswahl), einen Squad-Typ und (optional) eine oder mehrere Rollen im Squad wählen, die für alle ausgewählten User gelten; dann bestätigen. Alle User werden in einem Submit angemeldet. Wenn die Kapazität mitten im Batch aufgebraucht ist, werden die restlichen auf die Warteliste gesetzt. Die gewählten Rollen werden für jeden User gespeichert und neben seinem Namen im Event-Embed angezeigt (ohne Rolle nur der Name). |
 | Spieler | **Spieler entfernen** | Einen oder mehrere Spieler auswählen (Mehrfachauswahl) — aus aktuellen Squad-Mitgliedern, aus jeder Warteliste (markiert mit `[WL-Inf]` / `[WL-Veh]` / `[WL-Heli]`) **und** aus der Vorläufig-Liste (markiert mit `[Vorl-Inf]` / `[Vorl-Veh]` / `[Vorl-Heli]`). Die Aktion ist hinter einem roten „Abmelden"-Bestätigungsbutton abgesichert. |
-| Spieler | **Vorläufige fragen** (📨) | Fragt die vorläufig Angemeldeten, ob sie teilnehmen. Zuerst wählst du aus, **wen** du fragen willst (Mehrfach-Dropdown) oder drückst **Alle fragen**. Danach **Thread** oder **DM**; beim Thread dann **öffentlich** (direkt an der Event-Nachricht erstellt) oder **privat** (privater Thread, der zusätzlich dich als Orga hinzufügt). Die Nachricht pingt/verlinkt die gewählten Vorläufigen, sodass sie über die vorhandenen **Beitreten** / **Abmelden**-Buttons bestätigen. Wird nur angezeigt, wenn es vorläufig Angemeldete gibt. |
+| Spieler | **Vorläufige fragen** (📨) | Fragt die vorläufig Angemeldeten, ob sie teilnehmen. Zuerst wählst du aus, **wen** du fragen willst (Mehrfach-Dropdowns — bei mehr als 25 erscheinen mehrere) und drückst **Weiter**, oder du drückst **Alle fragen**. Danach **Thread** oder **DM**; beim Thread dann **öffentlich** (direkt an der Event-Nachricht erstellt) oder **privat** (privater Thread, der zusätzlich dich als Orga hinzufügt). Die Nachricht pingt/verlinkt die gewählten Vorläufigen, sodass sie über die vorhandenen **Beitreten** / **Abmelden**-Buttons bestätigen. Wird nur angezeigt, wenn es vorläufig Angemeldete gibt. |
+| Spieler | **Angemeldete fragen** (📨) | Erinnert die **fest Angemeldeten** (mit Squad-Platz oder als Caster — nicht Warteliste) daran, ihre Teilnahme zu bestätigen. Gleicher Auswahl-/Versand-Ablauf wie *Vorläufige fragen* (Empfänger wählen + **Weiter**, oder **Alle fragen**; dann Thread oder DM). Die Erinnerung bittet alle, die doch nicht können, sich über den **Abmelden**-Button abzumelden — es wird keine aktive Bestätigung getrackt; die Orga sieht einfach, wer sich abmeldet. Gibt es keine Angemeldeten, meldet der Button das beim Klick. |
 | Anmeldung | **Anmeldung öffnen** | Anmeldung manuell öffnen — hinter einer Bestätigungsabfrage abgesichert (beim Öffnen kann ein Ping an die konfigurierten Rollen gesendet werden) |
 | Anmeldung | **Anmeldung schließen** | Anmeldung manuell schließen — hinter einer Bestätigungsabfrage abgesichert |
 | Anmeldung | **Squads zusammenlegen** | Teilweise gefüllte Squads zusammenlegen und leere Squads entfernen — hinter einer Bestätigungsabfrage abgesichert. Passiert automatisch auch beim Event-Start. Nur im Spieler-Modus verfügbar. |

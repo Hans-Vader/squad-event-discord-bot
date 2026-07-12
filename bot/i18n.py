@@ -231,8 +231,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Continue",
     },
     "event.invalid_squad_sizes": {
-        "de": "Ungültiges Format. Verwende: Zahl / Zahl / Zahl (z.B. 6 / 2 / 1)",
-        "en": "Invalid format. Use: Number / Number / Number (e.g. 6 / 2 / 1)",
+        "de": "Ungültiges Format. Verwende: Zahl / Zahl / Zahl (z.B. 6 / 2 / 1), jeweils 1–9 — Squads können maximal 9 Spieler beherbergen.",
+        "en": "Invalid format. Use: Number / Number / Number (e.g. 6 / 2 / 1), each 1–9 — squads can hold at most 9 players.",
     },
     "event.name_label": {
         "de": "Event-Name",
@@ -1014,6 +1014,66 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Vorläufige per DM benachrichtigt: {ok} ok, {failed} fehlgeschlagen ({name})",
         "en": "Tentative players notified via DM: {ok} ok, {failed} failed ({name})",
     },
+    # Shared notify-wizard strings (used by both the tentative and the
+    # "confirm registered" flow). The recipient picker chunks entries into
+    # multiple 25-option selects, so it needs a confirm button + range label.
+    "tentative.notify_select_confirm": {
+        "de": "Weiter",
+        "en": "Continue",
+    },
+    "tentative.notify_select_empty": {
+        "de": "Bitte wähle zuerst mindestens einen Empfänger aus – oder nutze „Alle fragen“.",
+        "en": "Please select at least one recipient first – or use “Ask all”.",
+    },
+    "tentative.notify_select_range": {
+        "de": "Auswahl {a}–{b}",
+        "en": "Selection {a}–{b}",
+    },
+    # "Angemeldete fragen" — remind firmly-registered players to confirm/withdraw.
+    "button.notify_registered": {
+        "de": "Angemeldete fragen",
+        "en": "Ask registered",
+    },
+    "confirm.none": {
+        "de": "Es sind aktuell keine Spieler fest angemeldet.",
+        "en": "There are currently no registered players.",
+    },
+    "confirm.select_choose": {
+        "de": "Wen möchtest du erinnern? Wähle einzelne Angemeldete aus – oder nutze „Alle fragen“.",
+        "en": "Whom do you want to remind? Pick individual registered players – or use “Ask all”.",
+    },
+    "confirm.notify_choose": {
+        "de": "Wie möchtest du die angemeldeten Spieler an ihre Teilnahme erinnern?",
+        "en": "How do you want to remind the registered players about their attendance?",
+    },
+    "confirm.thread_name": {
+        "de": "Teilnahme-Check – {name}",
+        "en": "Attendance check – {name}",
+    },
+    "confirm.thread_text": {
+        "de": "{mentions}\nErinnerung: Ihr seid beim Event **{name}** angemeldet. Seid ihr wirklich dabei? Falls du doch nicht kannst, melde dich bitte über den **Abmelden**-Button am Event ({url}) ab.",
+        "en": "{mentions}\nReminder: you are registered for **{name}**. Are you really attending? If you can't make it, please withdraw via the **Decline** button on the event ({url}).",
+    },
+    "confirm.dm_text": {
+        "de": "Hi! Erinnerung: Du bist beim Event **{name}** angemeldet. Bist du wirklich dabei? Falls du doch nicht kannst, melde dich bitte über den **Abmelden**-Button am Event ab: {url}",
+        "en": "Hi! Reminder: you are registered for **{name}**. Are you really attending? If you can't make it, please withdraw via the **Decline** button on the event: {url}",
+    },
+    "confirm.notify_thread_done": {
+        "de": "✅ {count} angemeldete Spieler im Thread erinnert: {thread}",
+        "en": "✅ Reminded {count} registered players in the thread: {thread}",
+    },
+    "confirm.notify_dm_done": {
+        "de": "✅ {ok} angemeldete Spieler per DM erinnert{failed_suffix}.",
+        "en": "✅ Reminded {ok} registered players via DM{failed_suffix}.",
+    },
+    "log.confirm_notified_thread": {
+        "de": "Angemeldete im Thread erinnert: {count} ({name})",
+        "en": "Registered players reminded in thread: {count} ({name})",
+    },
+    "log.confirm_notified_dm": {
+        "de": "Angemeldete per DM erinnert: {ok} ok, {failed} fehlgeschlagen ({name})",
+        "en": "Registered players reminded via DM: {ok} ok, {failed} failed ({name})",
+    },
     "button.unregister": {
         "de": "Abmelden",
         "en": "Decline",
@@ -1591,6 +1651,42 @@ _STRINGS: dict[str, dict[str, str]] = {
     "edit.property.dont_waste_slots": {
         "de": "23. Slots nicht verschwenden (größere Squads)",
         "en": "23. Don't waste slots (bigger squads)",
+    },
+    "edit.property.dont_waste_sizes": {
+        "de": "24. Erlaubte Übergrößen (leer = alle)",
+        "en": "24. Allowed oversized sizes (empty = all)",
+    },
+    "edit.sizes_all": {
+        "de": "Alle",
+        "en": "All",
+    },
+    "edit.invalid_size_list": {
+        "de": "Ungültige Eingabe. Verwende kommagetrennte Zahlen (z. B. 7, 8) — oder leer für alle Übergrößen.",
+        "en": "Invalid input. Use comma-separated numbers (e.g. 7, 8) — or empty for all oversized sizes.",
+    },
+    "edit.size_list_hint": {
+        "de": "Kommagetrennte Größen, z. B. „7, 8“. Leer = alle Übergrößen erlaubt.",
+        "en": "Comma-separated sizes, e.g. \"7, 8\". Empty = all oversized sizes allowed.",
+    },
+    "edit.dont_waste_sizes_invalid": {
+        "de": "Ungültige Größen: erlaubt sind nur Werte über der Basisgröße ({base}) bis maximal {max}.",
+        "en": "Invalid sizes: only values above the base size ({base}) up to {max} are allowed.",
+    },
+    "edit.squad_size_max": {
+        "de": "Ungültiger Wert: Squads können maximal {max} Spieler beherbergen.",
+        "en": "Invalid value: squads can hold at most {max} players.",
+    },
+    "edit.dont_waste_max_size": {
+        "de": "Diese Option kann nicht aktiviert werden: Squads können maximal {max} Spieler beherbergen — bei Squad-Größe {size} sind keine größeren Squads möglich.",
+        "en": "This option cannot be enabled: squads can hold at most {max} players — with squad size {size} no bigger squads are possible.",
+    },
+    "edit.dont_waste_no_unused": {
+        "de": "Diese Option kann nicht aktiviert werden: Bei der aktuellen Konfiguration gibt es keine ungenutzten Slots.",
+        "en": "This option cannot be enabled: with the current configuration there are no unused slots.",
+    },
+    "edit.dont_waste_single_unused": {
+        "de": "Diese Option kann nicht aktiviert werden: Es ist nur 1 Slot ungenutzt — übergroße Squads müssen immer in gleicher Anzahl (paarweise, eins pro Team) gebildet werden.",
+        "en": "This option cannot be enabled: only 1 slot is unused — oversized squads must always come in equal numbers (in pairs, one per team).",
     },
     "edit.bool.enabled": {
         "de": "Aktiviert",
@@ -2210,18 +2306,29 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Don't waste slots",
     },
     "wizard.dont_waste_step_desc": {
-        "de": ("Bei der aktuellen Konfiguration bleiben {unused} Plätze ungenutzt. "
-               "Wenn aktiviert, können Squads größer als die Standardgröße angemeldet werden — "
-               "immer in gleicher Anzahl pro Größe, damit beide Teams gespiegelt werden können. "
-               "Die erste Anmeldung einer Übergröße legt die Größe fest."),
-        "en": ("With the current configuration {unused} slots stay unused. "
-               "When enabled, squads bigger than the base size can register — "
-               "always in equal numbers per size so both teams can be mirrored. "
-               "The first oversized registration locks in the size."),
+        "de": ("Die Anzahl der Infanterie-Squads ist immer gerade (gleich viele pro Team), "
+               "dadurch bleiben **{unused}** Plätze ungenutzt. Wenn aktiviert, können diese "
+               "Plätze durch größere Squads genutzt werden — immer in gleicher Anzahl pro "
+               "Größe, damit beide Teams gespiegelt werden können. Angeboten werden die "
+               "Größen, die die freien Plätze mit möglichst wenigen übergroßen Squads "
+               "ausnutzen."),
+        "en": ("The infantry squad count is always even (same number per team), which "
+               "leaves **{unused}** seats unused. When enabled, those seats can be used by "
+               "bigger squads — always in equal numbers per size so both teams can be "
+               "mirrored. Offered are the sizes that use the free seats with as few "
+               "oversized squads as possible."),
     },
     "wizard.dont_waste_select_placeholder": {
         "de": "Ungenutzte Plätze verwenden...",
         "en": "Use leftover slots...",
+    },
+    "wizard.dont_waste_sizes_placeholder": {
+        "de": "Erlaubte Übergrößen wählen (Standard: alle)...",
+        "en": "Pick allowed oversized sizes (default: all)...",
+    },
+    "wizard.dont_waste_size_option": {
+        "de": "{size} Spieler",
+        "en": "{size} players",
     },
     "wizard.dont_waste_enabled": {
         "de": "Slots nicht verschwenden aktivieren",
