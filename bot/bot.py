@@ -48,6 +48,7 @@ from utils import (
     _player_current_assignment, _select_tentative,
     consolidate_all_player_squads,
     build_event_ics, _ics_slug,
+    infantry_unused_pool, infantry_size_options, dont_waste_slots_active,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
 
@@ -130,6 +131,7 @@ _EDIT_PROPERTIES = [
     (20, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
     (21, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
     (22, "player_roles_enabled",   "edit.property.player_roles_enabled","bool",         None),
+    (23, "dont_waste_slots",       "edit.property.dont_waste_slots",    "bool",         None),
 ]
 
 
@@ -416,6 +418,7 @@ def _ensure_event_keys(event: dict):
         "recurrence": {"type": "never"},
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "mode": "rep",
+        "dont_waste_slots": False,
         "playstyle_enabled": True,
         "player_roles_enabled": True,
         "community_rep_cap_percent": None,
@@ -903,6 +906,18 @@ def _is_squad_type_full(event: dict, squad_type: str) -> bool:
     return _count_registered_squads_of_type(event, squad_type) >= _get_max_squads_for_type(event, squad_type)
 
 
+def _squad_slot_reserved(event: dict, squad_type: str, size: int) -> bool:
+    """True when a base-size infantry registration would take the squad slot
+    reserved for an incomplete oversized pair's mirror (don't-waste mode).
+    Sizes other than the current base (e.g. stale waitlist entries after a
+    squad-size edit) are never blocked by the reservation."""
+    if squad_type != "infantry" or not event.get("dont_waste_slots"):
+        return False
+    if size != _get_squad_sizes(event)["infantry"]:
+        return False
+    return dict(infantry_size_options(event)).get(size, 0) <= 0
+
+
 SQUAD_TYPES = ("infantry", "vehicle", "heli")
 TYPE_ABBREV = {"infantry": "Inf", "vehicle": "Veh", "heli": "Heli", "caster": "Cast"}
 
@@ -918,12 +933,31 @@ ROLES_BY_TYPE = {
 }
 
 
+def _parse_squad_type_value(value: str) -> tuple:
+    """Split a squad-type select value into (squad_type, requested_size).
+    Base options use the plain type ("infantry"); oversized infantry options
+    encode their size as "infantry:<size>"."""
+    if ":" in value:
+        squad_type, size = value.split(":", 1)
+        return squad_type, int(size)
+    return value, None
+
+
 def _squad_type_options(event: dict, lang: str) -> list:
     """Squad-type SelectOption list for a registration dropdown. Vehicle and
-    Heli are omitted when their `max_*_squads` is 0; Infantry is always shown."""
+    Heli are omitted when their `max_*_squads` is 0; Infantry is always shown.
+    With "don't waste slots" mode active, one option per offerable infantry
+    size is shown (oversized values encoded as "infantry:<size>")."""
     sizes = _get_squad_sizes(event) if event else {"infantry": 6, "vehicle": 2, "heli": 1}
     opts = [discord.SelectOption(
         label=t("squad.type_infantry", lang, size=sizes["infantry"]), value="infantry")]
+    if event:
+        oversized = [(s, r) for s, r in infantry_size_options(event) if s != sizes["infantry"]]
+        # Discord caps selects at 25 options; keep room for base + vehicle + heli.
+        for size, remaining in oversized[:22]:
+            opts.append(discord.SelectOption(
+                label=t("squad.type_infantry_sized", lang, size=size, count=remaining),
+                value=f"infantry:{size}"))
     if event and event.get("max_vehicle_squads", 0) > 0:
         opts.append(discord.SelectOption(
             label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"))
@@ -1068,8 +1102,13 @@ async def send_event_details(channel, event, db_id, lang="de", caster_enabled=Tr
 # ---------------------------------------------------------------------------
 # Core: squad registration
 # ---------------------------------------------------------------------------
-async def register_squad(interaction, guild_id, channel_id, squad_name, squad_type, playstyle):
-    """Register a squad. Uses guild lock for thread safety."""
+async def register_squad(interaction, guild_id, channel_id, squad_name, squad_type, playstyle,
+                         requested_size=None):
+    """Register a squad. Uses guild lock for thread safety.
+
+    `requested_size` carries an oversized infantry pick from the "don't waste
+    slots" select; it is re-validated under the lock because the offerable
+    sizes may have changed between the select and the modal submit."""
     lock = _get_guild_lock(guild_id)
     settings = get_guild_settings(guild_id) or DEFAULT_GUILD_SETTINGS
     lang = settings.get("language", "de")
@@ -1109,6 +1148,22 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
         available = event["max_player_slots"] - event["player_slots_used"]
         rep_name = interaction.user.display_name
 
+        type_full = _is_squad_type_full(event, squad_type)
+        mirror_reserved = False
+        if squad_type == "infantry" and requested_size is not None and requested_size != size:
+            # Oversized pick: never waitlist or silently resize — the slot
+            # either still exists (infantry_size_options self-gates on the
+            # toggle, so a mid-dialog config change also lands here) or the
+            # user has to pick again.
+            if (dict(infantry_size_options(event)).get(requested_size, 0) <= 0
+                    or requested_size > available):
+                await send_feedback(interaction, t("squad.size_unavailable", lang), ephemeral=True)
+                return False
+            size = requested_size
+        elif not type_full and _squad_slot_reserved(event, squad_type, size):
+            type_full = True
+            mirror_reserved = True
+
         ok_lim, lim_key, lim_usage = _check_registration_limits(
             event, user_assignments, interaction.guild, interaction.user, size, "rep")
         if not ok_lim:
@@ -1116,7 +1171,7 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
             return False
 
         wl_key = _waitlist_key(squad_type)
-        if _is_squad_type_full(event, squad_type):
+        if type_full:
             event[wl_key].append((squad_name, squad_type, playstyle, size, squad_id, rep_name))
             add_user_assignment(user_assignments, user_id, squad_id)
             save_event(db_id, event, user_assignments)
@@ -1165,7 +1220,12 @@ async def register_squad(interaction, guild_id, channel_id, squad_name, squad_ty
             t("log.squad_registered", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=playstyle),
             guild=interaction.guild)
     elif result == "type_full_waitlisted":
-        msg_key = "squad.type_full" if playstyle_enabled else "squad.type_full_no_playstyle"
+        if mirror_reserved:
+            # Not actually full — the last slot is held for an oversized pair's
+            # mirror, so don't claim "all slots taken".
+            msg_key = "squad.waitlisted_mirror"
+        else:
+            msg_key = "squad.type_full" if playstyle_enabled else "squad.type_full_no_playstyle"
         await send_feedback(interaction,
             t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
             ephemeral=True)
@@ -1524,7 +1584,9 @@ async def _process_squad_waitlist(event, user_assignments, db_id, guild_id, chan
                 break
             squad_name, squad_type, playstyle, size, squad_id, *_rest = entry
             rep_name = _rest[0] if _rest else None
-            if size <= remaining and not _is_squad_type_full(event, squad_type):
+            type_full = (_is_squad_type_full(event, squad_type)
+                         or _squad_slot_reserved(event, squad_type, size))
+            if size <= remaining and not type_full:
                 squad_data = {"name": squad_name, "type": squad_type, "playstyle": playstyle, "size": size}
                 if rep_name:
                     squad_data["rep_name"] = rep_name
@@ -2133,7 +2195,8 @@ class SquadRegistrationView(BaseView):
         desc_key = "squad.step_1_desc" if self.playstyle_enabled else "squad.step_1_desc_no_playstyle"
         lines = [f"**{t('squad.step_1_title', lang)}**", t(desc_key, lang)]
         if self.selected_type:
-            type_label = t(f"squad.type_{self.selected_type}", lang, size=sizes.get(self.selected_type, "?"))
+            stype, req_size = _parse_squad_type_value(self.selected_type)
+            type_label = t(f"squad.type_{stype}", lang, size=req_size or sizes.get(stype, "?"))
             lines.append(t("squad.selected_type", lang, label=type_label))
         if self.playstyle_enabled and self.selected_playstyle:
             lines.append(t("squad.selected_playstyle", lang, label=self.selected_playstyle))
@@ -2153,7 +2216,8 @@ class SquadRegistrationView(BaseView):
             event, user_assignments, _ = _get_channel_event(self.guild_id, self.channel_id)
             self._type_fits = True
             if event:
-                size = _get_squad_sizes(event).get(self.selected_type, 1)
+                stype, req_size = _parse_squad_type_value(self.selected_type)
+                size = req_size or _get_squad_sizes(event).get(stype, 1)
                 ok, key, usage = _check_seat_cap(event, user_assignments, interaction.guild,
                                                  interaction.user, size)
                 if not ok:
@@ -2166,18 +2230,21 @@ class SquadRegistrationView(BaseView):
     async def _continue(self, interaction):
         if not self._ready():
             return
-        modal = SquadNameModal(self.guild_id, self.channel_id, self.selected_type, self.selected_playstyle)
+        stype, req_size = _parse_squad_type_value(self.selected_type)
+        modal = SquadNameModal(self.guild_id, self.channel_id, stype, self.selected_playstyle,
+                               requested_size=req_size)
         await interaction.response.send_modal(modal)
 
 
 class SquadNameModal(ui.Modal):
-    def __init__(self, guild_id, channel_id, squad_type, playstyle):
+    def __init__(self, guild_id, channel_id, squad_type, playstyle, requested_size=None):
         lang = get_guild_language(guild_id)
         super().__init__(title=t("squad.register_title", lang))
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.squad_type = squad_type
         self.playstyle = playstyle
+        self.requested_size = requested_size
 
         self.squad_name = ui.TextInput(
             label=t("squad.name_label", lang),
@@ -2188,7 +2255,8 @@ class SquadNameModal(ui.Modal):
     async def on_submit(self, interaction):
         await interaction.response.defer(ephemeral=True)
         await register_squad(interaction, self.guild_id, self.channel_id,
-                             self.squad_name.value.strip(), self.squad_type, self.playstyle)
+                             self.squad_name.value.strip(), self.squad_type, self.playstyle,
+                             requested_size=self.requested_size)
 
 
 # ---------------------------------------------------------------------------
@@ -3281,7 +3349,8 @@ class _AdminSquadRegView(BaseView):
         desc_key = "squad.step_1_desc" if self.playstyle_enabled else "squad.step_1_desc_no_playstyle"
         lines = [f"**{t('squad.step_1_title', lang)}**", t(desc_key, lang)]
         if self.selected_type:
-            type_label = t(f"squad.type_{self.selected_type}", lang, size=sizes.get(self.selected_type, "?"))
+            stype, req_size = _parse_squad_type_value(self.selected_type)
+            type_label = t(f"squad.type_{stype}", lang, size=req_size or sizes.get(stype, "?"))
             lines.append(t("squad.selected_type", lang, label=type_label))
         if self.playstyle_enabled and self.selected_playstyle:
             lines.append(t("squad.selected_playstyle", lang, label=self.selected_playstyle))
@@ -3309,13 +3378,15 @@ class _AdminSquadRegView(BaseView):
     async def _continue(self, interaction):
         if not self._all_selected():
             return
-        modal = _AdminSquadNameModal(self.guild_id, self.channel_id, self.selected_type, self.selected_playstyle, self.selected_user)
+        stype, req_size = _parse_squad_type_value(self.selected_type)
+        modal = _AdminSquadNameModal(self.guild_id, self.channel_id, stype, self.selected_playstyle,
+                                     self.selected_user, requested_size=req_size)
         await interaction.response.send_modal(modal)
 
 
 class _AdminSquadNameModal(ui.Modal):
     """Admin add-squad step 2: enter squad name and register."""
-    def __init__(self, guild_id, channel_id, squad_type, playstyle, rep_user):
+    def __init__(self, guild_id, channel_id, squad_type, playstyle, rep_user, requested_size=None):
         lang = get_guild_language(guild_id)
         super().__init__(title=t("squad.register_title", lang))
         self.guild_id = guild_id
@@ -3323,6 +3394,7 @@ class _AdminSquadNameModal(ui.Modal):
         self.squad_type = squad_type
         self.playstyle = playstyle
         self.rep_user = rep_user
+        self.requested_size = requested_size
         self.squad_name = ui.TextInput(
             label=t("squad.name_label", lang),
             placeholder=t("squad.name_placeholder", lang),
@@ -3351,8 +3423,18 @@ class _AdminSquadNameModal(ui.Modal):
             rep_name = self.rep_user.display_name
             rep_uid = str(self.rep_user.id)
 
+            type_full = _is_squad_type_full(event, self.squad_type)
+            if self.squad_type == "infantry" and self.requested_size is not None and self.requested_size != size:
+                if (dict(infantry_size_options(event)).get(self.requested_size, 0) <= 0
+                        or self.requested_size > available):
+                    await interaction.followup.send(t("squad.size_unavailable", lang), ephemeral=True)
+                    return
+                size = self.requested_size
+            elif not type_full and _squad_slot_reserved(event, self.squad_type, size):
+                type_full = True
+
             wl_key = _waitlist_key(self.squad_type)
-            if _is_squad_type_full(event, self.squad_type):
+            if type_full:
                 event[wl_key].append((squad_name, self.squad_type, self.playstyle, size, squad_id, rep_name))
                 wl_pos = len(event[wl_key])
                 status = t("admin.squad_type_full_waitlist", lang, type=self.squad_type)
@@ -5481,18 +5563,14 @@ class WizardSquadLimitView(BaseView):
 
     async def _continue(self, interaction):
         self._save_selections()
-        embed = _build_confirmation_embed(self.event, self.guild_id)
-        confirm_view = WizardConfirmationView(
-            self.guild_id, self.channel_id, self.event, self.user_assignments,
-            self.settings, self.interaction_user)
-        await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
+        await _advance_to_dont_waste_or_confirmation(
+            interaction, self.guild_id, self.channel_id, self.event,
+            self.user_assignments, self.settings, self.interaction_user)
 
     async def _skip(self, interaction):
-        embed = _build_confirmation_embed(self.event, self.guild_id)
-        confirm_view = WizardConfirmationView(
-            self.guild_id, self.channel_id, self.event, self.user_assignments,
-            self.settings, self.interaction_user)
-        await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
+        await _advance_to_dont_waste_or_confirmation(
+            interaction, self.guild_id, self.channel_id, self.event,
+            self.user_assignments, self.settings, self.interaction_user)
 
 
 class WizardPlayerRolesView(BaseView):
@@ -5540,6 +5618,83 @@ class WizardPlayerRolesView(BaseView):
     def _save_selections(self):
         if self._selected_roles_enabled is not None:
             self.event["player_roles_enabled"] = self._selected_roles_enabled
+
+    async def _to_confirmation(self, interaction):
+        self._save_selections()
+        await _advance_to_dont_waste_or_confirmation(
+            interaction, self.guild_id, self.channel_id, self.event,
+            self.user_assignments, self.settings, self.interaction_user)
+
+    async def _continue(self, interaction):
+        await self._to_confirmation(interaction)
+
+    async def _skip(self, interaction):
+        await self._to_confirmation(interaction)
+
+
+async def _advance_to_dont_waste_or_confirmation(interaction, guild_id, channel_id, event,
+                                                 user_assignments, settings, interaction_user):
+    """Show the don't-waste-slots step, or go straight to confirmation when the
+    unused pool can't fit an oversized pair anyway."""
+    unused = infantry_unused_pool(event)
+    if event.get("mode", "rep") != "player" and unused >= 2:
+        lang = get_guild_language(guild_id)
+        content = (f"**{t('wizard.dont_waste_step_title', lang)}**\n"
+                   f"{t('wizard.dont_waste_step_desc', lang, unused=unused)}")
+        view = WizardDontWasteSlotsView(guild_id, channel_id, event, user_assignments,
+                                        settings, interaction_user)
+        await interaction.response.edit_message(content=content, embed=None, view=view)
+        return
+    embed = _build_confirmation_embed(event, guild_id)
+    confirm_view = WizardConfirmationView(guild_id, channel_id, event, user_assignments,
+                                          settings, interaction_user)
+    await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
+
+
+class WizardDontWasteSlotsView(BaseView):
+    """Step: enable or disable the "don't waste slots" mode, which offers the
+    unused infantry seats as oversized squads in mirrored pairs."""
+
+    def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
+        super().__init__(timeout=300, title="Wizard Dont Waste Slots")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.event = event
+        self.user_assignments = user_assignments
+        self.settings = settings
+        self.interaction_user = interaction_user
+        lang = get_guild_language(guild_id)
+
+        enabled_default = bool(event.get("dont_waste_slots", False))
+        self.mode_select = ui.Select(
+            placeholder=t("wizard.dont_waste_select_placeholder", lang),
+            options=[
+                discord.SelectOption(label=t("wizard.dont_waste_enabled", lang),
+                                     value="yes", default=enabled_default),
+                discord.SelectOption(label=t("wizard.dont_waste_disabled", lang),
+                                     value="no", default=not enabled_default),
+            ],
+            min_values=1, max_values=1, row=0)
+        self.mode_select.callback = self._mode_selected
+        self.add_item(self.mode_select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=1)
+        skip_btn.callback = self._skip
+        self.add_item(skip_btn)
+
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=1)
+        continue_btn.callback = self._continue
+        self.add_item(continue_btn)
+
+        self._selected_enabled = None
+
+    async def _mode_selected(self, interaction):
+        self._selected_enabled = self.mode_select.values[0] == "yes"
+        await interaction.response.defer()
+
+    def _save_selections(self):
+        if self._selected_enabled is not None:
+            self.event["dont_waste_slots"] = self._selected_enabled
 
     async def _to_confirmation(self, interaction):
         self._save_selections()
@@ -5617,6 +5772,12 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
                      else t("wizard.summary_player_roles_no", lang))
         embed.add_field(name=t("wizard.summary_player_roles", lang), value=roles_val, inline=True)
 
+    if event.get("mode", "rep") != "player" and infantry_unused_pool(event) >= 2:
+        dw_val = (t("wizard.summary_dont_waste_yes", lang)
+                  if event.get("dont_waste_slots", False)
+                  else t("wizard.summary_dont_waste_no", lang))
+        embed.add_field(name=t("wizard.summary_dont_waste", lang), value=dw_val, inline=True)
+
     if event.get("registration_start_time") is not None:
         cd_seconds = event.get("countdown_seconds")
         if cd_seconds is not None and cd_seconds > 0:
@@ -5659,9 +5820,10 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
         f"**{t('settings.max_vehicle_squads', lang)}:** {_max_veh}\n"
         f"**{t('settings.max_heli_squads', lang)}:** {_max_heli}\n"
         f"**{t('settings.max_caster_slots', lang)}:** {_max_casters}\n"
-        f"**{t('settings.max_squads_per_user', lang)}:** {event.get('max_squads_per_user', '?')}\n"
-        f"**{_unused_label}:** {_unused}"
+        f"**{t('settings.max_squads_per_user', lang)}:** {event.get('max_squads_per_user', '?')}"
     )
+    if not dont_waste_slots_active(event):
+        server_info += f"\n**{_unused_label}:** {_unused}"
     embed.add_field(name=t("wizard.summary_server", lang), value=server_info, inline=False)
 
     none_text = t("wizard.summary_none", lang)

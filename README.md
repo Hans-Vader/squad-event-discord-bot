@@ -123,7 +123,10 @@ Event creation uses a multi-step wizard:
 **Step 6 — Squad Limit:**
 - Max squads per user (1–20)
 
-**Step 7 — Confirmation:**
+**Step 7 — Don't waste slots** (only when ≥ 2 slots stay unused):
+- Offer the leftover infantry seats as oversized squads — always in equal numbers per size so both teams can be mirrored; the first oversized registration locks in the size. Hides the "Unused" counter in the embed.
+
+**Step 8 — Confirmation:**
 - Summary embed with all settings including unused slots — confirm or cancel
 
 Each step can be skipped. Server defaults from `/config_defaults` are used as starting values.
@@ -137,6 +140,8 @@ Server: 100 slots
 - Infantry: (100 − 2 − 10 − 2) / 6 = 14 squads (84 slots)
 - Unused: 2 slots
 ```
+
+With **Don't waste slots** enabled, those 2 unused slots would instead allow one pair of 7-player infantry squads.
 
 ## DM Event Editing
 

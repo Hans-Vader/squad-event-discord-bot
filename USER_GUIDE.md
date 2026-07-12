@@ -182,7 +182,10 @@ Player mode shows only the early-access % cap.
 - *Rep mode:* Playstyle selection — whether squads pick a playstyle when registering. Plus max squads per user (1–20) — only asked here when **no** registration-role gate is set; when a gate is configured, this is set in Step 4 (Slot Limits) instead.
 - *Player mode:* Role selection — whether players may pick an in-squad role (Squad Leader, Medic, Pilot, …) when registering. **When disabled, there is no role dropdown and roles are not shown in the embed.** Default: enabled. Can also be changed later via the DM editor.
 
-**Step 8 — Confirmation:**
+**Step 8 — Don't waste slots** *(only shown when the slot math leaves at least 2 unused seats)*:
+- When enabled, the leftover infantry seats can be absorbed by **oversized squads**: with 4 unused seats and squad size 6, registrants may pick a 6-, 7- or 8-player squad. Oversized squads always come in **equal numbers per size** so organizers can mirror them across two teams — the first oversized registration locks in the size (e.g. either 4× 7-player or 2× 8-player), and the remaining count is shown next to each option. If an oversized squad unregisters, its size is re-offered until the pair is complete again; when all oversized squads are gone, the full choice resets. Leftover seats that can't form a pair stay unused. With the mode enabled the "Unused" counter disappears from the event embed. Default: disabled. Can also be changed later via the DM editor (property 23).
+
+**Step 9 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel
 
 Each step can be skipped — if skipped, server defaults are used. Roles can also be configured later with `/set_event_roles`.
@@ -196,6 +199,8 @@ Server: 100 slots
 - Infantry: (100 − 2 − 10 − 2) / 6 = 14 squads (84 slots)
 - Unused: 2 slots
 ```
+
+With **Don't waste slots** enabled, those 2 unused slots would instead allow one pair of 7-player infantry squads.
 
 ### Editing an Event via DM
 
@@ -227,6 +232,8 @@ Organizers can edit a running event via DM: Click **Edit Event** in the admin pa
 19. Playstyle selection at registration (on/off)
 20. Slot limit: early access (% of player slots)
 21. Max squads per early-access role
+22. Role selection at registration (player mode, on/off)
+23. Don't waste slots (bigger squads, on/off)
 
 There's no separate confirm step — each edit applies as soon as you make it.
 

@@ -182,7 +182,10 @@ Im Spieler-Modus wird nur das %-Limit für Vorab-Zugang angezeigt.
 - *Vertreter-Modus:* Spielstil-Auswahl — ob Squads bei der Anmeldung einen Spielstil wählen. Plus Max. Squads pro Spieler (1–20) — wird hier nur gefragt, wenn **keine** Anmelde-Rolle gesetzt ist; mit Rollen-Gate wird dies in Schritt 4 (Slot-Limits) festgelegt.
 - *Spieler-Modus:* Rollen-Auswahl — ob Spieler bei der Anmeldung eine Rolle im Squad (Squad Leader, Medic, Pilot, …) wählen können. **Ist sie deaktiviert, gibt es kein Rollen-Dropdown und im Embed werden keine Rollen angezeigt.** Standard: aktiviert. Kann später auch über den DM-Editor geändert werden.
 
-**Schritt 8 — Bestätigung:**
+**Schritt 8 — Slots nicht verschwenden** *(erscheint nur, wenn die Slot-Berechnung mindestens 2 ungenutzte Plätze übrig lässt)*:
+- Wenn aktiviert, können die übrigen Infanterie-Plätze durch **übergroße Squads** genutzt werden: bei 4 ungenutzten Plätzen und Squad-Größe 6 kann man ein 6er-, 7er- oder 8er-Squad anmelden. Übergroße Squads gibt es immer in **gleicher Anzahl pro Größe**, damit die Organisatoren beide Teams spiegeln können — die erste übergroße Anmeldung legt die Größe fest (z. B. entweder 4× 7er oder 2× 8er), die verbleibende Anzahl steht neben jeder Option. Meldet sich ein übergroßes Squad ab, wird seine Größe wieder angeboten, bis das Paar erneut vollständig ist; sind alle übergroßen Squads weg, gibt es wieder die volle Auswahl. Plätze, die kein Paar mehr ergeben, bleiben ungenutzt. Mit aktiviertem Modus verschwindet der „Ungenutzt"-Zähler aus dem Event-Embed. Standard: deaktiviert. Kann später auch über den DM-Editor geändert werden (Eigenschaft 23).
+
+**Schritt 9 — Bestätigung:**
 - Zusammenfassungs-Embed mit allen Einstellungen inkl. ungenutzter Slots — Bestätigen oder Abbrechen
 
 Jeder Schritt kann übersprungen werden — ohne Auswahl werden die Server-Standardwerte verwendet. Rollen können auch nachträglich mit `/set_event_roles` konfiguriert werden.
@@ -196,6 +199,8 @@ Server: 100 Slots
 - Infanterie: (100 − 2 − 10 − 2) / 6 = 14 Squads (84 Slots)
 - Ungenutzt: 2 Slots
 ```
+
+Mit aktiviertem **Slots nicht verschwenden** würden diese 2 ungenutzten Slots stattdessen ein Paar 7er-Infanterie-Squads erlauben.
 
 ### Event per DM bearbeiten
 
@@ -227,6 +232,8 @@ Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Pan
 19. Spielstil-Auswahl bei Anmeldung (an/aus)
 20. Slot-Limit: Vorab-Zugang (% der Spieler-Slots)
 21. Max. Squads pro Vorab-Zugang-Rolle
+22. Rollenauswahl bei Anmeldung (Spieler-Modus, an/aus)
+23. Slots nicht verschwenden (größere Squads, an/aus)
 
 Es gibt keinen separaten Bestätigungsschritt — jede Änderung greift sofort.
 
