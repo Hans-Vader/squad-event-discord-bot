@@ -1277,17 +1277,28 @@ def format_event_details(event: dict, lang: str = "de",
             # Oversized sizes (don't-waste mode) stay permanently visible in
             # the header, shown like the squad counts: (registered/possible).
             oversized_counts = {}
+            base_count = 0
             for d in squad_group.values():
                 sq_size = d.get("size", size)
                 if sq_size > size:
                     oversized_counts[sq_size] = oversized_counts.get(sq_size, 0) + 1
+                else:
+                    base_count += 1
             totals = {}
+            base_remaining = 0
             for opt_size, remaining in infantry_size_options(event):
-                if opt_size != size:
+                if opt_size == size:
+                    base_remaining = remaining
+                else:
                     totals[opt_size] = oversized_counts.get(opt_size, 0) + remaining
             for opt_size, n in oversized_counts.items():
                 # Exhausted sizes (or leftovers after disabling the mode) stay visible.
                 totals.setdefault(opt_size, n)
+            if totals:
+                # With mixed sizes, the base size gets the same counter as the
+                # oversized entries; without them it would just repeat count/max.
+                size_info = (f"({base_count}/{base_count + base_remaining}) "
+                             f"{size_label}: {size}")
             for opt_size in sorted(totals):
                 size_info += (f" | ({oversized_counts.get(opt_size, 0)}/{totals[opt_size]}) "
                               f"{size_label}: {opt_size}")

@@ -229,9 +229,9 @@ class TestEmbedHeader(unittest.TestCase):
         # 7s possible, the 8's mirror stays claimable.
         ev = _embed_event(squads=_squads(7, 7, 8, 6))
         field = self._infantry_field(utils.format_event_details(ev, "de"))
-        self.assertIn("[Größe: 6 | (2/2) Größe: 7 | (1/2) Größe: 8]", field.name)
+        self.assertIn("[(1/8) Größe: 6 | (2/2) Größe: 7 | (1/2) Größe: 8]", field.name)
         field = self._infantry_field(utils.format_event_details(ev, "en"))
-        self.assertIn("[Size: 6 | (2/2) Size: 7 | (1/2) Size: 8]", field.name)
+        self.assertIn("[(1/8) Size: 6 | (2/2) Size: 7 | (1/2) Size: 8]", field.name)
 
     def test_header_after_nine_pair_offers_seven(self):
         # User scenario (pool 8): the 9er pair leaves 2 seats → a 7er pair is
@@ -241,7 +241,7 @@ class TestEmbedHeader(unittest.TestCase):
                           squads=_squads(9, 9))
         embed = utils.format_event_details(ev, "de")
         field = self._infantry_field(embed)
-        self.assertIn("[Größe: 6 | (0/2) Größe: 7 | (2/2) Größe: 9]", field.name)
+        self.assertIn("[(0/12) Größe: 6 | (0/2) Größe: 7 | (2/2) Größe: 9]", field.name)
         # ...and nothing is reported as unused while the 7er pair is still open.
         self.assertNotIn("Ungenutzt", self._all_values(embed))
 
@@ -250,7 +250,7 @@ class TestEmbedHeader(unittest.TestCase):
         # up with (0/allowed) even before any oversized squad registers.
         ev = _embed_event(squads=_squads(6, 6))
         field = self._infantry_field(utils.format_event_details(ev, "de"))
-        self.assertIn("[Größe: 6 | (0/4) Größe: 7 | (0/2) Größe: 8]", field.name)
+        self.assertIn("[(2/12) Größe: 6 | (0/4) Größe: 7 | (0/2) Größe: 8]", field.name)
 
     def test_header_plain_when_mode_off(self):
         ev = _embed_event(squads=_squads(6, 6), dont_waste_slots=False)
@@ -264,7 +264,7 @@ class TestEmbedHeader(unittest.TestCase):
                           max_vehicle_squads=0, max_heli_squads=0,
                           squads=_squads(7))
         field = self._infantry_field(utils.format_event_details(ev, "de"))
-        self.assertIn("(1/16) [Größe: 6 | (1/2) Größe: 7]", field.name)
+        self.assertIn("(1/16) [(0/14) Größe: 6 | (1/2) Größe: 7]", field.name)
 
     def test_embed_shows_even_squad_cap(self):
         # User-reported scenario: 92 infantry seats → 15 raw squads. The embed
