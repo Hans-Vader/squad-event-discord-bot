@@ -111,6 +111,8 @@ def init_db():
     logger.info(f"Database initialised: {DB_FILE}")
 
 
+# ponytail: one-time migration — safe to delete once the live DB has booted on this code
+#           (self-disabling no-op thereafter; fresh DBs never get the constraint).
 def _migrate_drop_unique_constraint(conn):
     """Rebuild `events` without UNIQUE(guild_id, channel_id, status) so a channel can
     hold multiple active events. Idempotent: detects the old constraint in the stored
