@@ -143,6 +143,29 @@ class TestSizeOptions(unittest.TestCase):
         ev = _event(squads=_squads(9, 9, 7, 7), **big)
         self.assertEqual(utils.infantry_size_options(ev), [(6, 10)])
 
+    def test_allowed_sizes_whitelist(self):
+        big = dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)  # pool 8
+        # Only 7s allowed: 8 and 9 vanish from the offers.
+        ev = _event(dont_waste_allowed_sizes=[7], **big)
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 14), (7, 8)])
+        # 7 and 8 allowed, 9 excluded.
+        ev = _event(dont_waste_allowed_sizes=[7, 8], **big)
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 14), (7, 8), (8, 4)])
+        # None/empty = no restriction.
+        ev = _event(dont_waste_allowed_sizes=None, **big)
+        self.assertEqual(utils.infantry_size_options(ev),
+                         [(6, 14), (7, 8), (8, 4), (9, 2)])
+
+    def test_whitelist_never_blocks_a_mirror(self):
+        big = dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
+        # A 9 got registered, then the whitelist was restricted to [7]: the 9's
+        # mirror stays offered (equal counts win), but ONLY the mirror.
+        ev = _event(dont_waste_allowed_sizes=[7], squads=_squads(9), **big)
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 2), (9, 1)])
+        # Pair complete → no further 9s.
+        ev = _event(dont_waste_allowed_sizes=[7], squads=_squads(9, 9), **big)
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 2)])
+
     def test_wasted_seats(self):
         big = dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
         # Options still open → nothing counts as wasted yet.
@@ -405,6 +428,42 @@ class TestModelPlumbing(unittest.TestCase):
         self.assertTrue(ok)
         self.assertFalse(ev["dont_waste_slots"])
 
+    def test_allowed_sizes_plumbing_and_validation(self):
+        settings = dict(database.DEFAULT_GUILD_SETTINGS)
+        ev = database.build_default_event(settings, "E", "01.01.2030", "20:00")
+        self.assertIsNone(ev["dont_waste_allowed_sizes"])
+        self.assertIn("dont_waste_allowed_sizes", database._CARRY_OVER_KEYS)
+        ev = {}
+        bot._ensure_event_keys(ev)
+        self.assertIsNone(ev["dont_waste_allowed_sizes"])
+        rows = [p for p in bot._EDIT_PROPERTIES if p[1] == "dont_waste_allowed_sizes"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][3], "size_list")
+        keys = [p[1] for p in bot._visible_edit_properties(_event(mode="player"))]
+        self.assertNotIn("dont_waste_allowed_sizes", keys)
+        # Text parsing: numbers, "all", garbage.
+        self.assertEqual(bot._validate_edit_text("7, 8", "size_list", "de"), ([7, 8], None))
+        self.assertEqual(bot._validate_edit_text("alle", "size_list", "de"), (None, None))
+        self.assertEqual(bot._validate_edit_text("", "size_list", "de"), (None, None))
+        self.assertEqual(bot._validate_edit_text("7, x", "size_list", "de"),
+                         (None, "edit.invalid_size_list"))
+        # Range validation via the editor: <= base or > 9 rejected.
+        ev = _event()
+        ok, err = bot._apply_property_change(ev, "dont_waste_allowed_sizes",
+                                             "size_list", None, [6], "de")
+        self.assertFalse(ok)
+        ok, err = bot._apply_property_change(ev, "dont_waste_allowed_sizes",
+                                             "size_list", None, [10], "de")
+        self.assertFalse(ok)
+        ok, _err = bot._apply_property_change(ev, "dont_waste_allowed_sizes",
+                                              "size_list", None, [7, 8], "de")
+        self.assertTrue(ok)
+        self.assertEqual(ev["dont_waste_allowed_sizes"], [7, 8])
+        ok, _err = bot._apply_property_change(ev, "dont_waste_allowed_sizes",
+                                              "size_list", None, None, "de")
+        self.assertTrue(ok)
+        self.assertIsNone(ev["dont_waste_allowed_sizes"])
+
     def test_squad_sizes_capped_at_game_limit(self):
         # Editing any squad size above 9 is rejected; 9 itself is fine.
         for key in ("infantry_squad_size", "vehicle_squad_size", "heli_squad_size"):
@@ -482,6 +541,8 @@ class TestPairingInvariants(unittest.TestCase):
             dict(max_player_slots=91),                                           # pool 5 (odd rest)
             dict(max_player_slots=98, max_vehicle_squads=0, max_heli_squads=0,
                  infantry_squad_size=7),
+            dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2,
+                 dont_waste_allowed_sizes=[7, 9]),                            # whitelist
         ]
         for cfg in configs:
             for _run in range(5):
@@ -509,6 +570,13 @@ class TestI18nKeys(unittest.TestCase):
         "wizard.summary_dont_waste",
         "wizard.summary_dont_waste_yes",
         "wizard.summary_dont_waste_no",
+        "wizard.dont_waste_sizes_placeholder",
+        "wizard.dont_waste_size_option",
+        "edit.property.dont_waste_sizes",
+        "edit.sizes_all",
+        "edit.invalid_size_list",
+        "edit.size_list_hint",
+        "edit.dont_waste_sizes_invalid",
         "squad.type_infantry_sized",
         "squad.waitlisted_mirror",
         "embed.server_overview_value_no_unused",

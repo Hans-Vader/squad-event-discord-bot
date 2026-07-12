@@ -275,7 +275,9 @@ def infantry_size_options(event: dict) -> list:
 
     # Pair rule: any size whose complete PAIR still fits the remaining pool is
     # offerable (plus mirrors of incomplete pairs) — the pool gets used up
-    # instead of being locked to the first-picked size.
+    # instead of being locked to the first-picked size. The organizer may
+    # additionally whitelist the allowed oversized sizes.
+    allowed = event.get("dont_waste_allowed_sizes")
     candidates = set(counts) | set(
         range(base + 1, min(base + free_pool // 2, MAX_SQUAD_PLAYERS) + 1))
     for size in sorted(candidates):
@@ -283,13 +285,19 @@ def infantry_size_options(event: dict) -> list:
         extra = size - base
         others_pending = pending - (1 if c % 2 else 0)
         avail = max(0, free_slots - others_pending)
+        blocked = allowed and size not in allowed
         if c % 2:
             # Incomplete pair: the mirror stays registerable (even if a config
-            # edit shrank the pool); anything beyond it only in full pairs.
+            # edit shrank the pool or excluded the size — equal counts win);
+            # anything beyond it only in full pairs of a still-allowed size.
             if avail < 1:
                 remaining = 0
+            elif blocked:
+                remaining = 1
             else:
                 remaining = 1 + 2 * min(free_pool // (2 * extra), (avail - 1) // 2)
+        elif blocked:
+            remaining = 0
         else:
             remaining = 2 * min(free_pool // (2 * extra), avail // 2)
         if remaining > 0:

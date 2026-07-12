@@ -1652,6 +1652,26 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "23. Slots nicht verschwenden (größere Squads)",
         "en": "23. Don't waste slots (bigger squads)",
     },
+    "edit.property.dont_waste_sizes": {
+        "de": "24. Erlaubte Übergrößen (leer = alle)",
+        "en": "24. Allowed oversized sizes (empty = all)",
+    },
+    "edit.sizes_all": {
+        "de": "Alle",
+        "en": "All",
+    },
+    "edit.invalid_size_list": {
+        "de": "Ungültige Eingabe. Verwende kommagetrennte Zahlen (z. B. 7, 8) — oder leer für alle Übergrößen.",
+        "en": "Invalid input. Use comma-separated numbers (e.g. 7, 8) — or empty for all oversized sizes.",
+    },
+    "edit.size_list_hint": {
+        "de": "Kommagetrennte Größen, z. B. „7, 8“. Leer = alle Übergrößen erlaubt.",
+        "en": "Comma-separated sizes, e.g. \"7, 8\". Empty = all oversized sizes allowed.",
+    },
+    "edit.dont_waste_sizes_invalid": {
+        "de": "Ungültige Größen: erlaubt sind nur Werte über der Basisgröße ({base}) bis maximal {max}.",
+        "en": "Invalid sizes: only values above the base size ({base}) up to {max} are allowed.",
+    },
     "edit.squad_size_max": {
         "de": "Ungültiger Wert: Squads können maximal {max} Spieler beherbergen.",
         "en": "Invalid value: squads can hold at most {max} players.",
@@ -2299,6 +2319,14 @@ _STRINGS: dict[str, dict[str, str]] = {
     "wizard.dont_waste_select_placeholder": {
         "de": "Ungenutzte Plätze verwenden...",
         "en": "Use leftover slots...",
+    },
+    "wizard.dont_waste_sizes_placeholder": {
+        "de": "Erlaubte Übergrößen wählen (Standard: alle)...",
+        "en": "Pick allowed oversized sizes (default: all)...",
+    },
+    "wizard.dont_waste_size_option": {
+        "de": "{size} Spieler",
+        "en": "{size} players",
     },
     "wizard.dont_waste_enabled": {
         "de": "Slots nicht verschwenden aktivieren",

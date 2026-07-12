@@ -133,6 +133,7 @@ _EDIT_PROPERTIES = [
     (21, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
     (22, "player_roles_enabled",   "edit.property.player_roles_enabled","bool",         None),
     (23, "dont_waste_slots",       "edit.property.dont_waste_slots",    "bool",         None),
+    (24, "dont_waste_allowed_sizes", "edit.property.dont_waste_sizes",  "size_list",    None),
 ]
 
 
@@ -420,6 +421,7 @@ def _ensure_event_keys(event: dict):
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "mode": "rep",
         "dont_waste_slots": False,
+        "dont_waste_allowed_sizes": None,
         "playstyle_enabled": True,
         "player_roles_enabled": True,
         "community_rep_cap_percent": None,
@@ -3807,6 +3809,8 @@ def _format_property_value(event, key, vtype, lang):
         return _format_percent_value(val, lang)
     if vtype == "squad_count":
         return _format_count_value(val, lang)
+    if vtype == "size_list":
+        return ", ".join(str(v) for v in val) if val else t("edit.sizes_all", lang)
     return str(val) if val is not None else not_set
 
 
@@ -3895,6 +3899,14 @@ def _validate_edit_value(message, key, vtype, lang):
             return False, None
         return None, "edit.invalid_bool"
 
+    if vtype == "size_list":
+        if text.lower() in clear_words or text.lower() in {"alle", "all"}:
+            return None, None
+        vals = _parse_int_list(text)
+        if not vals:
+            return None, "edit.invalid_size_list"
+        return sorted(set(vals)), None
+
     return text, None
 
 
@@ -3917,7 +3929,8 @@ def _visible_edit_properties(event):
         # dont_waste_slots is a rep-mode concept (mirrored squad pairs) and
         # would be inert here — hide it like the playstyle toggle.
         return [p for p in _EDIT_PROPERTIES
-                if p[1] not in ("playstyle_enabled", "dont_waste_slots")]
+                if p[1] not in ("playstyle_enabled", "dont_waste_slots",
+                                "dont_waste_allowed_sizes")]
     return [p for p in _EDIT_PROPERTIES if p[1] != "player_roles_enabled"]
 
 
@@ -3992,6 +4005,13 @@ def _validate_edit_text(text, vtype, lang):
         if parsed is None:
             return None, "edit.invalid_date"
         return parsed, None
+    if vtype == "size_list":
+        if text.lower() in clear_words or text.lower() in {"alle", "all"}:
+            return None, None
+        vals = _parse_int_list(text)
+        if not vals:
+            return None, "edit.invalid_size_list"
+        return sorted(set(vals)), None
     return text, None
 
 
@@ -4015,6 +4035,12 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
     if (key in ("infantry_squad_size", "vehicle_squad_size", "heli_squad_size")
             and new_value > MAX_SQUAD_PLAYERS):
         return False, t("edit.squad_size_max", lang, max=MAX_SQUAD_PLAYERS)
+
+    if key == "dont_waste_allowed_sizes" and new_value:
+        _base = event.get("infantry_squad_size", 6)
+        if any(k <= _base or k > MAX_SQUAD_PLAYERS for k in new_value):
+            return False, t("edit.dont_waste_sizes_invalid", lang,
+                            base=_base, max=MAX_SQUAD_PLAYERS)
 
     if key == "dont_waste_slots" and new_value:
         if event.get("infantry_squad_size", 6) >= MAX_SQUAD_PLAYERS:
@@ -4389,6 +4415,8 @@ def _scalar_hint(vtype, lang):
         return t("edit.reg_start_hint", lang)
     if vtype == "string_nullable":
         return t("edit.description_hint", lang)
+    if vtype == "size_list":
+        return t("edit.size_list_hint", lang)
     return ""
 
 
@@ -4397,6 +4425,7 @@ def _scalar_placeholder(vtype):
         "date": "TT.MM.JJJJ",
         "time": "HH:MM",
         "reg_start": "TT.MM.JJJJ HH:MM / now / empty",
+        "size_list": "7, 8",
     }.get(vtype, "")
 
 
@@ -5708,23 +5737,49 @@ class WizardDontWasteSlotsView(BaseView):
         self.mode_select.callback = self._mode_selected
         self.add_item(self.mode_select)
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=1)
+        # Which oversized sizes the organizer allows (default: all candidates).
+        base = event.get("infantry_squad_size", 6)
+        pool = infantry_unused_pool(event)
+        self._candidates = list(range(base + 1, min(base + pool // 2, MAX_SQUAD_PLAYERS) + 1))
+        self.sizes_select = None
+        if len(self._candidates) > 1:
+            current = event.get("dont_waste_allowed_sizes") or self._candidates
+            self.sizes_select = ui.Select(
+                placeholder=t("wizard.dont_waste_sizes_placeholder", lang),
+                options=[discord.SelectOption(
+                    label=t("wizard.dont_waste_size_option", lang, size=k),
+                    value=str(k), default=k in current) for k in self._candidates],
+                min_values=1, max_values=len(self._candidates), row=1)
+            self.sizes_select.callback = self._sizes_selected
+            self.add_item(self.sizes_select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=2)
         skip_btn.callback = self._skip
         self.add_item(skip_btn)
 
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=1)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=2)
         continue_btn.callback = self._continue
         self.add_item(continue_btn)
 
         self._selected_enabled = None
+        self._selected_sizes = None
 
     async def _mode_selected(self, interaction):
         self._selected_enabled = self.mode_select.values[0] == "yes"
         await interaction.response.defer()
 
+    async def _sizes_selected(self, interaction):
+        self._selected_sizes = sorted(int(v) for v in self.sizes_select.values)
+        await interaction.response.defer()
+
     def _save_selections(self):
         if self._selected_enabled is not None:
             self.event["dont_waste_slots"] = self._selected_enabled
+        if self._selected_sizes is not None:
+            # All candidates picked == no restriction.
+            self.event["dont_waste_allowed_sizes"] = (
+                None if set(self._selected_sizes) == set(self._candidates)
+                else self._selected_sizes)
 
     async def _to_confirmation(self, interaction):
         self._save_selections()
@@ -5806,6 +5861,9 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
         dw_val = (t("wizard.summary_dont_waste_yes", lang)
                   if event.get("dont_waste_slots", False)
                   else t("wizard.summary_dont_waste_no", lang))
+        allowed_sizes = event.get("dont_waste_allowed_sizes")
+        if event.get("dont_waste_slots", False) and allowed_sizes:
+            dw_val += " (" + ", ".join(str(s) for s in allowed_sizes) + ")"
         embed.add_field(name=t("wizard.summary_dont_waste", lang), value=dw_val, inline=True)
 
     if event.get("registration_start_time") is not None:
