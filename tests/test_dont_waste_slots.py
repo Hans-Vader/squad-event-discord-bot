@@ -236,7 +236,8 @@ class TestSizeOptions(unittest.TestCase):
 
     def test_active_gate(self):
         self.assertTrue(utils.dont_waste_slots_active(_event()))
-        self.assertFalse(utils.dont_waste_slots_active(_event(mode="player")))
+        # Player mode is supported too (capacities are pre-planned by the bot).
+        self.assertTrue(utils.dont_waste_slots_active(_event(mode="player")))
         self.assertFalse(utils.dont_waste_slots_active(_event(dont_waste_slots=False)))
         self.assertFalse(utils.dont_waste_slots_active(_event(max_player_slots=87)))  # U=1
         # An odd base cap always makes the mode meaningful (a whole squad feeds the pool).
@@ -409,9 +410,9 @@ class TestModelPlumbing(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][3], "bool")
 
-    def test_edit_property_hidden_in_player_mode(self):
+    def test_edit_property_visible_in_both_modes(self):
         keys = [p[1] for p in bot._visible_edit_properties(_event(mode="player"))]
-        self.assertNotIn("dont_waste_slots", keys)
+        self.assertIn("dont_waste_slots", keys)
         keys = [p[1] for p in bot._visible_edit_properties(_event())]
         self.assertIn("dont_waste_slots", keys)
 
@@ -455,7 +456,7 @@ class TestModelPlumbing(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][3], "size_list")
         keys = [p[1] for p in bot._visible_edit_properties(_event(mode="player"))]
-        self.assertNotIn("dont_waste_allowed_sizes", keys)
+        self.assertIn("dont_waste_allowed_sizes", keys)
         # Text parsing: numbers, "all", garbage.
         self.assertEqual(bot._validate_edit_text("7, 8", "size_list", "de"), ([7, 8], None))
         self.assertEqual(bot._validate_edit_text("alle", "size_list", "de"), (None, None))
@@ -573,6 +574,123 @@ class TestPairingInvariants(unittest.TestCase):
                         trace.append(f"-{ev['squads'][sid]['size']}")
                         ev["player_slots_used"] -= ev["squads"].pop(sid)["size"]
                     self._check(ev, trace[-15:])
+
+
+def _player_event(**over):
+    # 26 seats, no vehicle/heli, base 6 → cap 4 (even), pool 2: plan = one
+    # 7er pair → capacity layout [6, 6, 7, 7].
+    ev = _event(mode="player", max_player_slots=26,
+                max_vehicle_squads=0, max_heli_squads=0,
+                player_slots_used=0)
+    ev.setdefault("infantry_waitlist", [])
+    ev.update(over)
+    return ev
+
+
+class TestPlayerMode(unittest.TestCase):
+    def _fill(self, ev, ua, n, start=0):
+        statuses = []
+        for i in range(start, start + n):
+            _name, status = utils._player_register(ev, ua, f"u{i}", f"P{i}", "infantry")
+            statuses.append(status)
+        return statuses
+
+    def _capacities(self, ev):
+        return sorted(d["size"] for d in ev["squads"].values()
+                      if d.get("type") == "infantry")
+
+    def test_planned_capacities(self):
+        self.assertEqual(utils.planned_infantry_capacities(_player_event()),
+                         [6, 6, 7, 7])
+        self.assertEqual(utils.planned_infantry_capacities(
+            _player_event(dont_waste_slots=False)), [6, 6, 6, 6])
+        # Whitelist that can't fit the pool → all base.
+        self.assertEqual(utils.planned_infantry_capacities(
+            _player_event(dont_waste_allowed_sizes=[9])), [6, 6, 6, 6])
+
+    def test_auto_creation_uses_planned_capacities(self):
+        ev, ua = _player_event(), {}
+        statuses = self._fill(ev, ua, 26)
+        self.assertTrue(all(s == "registered" for s in statuses))
+        self.assertEqual(self._capacities(ev), [6, 6, 7, 7])
+        self.assertEqual(ev["player_slots_used"], 26)
+        # Seat 27 exceeds the planned layout → waitlist.
+        _name, status = utils._player_register(ev, ua, "u99", "P99", "infantry")
+        self.assertEqual(status, "waitlisted")
+
+    def test_mode_off_unchanged(self):
+        ev, ua = _player_event(dont_waste_slots=False), {}
+        statuses = self._fill(ev, ua, 26)
+        self.assertEqual(statuses.count("registered"), 24)  # 4 squads x 6
+        self.assertEqual(statuses.count("waitlisted"), 2)
+        self.assertEqual(self._capacities(ev), [6, 6, 6, 6])
+
+    def test_consolidation_replans_capacities(self):
+        # Fill completely, then thin out to 20 players → replan needs no
+        # oversized squads at all (4 x 6 = 24 >= 20).
+        ev, ua = _player_event(), {}
+        self._fill(ev, ua, 26)
+        for i in range(20, 26):
+            utils._player_unregister(ev, ua, f"u{i}")
+        utils.consolidate_all_player_squads(ev, ua)
+        self.assertEqual(self._capacities(ev), [6, 6, 6, 6])
+        self.assertEqual(sum(len(d["members"]) for d in ev["squads"].values()), 20)
+        # Full house consolidates back to the planned pair layout.
+        ev, ua = _player_event(), {}
+        self._fill(ev, ua, 26)
+        utils.consolidate_all_player_squads(ev, ua)
+        self.assertEqual(self._capacities(ev), [6, 6, 7, 7])
+        self.assertEqual(sum(len(d["members"]) for d in ev["squads"].values()), 26)
+        # Every member landed within its squad's capacity.
+        for d in ev["squads"].values():
+            self.assertLessEqual(len(d["members"]), d["size"])
+
+    def test_unregister_does_not_shrink_capacities(self):
+        # Review finding: the per-unregister compaction must NOT replan —
+        # otherwise capacities shrink (26→24 players ⇒ all-base) and a new
+        # registration could never grow back into the planned layout.
+        ev, ua = _player_event(), {}
+        self._fill(ev, ua, 26)
+        utils._player_unregister(ev, ua, "u0")
+        utils._player_unregister(ev, ua, "u1")
+        self.assertEqual(self._capacities(ev), [6, 6, 7, 7])
+        _name, status = utils._player_register(ev, ua, "n1", "N1", "infantry")
+        self.assertEqual(status, "registered")
+
+    def test_tiny_cap_never_plans_unpairable_oversize(self):
+        # Cap 1 (exempt from the even rule) can't hold a pair → all base.
+        ev = _player_event(max_player_slots=8)  # 8 seats → cap 1, pool 2
+        self.assertEqual(utils.planned_infantry_capacities(ev), [6])
+
+    def test_unregister_frees_oversized_seat_for_waitlist(self):
+        ev, ua = _player_event(), {}
+        self._fill(ev, ua, 26)
+        utils._player_register(ev, ua, "w1", "W1", "infantry")  # waitlisted
+        utils._player_unregister(ev, ua, "u0")
+        self.assertEqual(sum(len(d["members"]) for d in ev["squads"].values()
+                             if d.get("type") == "infantry"), 26)
+        self.assertIn("w1", ua)
+
+    def test_player_mode_wasted_seats(self):
+        self.assertEqual(utils.infantry_wasted_seats(_player_event()), 0)
+        # Pool 5 (31 seats): plan absorbs 4 → 1 seat can never be used.
+        self.assertEqual(utils.infantry_wasted_seats(
+            _player_event(max_player_slots=31)), 1)
+        # Whitelist [9] with pool 2 → nothing absorbable, all 2 wasted.
+        self.assertEqual(utils.infantry_wasted_seats(
+            _player_event(dont_waste_allowed_sizes=[9])), 2)
+
+    def test_player_mode_header_shows_planned_layout(self):
+        ev = _player_event(name="E", date="01.01.2099", time="20:00",
+                           server_max_players=28, max_caster_slots=2,
+                           caster_slots_used=0, casters={}, vehicle_waitlist=[],
+                           heli_waitlist=[], caster_waitlist=[], tentative=[],
+                           declined=[])
+        ua = {}
+        self._fill(ev, ua, 13)  # squads 1+2 full, squad 3 (7er) partially
+        embed = utils.format_event_details(ev, "de")
+        field = next(f for f in embed.fields if "Infan" in f.name)
+        self.assertIn("[(2/2) Größe: 6 | (1/2) Größe: 7]", field.name)
 
 
 class TestI18nKeys(unittest.TestCase):

@@ -3926,11 +3926,7 @@ def _visible_edit_properties(event):
     mode.
     """
     if is_player_mode(event):
-        # dont_waste_slots is a rep-mode concept (mirrored squad pairs) and
-        # would be inert here — hide it like the playstyle toggle.
-        return [p for p in _EDIT_PROPERTIES
-                if p[1] not in ("playstyle_enabled", "dont_waste_slots",
-                                "dont_waste_allowed_sizes")]
+        return [p for p in _EDIT_PROPERTIES if p[1] != "playstyle_enabled"]
     return [p for p in _EDIT_PROPERTIES if p[1] != "player_roles_enabled"]
 
 
