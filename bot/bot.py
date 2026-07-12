@@ -7420,35 +7420,6 @@ async def export_csv_cmd(interaction: discord.Interaction):
     await _resolve_command_event(interaction, lang, _do)
 
 
-# ############################# #
-# TEST COMMAND                  #
-# ############################# #
-
-@bot.tree.command(name="test", description="Run the test suite (organizer only)")
-async def test_command(interaction: discord.Interaction):
-    if not await check_organizer(interaction):
-        return
-    await interaction.response.defer(ephemeral=True)
-
-    import subprocess
-    try:
-        result = subprocess.run(
-            [sys.executable, "Test/test.py"],
-            capture_output=True, text=True, timeout=30,
-        )
-        output_text = result.stdout
-        if result.stderr:
-            output_text += "\n--- STDERR ---\n" + result.stderr
-    except subprocess.TimeoutExpired:
-        output_text = "Test timed out after 30 seconds."
-    except Exception as e:
-        output_text = f"Error running tests: {e}"
-
-    buf = io.BytesIO(output_text.encode("utf-8"))
-    file = discord.File(fp=buf, filename=f"test_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
-    await interaction.followup.send("Test results:", file=file, ephemeral=True)
-
-
 @bot.tree.command(name="sync", description="Sync slash commands (admin only)")
 async def sync_command(interaction: discord.Interaction):
     if not await check_admin(interaction):
@@ -7490,8 +7461,7 @@ async def help_command(interaction: discord.Interaction):
             "`/set_language` - Sprache ändern\n"
             "`/set_log_channel` - Log-Kanal setzen\n"
             "`/config_defaults` - Standard-Event-Einstellungen bearbeiten\n"
-            "`/sync` - Slash-Commands synchronisieren\n"
-            "`/test` - Test-Suite ausführen"
+            "`/sync` - Slash-Commands synchronisieren"
         ), inline=False)
     else:
         embed.add_field(name="Events", value=(
@@ -7520,8 +7490,7 @@ async def help_command(interaction: discord.Interaction):
             "`/set_language` - Change language\n"
             "`/set_log_channel` - Set log channel\n"
             "`/config_defaults` - Edit default event settings\n"
-            "`/sync` - Sync slash commands\n"
-            "`/test` - Run test suite"
+            "`/sync` - Sync slash commands"
         ), inline=False)
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
