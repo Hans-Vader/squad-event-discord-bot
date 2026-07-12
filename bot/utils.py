@@ -235,6 +235,28 @@ def dont_waste_slots_active(event: dict) -> bool:
     return bool(event.get("dont_waste_slots")) and dont_waste_slots_possible(event)
 
 
+def _pair_plan(free_pool: int, extras: list) -> dict:
+    """Canonical plan for absorbing the remaining pool with oversized pairs:
+    least wasted seats first, then the fewest oversized squads, preferring
+    bigger squads on ties. Returns {extra_seats_per_squad: number_of_pairs}."""
+    coins = sorted({2 * e for e in extras if e > 0}, reverse=True)
+    if free_pool < 2 or not coins:
+        return {}
+    reach = {0: {}}  # exactly-absorbed seats -> pair multiset {coin: n}
+    for total in range(2, free_pool + 1):
+        best = None
+        for coin in coins:
+            prev = reach.get(total - coin)
+            if prev is None:
+                continue
+            if best is None or sum(prev.values()) + 1 < sum(best.values()):
+                best = dict(prev)
+                best[coin] = best.get(coin, 0) + 1
+        if best is not None:
+            reach[total] = best
+    return {coin // 2: n for coin, n in reach[max(reach)].items()}
+
+
 def infantry_size_options(event: dict) -> list:
     """Infantry squad sizes currently offerable, as [(size, remaining), ...]
     ascending with the base size always first.
@@ -273,33 +295,30 @@ def infantry_size_options(event: dict) -> list:
     free_pool = max(0, pool - consumed - reserved)
     options = [(base, max(0, free_slots - pending))]
 
-    # Pair rule: any size whose complete PAIR still fits the remaining pool is
-    # offerable (plus mirrors of incomplete pairs) — the pool gets used up
-    # instead of being locked to the first-picked size. The organizer may
-    # additionally whitelist the allowed oversized sizes.
+    # Offered are the pairs of the canonical plan (least waste, then fewest
+    # oversized squads — so as many regular squads as possible), plus mirrors
+    # of incomplete pairs. The organizer may additionally whitelist sizes.
     allowed = event.get("dont_waste_allowed_sizes")
-    candidates = set(counts) | set(
-        range(base + 1, min(base + free_pool // 2, MAX_SQUAD_PLAYERS) + 1))
+    extras = [k - base
+              for k in range(base + 1, min(base + free_pool // 2, MAX_SQUAD_PLAYERS) + 1)
+              if not (allowed and k not in allowed)]
+    plan = _pair_plan(free_pool, extras)
+    candidates = set(counts) | {base + e for e in plan}
     for size in sorted(candidates):
         c = counts.get(size, 0)
         extra = size - base
         others_pending = pending - (1 if c % 2 else 0)
         avail = max(0, free_slots - others_pending)
-        blocked = allowed and size not in allowed
         if c % 2:
             # Incomplete pair: the mirror stays registerable (even if a config
             # edit shrank the pool or excluded the size — equal counts win);
-            # anything beyond it only in full pairs of a still-allowed size.
+            # anything beyond it only per plan.
             if avail < 1:
                 remaining = 0
-            elif blocked:
-                remaining = 1
             else:
-                remaining = 1 + 2 * min(free_pool // (2 * extra), (avail - 1) // 2)
-        elif blocked:
-            remaining = 0
+                remaining = 1 + 2 * min(plan.get(extra, 0), (avail - 1) // 2)
         else:
-            remaining = 2 * min(free_pool // (2 * extra), avail // 2)
+            remaining = 2 * min(plan.get(extra, 0), avail // 2)
         if remaining > 0:
             options.append((size, remaining))
     return options

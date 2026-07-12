@@ -2309,12 +2309,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": ("Die Anzahl der Infanterie-Squads ist immer gerade (gleich viele pro Team), "
                "dadurch bleiben **{unused}** Plätze ungenutzt. Wenn aktiviert, können diese "
                "Plätze durch größere Squads genutzt werden — immer in gleicher Anzahl pro "
-               "Größe, damit beide Teams gespiegelt werden können. Wählbar ist jede Größe, "
-               "deren Paar noch in die freien Plätze passt."),
+               "Größe, damit beide Teams gespiegelt werden können. Angeboten werden die "
+               "Größen, die die freien Plätze mit möglichst wenigen übergroßen Squads "
+               "ausnutzen."),
         "en": ("The infantry squad count is always even (same number per team), which "
                "leaves **{unused}** seats unused. When enabled, those seats can be used by "
                "bigger squads — always in equal numbers per size so both teams can be "
-               "mirrored. Any size whose pair still fits the remaining seats is offered."),
+               "mirrored. Offered are the sizes that use the free seats with as few "
+               "oversized squads as possible."),
     },
     "wizard.dont_waste_select_placeholder": {
         "de": "Ungenutzte Plätze verwenden...",
