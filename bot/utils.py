@@ -218,12 +218,21 @@ def infantry_unused_pool(event: dict) -> int:
     return inf_slots - _even_infantry_max(inf_slots // inf_size) * inf_size
 
 
-def dont_waste_slots_active(event: dict) -> bool:
-    """True when the don't-waste-slots mode can actually do anything: rep
-    mode, toggle on, and a pool that fits at least one oversized pair."""
+MAX_SQUAD_PLAYERS = 9  # hard in-game limit — no squad can hold more players
+
+
+def dont_waste_slots_possible(event: dict) -> bool:
+    """True when the don't-waste-slots mode could do anything at all: rep
+    mode, a base size below the in-game squad limit, and a pool that fits at
+    least one oversized pair."""
     return (event.get("mode", "rep") != "player"
-            and bool(event.get("dont_waste_slots"))
+            and event.get("infantry_squad_size", 6) < MAX_SQUAD_PLAYERS
             and infantry_unused_pool(event) >= 2)
+
+
+def dont_waste_slots_active(event: dict) -> bool:
+    """True when the mode is enabled and can actually do anything."""
+    return bool(event.get("dont_waste_slots")) and dont_waste_slots_possible(event)
 
 
 def infantry_size_options(event: dict) -> list:
@@ -282,7 +291,7 @@ def infantry_size_options(event: dict) -> list:
                 options.append((size, remaining))
     else:
         fresh_cap = free_slots - (free_slots % 2)  # a new pair needs two squad slots
-        for size in range(base + 1, base + pool // 2 + 1):
+        for size in range(base + 1, min(base + pool // 2, MAX_SQUAD_PLAYERS) + 1):
             allowed = 2 * (pool // (2 * (size - base)))
             remaining = min(allowed, fresh_cap)
             if remaining >= 2:

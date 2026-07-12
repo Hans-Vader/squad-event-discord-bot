@@ -1652,6 +1652,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "23. Slots nicht verschwenden (größere Squads)",
         "en": "23. Don't waste slots (bigger squads)",
     },
+    "edit.dont_waste_max_size": {
+        "de": "Diese Option kann nicht aktiviert werden: Squads können maximal {max} Spieler beherbergen — bei Squad-Größe {size} sind keine größeren Squads möglich.",
+        "en": "This option cannot be enabled: squads can hold at most {max} players — with squad size {size} no bigger squads are possible.",
+    },
     "edit.dont_waste_no_unused": {
         "de": "Diese Option kann nicht aktiviert werden: Bei der aktuellen Konfiguration gibt es keine ungenutzten Slots.",
         "en": "This option cannot be enabled: with the current configuration there are no unused slots.",

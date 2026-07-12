@@ -86,8 +86,9 @@ class TestSizeOptions(unittest.TestCase):
         # 92 infantry seats = 15 base squads. 15 can't split into two equal
         # teams, so the cap becomes 14 and 6+2=8 seats feed the oversized pool.
         ev = _event(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
+        # No size above 9 — squads can't hold more players in-game.
         self.assertEqual(utils.infantry_size_options(ev),
-                         [(6, 14), (7, 8), (8, 4), (9, 2), (10, 2)])
+                         [(6, 14), (7, 8), (8, 4), (9, 2)])
         # The even cap holds regardless of the toggle — those seats just stay
         # unused when the mode is off.
         self.assertEqual(utils.infantry_size_options(
@@ -172,6 +173,9 @@ class TestSizeOptions(unittest.TestCase):
         self.assertFalse(utils.dont_waste_slots_active(_event(max_player_slots=87)))  # U=1
         # An odd base cap always makes the mode meaningful (a whole squad feeds the pool).
         self.assertTrue(utils.dont_waste_slots_active(_event(max_player_slots=96)))
+        # Base size at the in-game limit → no bigger squads can ever exist.
+        self.assertFalse(utils.dont_waste_slots_active(
+            _event(infantry_squad_size=9, max_player_slots=104)))
 
 
 def _embed_event(**over):
@@ -270,14 +274,13 @@ class TestSelectValuePlumbing(unittest.TestCase):
         self.assertEqual([o.value for o in opts],
                          ["infantry", "infantry:7", "vehicle", "heli"])
 
-    def test_squad_type_options_respect_discord_cap(self):
-        # Absurd config: base size 47 with a 46-seat remainder → 23 candidate
-        # oversized sizes; the select must stay within Discord's 25-option cap.
-        ev = _event(infantry_squad_size=47, max_player_slots=248)
-        self.assertEqual(len([s for s, _ in utils.infantry_size_options(ev)
-                              if s != 47]), 23)
+    def test_no_sizes_above_game_limit(self):
+        # Squads hold at most 9 players in-game: a base size at/above the limit
+        # yields no oversized options at all, and the select stays tiny.
+        ev = _event(infantry_squad_size=9, max_player_slots=104)  # 90 seats, 10 squads
+        self.assertEqual(utils.infantry_size_options(ev), [(9, 10)])
         opts = bot._squad_type_options(ev, "en")
-        self.assertLessEqual(len(opts), 25)
+        self.assertEqual([o.value for o in opts], ["infantry", "vehicle", "heli"])
 
     def test_slot_reserved_helper(self):
         # Base-size registration blocked while a mirror is pending...
@@ -329,6 +332,11 @@ class TestModelPlumbing(unittest.TestCase):
         ok, err = bot._apply_property_change(ev, "dont_waste_slots", "bool", None, True, "de")
         self.assertFalse(ok)
         self.assertIn("nur 1 Slot", err)
+        # Base size at the 9-player game limit → rejected even with unused slots.
+        ev = _event(infantry_squad_size=9, max_player_slots=104, dont_waste_slots=False)
+        ok, err = bot._apply_property_change(ev, "dont_waste_slots", "bool", None, True, "de")
+        self.assertFalse(ok)
+        self.assertIn("maximal 9 Spieler", err)
         # Enough unused slots → accepted.
         ev = _event(dont_waste_slots=False)
         ok, err = bot._apply_property_change(ev, "dont_waste_slots", "bool", None, True, "de")
@@ -355,6 +363,7 @@ class TestI18nKeys(unittest.TestCase):
         "squad.waitlisted_mirror",
         "embed.server_overview_value_no_unused",
         "edit.property.dont_waste_slots",
+        "edit.dont_waste_max_size",
         "edit.dont_waste_no_unused",
         "edit.dont_waste_single_unused",
         "squad.size_unavailable",

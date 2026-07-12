@@ -48,7 +48,8 @@ from utils import (
     _player_current_assignment, _select_tentative,
     consolidate_all_player_squads,
     build_event_ics, _ics_slug,
-    infantry_unused_pool, infantry_size_options, dont_waste_slots_active,
+    infantry_unused_pool, infantry_size_options,
+    dont_waste_slots_active, dont_waste_slots_possible, MAX_SQUAD_PLAYERS,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
 
@@ -956,12 +957,13 @@ def _squad_type_options(event: dict, lang: str) -> list:
     opts = [discord.SelectOption(
         label=t("squad.type_infantry", lang, size=sizes["infantry"]), value="infantry")]
     if event:
-        oversized = [(s, r) for s, r in infantry_size_options(event) if s != sizes["infantry"]]
-        # Discord caps selects at 25 options; keep room for base + vehicle + heli.
-        for size, remaining in oversized[:22]:
-            opts.append(discord.SelectOption(
-                label=t("squad.type_infantry_sized", lang, size=size, count=remaining),
-                value=f"infantry:{size}"))
+        # At most 8 oversized sizes exist (capped at MAX_SQUAD_PLAYERS), so the
+        # select always stays far below Discord's 25-option limit.
+        for size, remaining in infantry_size_options(event):
+            if size != sizes["infantry"]:
+                opts.append(discord.SelectOption(
+                    label=t("squad.type_infantry_sized", lang, size=size, count=remaining),
+                    value=f"infantry:{size}"))
     if event and event.get("max_vehicle_squads", 0) > 0:
         opts.append(discord.SelectOption(
             label=t("squad.type_vehicle", lang, size=sizes["vehicle"]), value="vehicle"))
@@ -4008,6 +4010,10 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
                             type=t(f"embed.type_{type_key}", lang))
 
     if key == "dont_waste_slots" and new_value:
+        if event.get("infantry_squad_size", 6) >= MAX_SQUAD_PLAYERS:
+            return False, t("edit.dont_waste_max_size", lang,
+                            max=MAX_SQUAD_PLAYERS,
+                            size=event.get("infantry_squad_size", 6))
         unused = infantry_unused_pool(event)
         if unused == 1:
             return False, t("edit.dont_waste_single_unused", lang)
@@ -5650,8 +5656,8 @@ async def _advance_to_dont_waste_or_confirmation(interaction, guild_id, channel_
                                                  user_assignments, settings, interaction_user):
     """Show the don't-waste-slots step, or go straight to confirmation when the
     unused pool can't fit an oversized pair anyway."""
-    unused = infantry_unused_pool(event)
-    if event.get("mode", "rep") != "player" and unused >= 2:
+    if dont_waste_slots_possible(event):
+        unused = infantry_unused_pool(event)
         lang = get_guild_language(guild_id)
         content = (f"**{t('wizard.dont_waste_step_title', lang)}**\n"
                    f"{t('wizard.dont_waste_step_desc', lang, unused=unused)}")
@@ -5786,7 +5792,7 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
                      else t("wizard.summary_player_roles_no", lang))
         embed.add_field(name=t("wizard.summary_player_roles", lang), value=roles_val, inline=True)
 
-    if event.get("mode", "rep") != "player" and infantry_unused_pool(event) >= 2:
+    if dont_waste_slots_possible(event):
         dw_val = (t("wizard.summary_dont_waste_yes", lang)
                   if event.get("dont_waste_slots", False)
                   else t("wizard.summary_dont_waste_no", lang))
