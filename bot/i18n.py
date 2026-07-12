@@ -1652,6 +1652,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "23. Slots nicht verschwenden (größere Squads)",
         "en": "23. Don't waste slots (bigger squads)",
     },
+    "edit.dont_waste_no_unused": {
+        "de": "Diese Option kann nicht aktiviert werden: Bei der aktuellen Konfiguration gibt es keine ungenutzten Slots.",
+        "en": "This option cannot be enabled: with the current configuration there are no unused slots.",
+    },
+    "edit.dont_waste_single_unused": {
+        "de": "Diese Option kann nicht aktiviert werden: Es ist nur 1 Slot ungenutzt — übergroße Squads müssen immer in gleicher Anzahl (paarweise, eins pro Team) gebildet werden.",
+        "en": "This option cannot be enabled: only 1 slot is unused — oversized squads must always come in equal numbers (in pairs, one per team).",
+    },
     "edit.bool.enabled": {
         "de": "Aktiviert",
         "en": "Enabled",

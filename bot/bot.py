@@ -3909,7 +3909,10 @@ def _visible_edit_properties(event):
     mode.
     """
     if is_player_mode(event):
-        return [p for p in _EDIT_PROPERTIES if p[1] != "playstyle_enabled"]
+        # dont_waste_slots is a rep-mode concept (mirrored squad pairs) and
+        # would be inert here — hide it like the playstyle toggle.
+        return [p for p in _EDIT_PROPERTIES
+                if p[1] not in ("playstyle_enabled", "dont_waste_slots")]
     return [p for p in _EDIT_PROPERTIES if p[1] != "player_roles_enabled"]
 
 
@@ -4003,6 +4006,13 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
         if has_squads or has_wl:
             return False, t("edit.cannot_disable_type_with_entries", lang,
                             type=t(f"embed.type_{type_key}", lang))
+
+    if key == "dont_waste_slots" and new_value:
+        unused = infantry_unused_pool(event)
+        if unused == 1:
+            return False, t("edit.dont_waste_single_unused", lang)
+        if unused < 2:
+            return False, t("edit.dont_waste_no_unused", lang)
 
     if key == "registration_start_time":
         if new_value == "__immediate__":

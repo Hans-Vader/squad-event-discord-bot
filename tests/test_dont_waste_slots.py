@@ -311,6 +311,35 @@ class TestModelPlumbing(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][3], "bool")
 
+    def test_edit_property_hidden_in_player_mode(self):
+        keys = [p[1] for p in bot._visible_edit_properties(_event(mode="player"))]
+        self.assertNotIn("dont_waste_slots", keys)
+        keys = [p[1] for p in bot._visible_edit_properties(_event())]
+        self.assertIn("dont_waste_slots", keys)
+
+    def test_enable_via_editor_requires_unused_slots(self):
+        # No unused slots (72 infantry seats = 12 even squads) → rejected.
+        ev = _event(max_player_slots=86, dont_waste_slots=False)
+        ok, err = bot._apply_property_change(ev, "dont_waste_slots", "bool", None, True, "de")
+        self.assertFalse(ok)
+        self.assertIn("keine ungenutzten Slots", err)
+        self.assertFalse(ev["dont_waste_slots"])
+        # A single unused slot can never form a pair → rejected with its own message.
+        ev = _event(max_player_slots=87, dont_waste_slots=False)
+        ok, err = bot._apply_property_change(ev, "dont_waste_slots", "bool", None, True, "de")
+        self.assertFalse(ok)
+        self.assertIn("nur 1 Slot", err)
+        # Enough unused slots → accepted.
+        ev = _event(dont_waste_slots=False)
+        ok, err = bot._apply_property_change(ev, "dont_waste_slots", "bool", None, True, "de")
+        self.assertTrue(ok)
+        self.assertTrue(ev["dont_waste_slots"])
+        # Disabling is always allowed, even with no unused slots.
+        ev = _event(max_player_slots=86)
+        ok, err = bot._apply_property_change(ev, "dont_waste_slots", "bool", None, False, "de")
+        self.assertTrue(ok)
+        self.assertFalse(ev["dont_waste_slots"])
+
 
 class TestI18nKeys(unittest.TestCase):
     KEYS = (
@@ -326,6 +355,8 @@ class TestI18nKeys(unittest.TestCase):
         "squad.waitlisted_mirror",
         "embed.server_overview_value_no_unused",
         "edit.property.dont_waste_slots",
+        "edit.dont_waste_no_unused",
+        "edit.dont_waste_single_unused",
         "squad.size_unavailable",
     )
 
