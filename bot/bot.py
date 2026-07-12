@@ -884,7 +884,11 @@ def _get_max_infantry_squads(event: dict) -> int:
     heli_size = event.get("heli_squad_size", 1)
     inf_size = event.get("infantry_squad_size", 6)
     remaining = server_cap - max_casters - (max_vehicles * veh_size) - (max_helis * heli_size)
-    return remaining // inf_size if inf_size > 0 else 0
+    count = remaining // inf_size if inf_size > 0 else 0
+    # The infantry cap is always even so both teams get the same squad count.
+    if count >= 2:
+        count -= count % 2
+    return count
 
 
 def _count_registered_squads_of_type(event: dict, squad_type: str) -> int:
@@ -5809,6 +5813,9 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
     _heli_slots = _max_heli * _heli_size
     _inf_pool = _cap - _max_casters - _veh_slots - _heli_slots
     _max_inf = _inf_pool // _inf_size if _inf_size > 0 else 0
+    # The infantry cap is always even so both teams get the same squad count.
+    if _max_inf >= 2:
+        _max_inf -= _max_inf % 2
     _unused = _cap - _max_casters - (_max_inf * _inf_size) - _veh_slots - _heli_slots
     _unused_label = "Ungenutzt" if lang == "de" else "Unused"
 

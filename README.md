@@ -141,7 +141,7 @@ Server: 100 slots
 - Unused: 2 slots
 ```
 
-With **Don't waste slots** enabled, those 2 unused slots would instead allow one pair of 7-player infantry squads.
+The infantry squad count is always rounded down to an even number so both teams get the same count; an odd cap's dropped squad counts as unused. With **Don't waste slots** enabled, unused slots are offered as oversized squads — here, one pair of 7-player infantry squads.
 
 ## DM Event Editing
 

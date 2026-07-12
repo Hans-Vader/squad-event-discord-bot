@@ -19,12 +19,12 @@ from i18n import _STRINGS  # noqa: E402
 
 
 def _event(**over):
-    # max_player_slots 96, vehicle 6*2=12, heli 2*1=2 → 82 infantry seats:
-    # 13 base squads of 6 + 4 unused (U=4).
+    # max_player_slots 90, vehicle 6*2=12, heli 2*1=2 → 76 infantry seats:
+    # 12 base squads of 6 (even, so both teams get the same count) + 4 unused.
     ev = {
         "mode": "rep",
         "dont_waste_slots": True,
-        "max_player_slots": 96,
+        "max_player_slots": 90,
         "infantry_squad_size": 6,
         "vehicle_squad_size": 2,
         "heli_squad_size": 1,
@@ -47,9 +47,14 @@ def _squads(*sizes):
 class TestUnusedPool(unittest.TestCase):
     def test_remainders(self):
         self.assertEqual(utils.infantry_unused_pool(_event()), 4)
-        self.assertEqual(utils.infantry_unused_pool(_event(max_player_slots=97)), 5)
-        self.assertEqual(utils.infantry_unused_pool(_event(max_player_slots=92)), 0)
-        self.assertEqual(utils.infantry_unused_pool(_event(max_player_slots=93)), 1)
+        self.assertEqual(utils.infantry_unused_pool(_event(max_player_slots=91)), 5)
+        self.assertEqual(utils.infantry_unused_pool(_event(max_player_slots=86)), 0)
+        self.assertEqual(utils.infantry_unused_pool(_event(max_player_slots=87)), 1)
+
+    def test_odd_base_cap_feeds_pool(self):
+        # 82 infantry seats → 13 base squads would be odd; the cap rounds down
+        # to 12 and the 13th squad's 6 seats join the 4-seat remainder.
+        self.assertEqual(utils.infantry_unused_pool(_event(max_player_slots=96)), 10)
 
     def test_degenerate_config_clamps(self):
         self.assertEqual(utils.infantry_unused_pool(_event(max_player_slots=0)), 0)
@@ -59,100 +64,119 @@ class TestUnusedPool(unittest.TestCase):
 class TestSizeOptions(unittest.TestCase):
     def test_mode_off_base_only(self):
         opts = utils.infantry_size_options(_event(dont_waste_slots=False))
-        self.assertEqual(opts, [(6, 13)])
+        self.assertEqual(opts, [(6, 12)])
 
     def test_player_mode_base_only(self):
         opts = utils.infantry_size_options(_event(mode="player"))
-        self.assertEqual(opts, [(6, 13)])
+        self.assertEqual(opts, [(6, 12)])
 
     def test_no_pool_base_only(self):
-        self.assertEqual(utils.infantry_size_options(_event(max_player_slots=92)),
-                         [(6, 13)])  # U=0
-        self.assertEqual(utils.infantry_size_options(_event(max_player_slots=93)),
-                         [(6, 13)])  # U=1 → strict pairs impossible
+        self.assertEqual(utils.infantry_size_options(_event(max_player_slots=86)),
+                         [(6, 12)])  # U=0
+        self.assertEqual(utils.infantry_size_options(_event(max_player_slots=87)),
+                         [(6, 12)])  # U=1 → strict pairs impossible
 
     def test_initial_options_u4(self):
         # U=4: either 4x 7 (2 pairs of +1) or 2x 8 (1 pair of +2); nothing above S+U//2.
         opts = utils.infantry_size_options(_event())
-        self.assertEqual(opts, [(6, 13), (7, 4), (8, 2)])
+        self.assertEqual(opts, [(6, 12), (7, 4), (8, 2)])
+
+    def test_odd_base_cap_rounds_down_and_feeds_pool(self):
+        # User-reported scenario: server 100, casters 2, 2 vehicle, 2 heli →
+        # 92 infantry seats = 15 base squads. 15 can't split into two equal
+        # teams, so the cap becomes 14 and 6+2=8 seats feed the oversized pool.
+        ev = _event(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
+        self.assertEqual(utils.infantry_size_options(ev),
+                         [(6, 14), (7, 8), (8, 4), (9, 2), (10, 2)])
+        # The even cap holds regardless of the toggle — those seats just stay
+        # unused when the mode is off.
+        self.assertEqual(utils.infantry_size_options(
+            _event(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2,
+                   dont_waste_slots=False)),
+            [(6, 14)])
+        # Caps below 2 are exempt so tiny configs stay usable.
+        tiny = _event(max_player_slots=20, dont_waste_slots=False)  # 6 inf seats
+        self.assertEqual(utils.infantry_size_options(tiny), [(6, 1)])
 
     def test_first_pick_locks_size(self):
         ev = _event(squads=_squads(7))
         # one 7 registered: 8 gone, 7 continues (mirror + one more pair),
         # base loses one slot to the reserved mirror.
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 11), (7, 3)])
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 10), (7, 3)])
 
     def test_pair_completion_and_exhaustion(self):
         self.assertEqual(utils.infantry_size_options(_event(squads=_squads(7, 7))),
-                         [(6, 11), (7, 2)])
+                         [(6, 10), (7, 2)])
         self.assertEqual(utils.infantry_size_options(_event(squads=_squads(7, 7, 7, 7))),
-                         [(6, 9)])
+                         [(6, 8)])
 
     def test_unregister_reoffers_and_resets(self):
         # three 7s left after an unregister → mirror re-offered
         self.assertEqual(utils.infantry_size_options(_event(squads=_squads(7, 7, 7))),
-                         [(6, 9), (7, 1)])
+                         [(6, 8), (7, 1)])
         # all oversized gone → full choice again
         self.assertEqual(utils.infantry_size_options(_event(squads=_squads(6, 6))),
-                         [(6, 11), (7, 4), (8, 2)])
+                         [(6, 10), (7, 4), (8, 2)])
 
     def test_odd_leftover_stays_unused(self):
         # U=5: 8-pair consumes 4, the 5th seat can never be paired.
-        ev = _event(max_player_slots=97)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 13), (7, 4), (8, 2)])
-        ev = _event(max_player_slots=97, squads=_squads(8, 8))
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 11)])
+        ev = _event(max_player_slots=91)
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 4), (8, 2)])
+        ev = _event(max_player_slots=91, squads=_squads(8, 8))
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 10)])
 
     def test_mirror_slot_reservation(self):
-        # 11 base squads + one unpaired 7 → 12 of 13 slots used; the last
+        # 10 base squads + one unpaired 7 → 11 of 12 slots used; the last
         # squad slot is reserved for the mirror: base drops to 0, 7 stays.
-        ev = _event(squads=_squads(7, *([6] * 11)))
+        ev = _event(squads=_squads(7, *([6] * 10)))
         self.assertEqual(utils.infantry_size_options(ev), [(6, 0), (7, 1)])
 
     def test_fresh_pair_needs_two_squad_slots(self):
-        # 12 base squads → only one squad slot free: no room for a new pair.
-        ev = _event(squads=_squads(*([6] * 12)))
+        # 11 base squads → only one squad slot free: no room for a new pair.
+        ev = _event(squads=_squads(*([6] * 11)))
         self.assertEqual(utils.infantry_size_options(ev), [(6, 1)])
 
     def test_config_shrink_clamps(self):
         # U shrank to 0 after an 8-pair registered → no oversized offered, no crash.
-        ev = _event(max_player_slots=92, squads=_squads(8, 8))
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 11)])
+        ev = _event(max_player_slots=86, squads=_squads(8, 8))
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 10)])
         # ...but an incomplete pair is still offered so it can be equalized.
-        ev = _event(max_player_slots=92, squads=_squads(8))
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 11), (8, 1)])
+        ev = _event(max_player_slots=86, squads=_squads(8))
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 10), (8, 1)])
 
     def test_legacy_squads_without_size(self):
         ev = _event(squads={"s0": {"name": "x", "type": "infantry"}})
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 4), (8, 2)])
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 11), (7, 4), (8, 2)])
 
     def test_vehicle_heli_ignored(self):
         ev = _event(squads={"v": {"type": "vehicle", "size": 2},
                             "h": {"type": "heli", "size": 1}})
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 13), (7, 4), (8, 2)])
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 4), (8, 2)])
 
     def test_locked_size_needs_two_slots_for_new_pair(self):
-        # 2x7 complete + 10 base squads → one squad slot free: a third 7 would
+        # 2x7 complete + 9 base squads → one squad slot free: a third 7 would
         # start a pair whose mirror could never register, so it isn't offered.
-        ev = _event(squads=_squads(7, 7, *([6] * 10)))
+        ev = _event(squads=_squads(7, 7, *([6] * 9)))
         self.assertEqual(utils.infantry_size_options(ev), [(6, 1)])
 
     def test_multiple_pending_mirrors_all_reserved(self):
         # Degenerate post-config-edit state: two different oversized sizes,
         # each unpaired. Both mirrors keep a reserved slot; base gets none.
-        ev = _event(squads=_squads(7, 8, *([6] * 9)))
+        ev = _event(squads=_squads(7, 8, *([6] * 8)))
         self.assertEqual(utils.infantry_size_options(ev), [(6, 0), (7, 1), (8, 1)])
 
     def test_active_gate(self):
         self.assertTrue(utils.dont_waste_slots_active(_event()))
         self.assertFalse(utils.dont_waste_slots_active(_event(mode="player")))
         self.assertFalse(utils.dont_waste_slots_active(_event(dont_waste_slots=False)))
-        self.assertFalse(utils.dont_waste_slots_active(_event(max_player_slots=93)))  # U=1
+        self.assertFalse(utils.dont_waste_slots_active(_event(max_player_slots=87)))  # U=1
+        # An odd base cap always makes the mode meaningful (a whole squad feeds the pool).
+        self.assertTrue(utils.dont_waste_slots_active(_event(max_player_slots=96)))
 
 
 def _embed_event(**over):
     ev = _event(name="Test Event", date="01.01.2099", time="20:00",
-                server_max_players=98, max_caster_slots=2,
+                server_max_players=92, max_caster_slots=2,
                 player_slots_used=0, caster_slots_used=0,
                 casters={}, infantry_waitlist=[], vehicle_waitlist=[],
                 heli_waitlist=[], caster_waitlist=[], tentative=[], declined=[])
@@ -168,16 +192,48 @@ class TestEmbedHeader(unittest.TestCase):
         return None
 
     def test_oversized_sizes_shown_in_header(self):
+        # Degenerate mixed-size state: counts and possible totals per size.
         ev = _embed_event(squads=_squads(7, 7, 8, 6))
         field = self._infantry_field(utils.format_event_details(ev, "de"))
-        self.assertIn("[Größe: 6 | 2× 7er, 1× 8er]", field.name)
+        self.assertIn("[Größe: 6 | (2/4) Größe: 7 | (1/2) Größe: 8]", field.name)
         field = self._infantry_field(utils.format_event_details(ev, "en"))
-        self.assertIn("[Size: 6 | 2× 7, 1× 8]", field.name)
+        self.assertIn("[Size: 6 | (2/4) Size: 7 | (1/2) Size: 8]", field.name)
 
-    def test_header_unchanged_without_oversized(self):
+    def test_header_shows_possible_sizes_before_any_register(self):
+        # "Permanently visible": with the mode active the candidate sizes show
+        # up with (0/allowed) even before any oversized squad registers.
         ev = _embed_event(squads=_squads(6, 6))
         field = self._infantry_field(utils.format_event_details(ev, "de"))
+        self.assertIn("[Größe: 6 | (0/4) Größe: 7 | (0/2) Größe: 8]", field.name)
+
+    def test_header_plain_when_mode_off(self):
+        ev = _embed_event(squads=_squads(6, 6), dont_waste_slots=False)
+        field = self._infantry_field(utils.format_event_details(ev, "de"))
         self.assertIn("[Größe: 6]", field.name)
+
+    def test_header_user_example(self):
+        # Server 100, 2 casters, no vehicle/heli → 16 base squads, 2 leftover
+        # seats, one 7er registered: ⚔️ Infanterie (1/16) [Größe: 6 | (1/2) Größe: 7]
+        ev = _embed_event(server_max_players=100, max_player_slots=98,
+                          max_vehicle_squads=0, max_heli_squads=0,
+                          squads=_squads(7))
+        field = self._infantry_field(utils.format_event_details(ev, "de"))
+        self.assertIn("(1/16) [Größe: 6 | (1/2) Größe: 7]", field.name)
+
+    def test_embed_shows_even_squad_cap(self):
+        # User-reported scenario: 92 infantry seats → 15 raw squads. The embed
+        # must show an even cap (14) regardless of the toggle.
+        ev = _embed_event(server_max_players=100, max_player_slots=98,
+                          max_vehicle_squads=2, max_heli_squads=2,
+                          squads=_squads(7))
+        field = self._infantry_field(utils.format_event_details(ev, "de"))
+        self.assertIn("(1/14)", field.name)
+        ev["dont_waste_slots"] = False
+        embed = utils.format_event_details(ev, "de")
+        field = self._infantry_field(embed)
+        self.assertIn("(1/14)", field.name)
+        # With the mode off, the dropped squad's seats count as unused.
+        self.assertIn("Ungenutzt: 8", self._all_values(embed))
 
     def _all_values(self, embed):
         return "\n".join(str(f.value) for f in embed.fields)

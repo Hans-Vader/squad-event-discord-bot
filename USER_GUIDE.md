@@ -183,7 +183,7 @@ Player mode shows only the early-access % cap.
 - *Player mode:* Role selection — whether players may pick an in-squad role (Squad Leader, Medic, Pilot, …) when registering. **When disabled, there is no role dropdown and roles are not shown in the embed.** Default: enabled. Can also be changed later via the DM editor.
 
 **Step 8 — Don't waste slots** *(only shown when the slot math leaves at least 2 unused seats)*:
-- When enabled, the leftover infantry seats can be absorbed by **oversized squads**: with 4 unused seats and squad size 6, registrants may pick a 6-, 7- or 8-player squad. Oversized squads always come in **equal numbers per size** so organizers can mirror them across two teams — the first oversized registration locks in the size (e.g. either 4× 7-player or 2× 8-player), and the remaining count is shown next to each option. If an oversized squad unregisters, its size is re-offered until the pair is complete again; when all oversized squads are gone, the full choice resets. Leftover seats that can't form a pair stay unused. With the mode enabled the "Unused" counter disappears from the event embed, and registered oversized squads are summarized in the infantry field header (e.g. `[Size: 6 | 2× 7]`) in addition to each squad row showing its own seat count. Default: disabled. Can also be changed later via the DM editor (property 23).
+- The number of infantry squads is **always kept even** so both teams get the same count (see slot calculation below). When this step is enabled, the unused seats — the remainder plus, with an odd raw cap, the dropped squad's seats — can be absorbed by **oversized squads**: with 4 unused seats and squad size 6, registrants may pick a 6-, 7- or 8-player squad. Oversized squads always come in **equal numbers per size** so organizers can mirror them across two teams — the first oversized registration locks in the size (e.g. either 4× 7-player or 2× 8-player), and the remaining count is shown next to each option. If an oversized squad unregisters, its size is re-offered until the pair is complete again; when all oversized squads are gone, the full choice resets. Leftover seats that can't form a pair stay unused. With the mode enabled the "Unused" counter disappears from the event embed, and the oversized sizes are permanently visible in the infantry field header with their own registered/possible counter — e.g. `⚔️ Infantry (1/16) [Size: 6 | (1/2) Size: 7]` — in addition to each squad row showing its own seat count. Default: disabled. Can also be changed later via the DM editor (property 23).
 
 **Step 9 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel
@@ -200,7 +200,7 @@ Server: 100 slots
 - Unused: 2 slots
 ```
 
-With **Don't waste slots** enabled, those 2 unused slots would instead allow one pair of 7-player infantry squads.
+The infantry squad count is always rounded down to an **even** number so both teams get the same count — if the raw math yields an odd cap (e.g. 15), the cap becomes 14 and the dropped squad's seats count as unused. With **Don't waste slots** enabled, unused slots are offered as oversized squads instead — in the example above, the 2 unused slots would allow one pair of 7-player infantry squads.
 
 ### Editing an Event via DM
 

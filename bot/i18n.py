@@ -2270,14 +2270,15 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Don't waste slots",
     },
     "wizard.dont_waste_step_desc": {
-        "de": ("Bei der aktuellen Konfiguration bleiben {unused} Plätze ungenutzt. "
-               "Wenn aktiviert, können Squads größer als die Standardgröße angemeldet werden — "
-               "immer in gleicher Anzahl pro Größe, damit beide Teams gespiegelt werden können. "
+        "de": ("Die Anzahl der Infanterie-Squads ist immer gerade (gleich viele pro Team), "
+               "dadurch bleiben {unused} Plätze ungenutzt. Wenn aktiviert, können diese "
+               "Plätze durch größere Squads genutzt werden — immer in gleicher Anzahl pro "
+               "Größe, damit beide Teams gespiegelt werden können. "
                "Die erste Anmeldung einer Übergröße legt die Größe fest."),
-        "en": ("With the current configuration {unused} slots stay unused. "
-               "When enabled, squads bigger than the base size can register — "
-               "always in equal numbers per size so both teams can be mirrored. "
-               "The first oversized registration locks in the size."),
+        "en": ("The infantry squad count is always even (same number per team), which "
+               "leaves {unused} seats unused. When enabled, those seats can be used by "
+               "bigger squads — always in equal numbers per size so both teams can be "
+               "mirrored. The first oversized registration locks in the size."),
     },
     "wizard.dont_waste_select_placeholder": {
         "de": "Ungenutzte Plätze verwenden...",

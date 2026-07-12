@@ -194,19 +194,28 @@ def _max_squads_for_type(event: dict, squad_type: str) -> int:
     veh_slots = event.get("max_vehicle_squads", 0) * event.get("vehicle_squad_size", 0)
     heli_slots = event.get("max_heli_squads", 0) * event.get("heli_squad_size", 0)
     inf_size = max(1, event.get("infantry_squad_size", 6))
-    return max(0, (seats - veh_slots - heli_slots) // inf_size)
+    # The infantry cap is always even so both teams get the same squad count.
+    return _even_infantry_max(max(0, (seats - veh_slots - heli_slots) // inf_size))
+
+
+def _even_infantry_max(raw_max: int) -> int:
+    """Round an infantry squad cap down to an even count so both teams get the
+    same number of squads. Caps below 2 are left alone so tiny configs stay
+    usable."""
+    return raw_max if raw_max < 2 else raw_max - raw_max % 2
 
 
 def infantry_unused_pool(event: dict) -> int:
-    """Static leftover infantry seats: the remainder of the infantry seat
-    budget that no base-size squad can use (0 <= pool < infantry_squad_size)."""
+    """Seats the don't-waste mode can hand out as oversized squads: the seat
+    remainder plus — when the base squad count would be odd — one whole base
+    squad, because the infantry squad count must stay even (two equal teams)."""
     inf_size = event.get("infantry_squad_size", 6)
     if inf_size <= 0:
         return 0
     veh_slots = event.get("max_vehicle_squads", 0) * event.get("vehicle_squad_size", 0)
     heli_slots = event.get("max_heli_squads", 0) * event.get("heli_squad_size", 0)
     inf_slots = max(0, event.get("max_player_slots", 0) - veh_slots - heli_slots)
-    return inf_slots % inf_size
+    return inf_slots - _even_infantry_max(inf_slots // inf_size) * inf_size
 
 
 def dont_waste_slots_active(event: dict) -> bool:
@@ -1203,6 +1212,8 @@ def format_event_details(event: dict, lang: str = "de",
     heli_player_slots = max_helis * heli_size
     infantry_player_slots = max(0, server_cap - max_casters - vehicle_player_slots - heli_player_slots)
     max_inf_squads = infantry_player_slots // inf_size if inf_size > 0 else 0
+    # Squad count is always even so both teams get the same number of squads.
+    max_inf_squads = _even_infantry_max(max_inf_squads)
     unused = server_cap - max_casters - (max_inf_squads * inf_size) - vehicle_player_slots - heli_player_slots
 
     is_player_mode = event.get("mode") == "player"
@@ -1238,20 +1249,26 @@ def format_event_details(event: dict, lang: str = "de",
         if type_key != "infantry" and max_count == 0:
             continue
         size_label = "Größe" if lang == "de" else "Size"
-        size_info = str(size)
+        size_info = f"{size_label}: {size}"
         if type_key == "infantry":
-            # Registered oversized squads (don't-waste mode) show up in the
-            # header so mixed sizes are visible at a glance.
+            # Oversized sizes (don't-waste mode) stay permanently visible in
+            # the header, shown like the squad counts: (registered/possible).
             oversized_counts = {}
             for d in squad_group.values():
                 sq_size = d.get("size", size)
                 if sq_size > size:
                     oversized_counts[sq_size] = oversized_counts.get(sq_size, 0) + 1
-            if oversized_counts:
-                suffix = "er" if lang == "de" else ""
-                size_info += " | " + ", ".join(
-                    f"{n}× {k}{suffix}" for k, n in sorted(oversized_counts.items()))
-        name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count}) [{size_label}: {size_info}]"
+            totals = {}
+            for opt_size, remaining in infantry_size_options(event):
+                if opt_size != size:
+                    totals[opt_size] = oversized_counts.get(opt_size, 0) + remaining
+            for opt_size, n in oversized_counts.items():
+                # Exhausted sizes (or leftovers after disabling the mode) stay visible.
+                totals.setdefault(opt_size, n)
+            for opt_size in sorted(totals):
+                size_info += (f" | ({oversized_counts.get(opt_size, 0)}/{totals[opt_size]}) "
+                              f"{size_label}: {opt_size}")
+        name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count}) [{size_info}]"
         if squad_group:
             text = ""
             for squad_id, data in squad_group.items():
