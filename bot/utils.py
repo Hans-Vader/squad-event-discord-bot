@@ -1238,7 +1238,20 @@ def format_event_details(event: dict, lang: str = "de",
         if type_key != "infantry" and max_count == 0:
             continue
         size_label = "Größe" if lang == "de" else "Size"
-        name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count}) [{size_label}: {size}]"
+        size_info = str(size)
+        if type_key == "infantry":
+            # Registered oversized squads (don't-waste mode) show up in the
+            # header so mixed sizes are visible at a glance.
+            oversized_counts = {}
+            for d in squad_group.values():
+                sq_size = d.get("size", size)
+                if sq_size > size:
+                    oversized_counts[sq_size] = oversized_counts.get(sq_size, 0) + 1
+            if oversized_counts:
+                suffix = "er" if lang == "de" else ""
+                size_info += " | " + ", ".join(
+                    f"{n}× {k}{suffix}" for k, n in sorted(oversized_counts.items()))
+        name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count}) [{size_label}: {size_info}]"
         if squad_group:
             text = ""
             for squad_id, data in squad_group.items():
