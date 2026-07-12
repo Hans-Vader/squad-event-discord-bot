@@ -2287,12 +2287,12 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     "wizard.dont_waste_step_desc": {
         "de": ("Die Anzahl der Infanterie-Squads ist immer gerade (gleich viele pro Team), "
-               "dadurch bleiben {unused} Plätze ungenutzt. Wenn aktiviert, können diese "
+               "dadurch bleiben **{unused}** Plätze ungenutzt. Wenn aktiviert, können diese "
                "Plätze durch größere Squads genutzt werden — immer in gleicher Anzahl pro "
                "Größe, damit beide Teams gespiegelt werden können. Wählbar ist jede Größe, "
                "deren Paar noch in die freien Plätze passt."),
         "en": ("The infantry squad count is always even (same number per team), which "
-               "leaves {unused} seats unused. When enabled, those seats can be used by "
+               "leaves **{unused}** seats unused. When enabled, those seats can be used by "
                "bigger squads — always in equal numbers per size so both teams can be "
                "mirrored. Any size whose pair still fits the remaining seats is offered."),
     },

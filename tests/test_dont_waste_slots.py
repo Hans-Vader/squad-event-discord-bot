@@ -6,7 +6,9 @@ reservation), the select option/value plumbing, model defaults/carry-over,
 and presence of the new i18n keys.
 """
 
+import itertools
 import os
+import random
 import sys
 import unittest
 
@@ -414,6 +416,87 @@ class TestModelPlumbing(unittest.TestCase):
         ok, _err = bot._apply_property_change(ev, "infantry_squad_size", "int", None, 9, "de")
         self.assertTrue(ok)
         self.assertEqual(ev["infantry_squad_size"], 9)
+
+
+class TestPairingInvariants(unittest.TestCase):
+    """Seeded random-walk property test: drive register/unregister sequences
+    through the real gates and verify after every step that the squads can
+    always be split into two teams with equal oversized counts per size —
+    i.e. every incomplete pair stays registerable and the pool is never
+    overbooked. (A deeper exhaustive audit of the same invariants ran during
+    development; this guards against regressions.)"""
+
+    _ids = itertools.count()
+
+    def _register(self, ev, size):
+        """Replicate register_squad's infantry gates. True if registered."""
+        base = ev["infantry_squad_size"]
+        available = ev["max_player_slots"] - ev["player_slots_used"]
+        opts = dict(utils.infantry_size_options(ev))
+        if size != base:
+            if opts.get(size, 0) <= 0 or size > available:
+                return False
+        elif (bot._is_squad_type_full(ev, "infantry")
+                or bot._squad_slot_reserved(ev, "infantry", size)
+                or size > available):
+            return False
+        ev["squads"][f"p{next(self._ids)}"] = {"name": "x", "type": "infantry", "size": size}
+        ev["player_slots_used"] += size
+        return True
+
+    def _check(self, ev, trace):
+        base = ev["infantry_squad_size"]
+        pool = utils.infantry_unused_pool(ev)
+        cap = utils._max_squads_for_type(ev, "infantry")
+        squads = [d for d in ev["squads"].values() if d["type"] == "infantry"]
+        counts = {}
+        for d in squads:
+            if d["size"] > base:
+                counts[d["size"]] = counts.get(d["size"], 0) + 1
+        consumed = sum((k - base) * c for k, c in counts.items())
+        reserved = sum(k - base for k, c in counts.items() if c % 2)
+        pending = sum(1 for c in counts.values() if c % 2)
+        ctx = f"trace={trace} sizes={sorted(d['size'] for d in squads)}"
+        self.assertLessEqual(consumed, pool, f"pool overbooked: {ctx}")
+        self.assertLessEqual(consumed + reserved, pool, f"reservation overbooked: {ctx}")
+        self.assertGreaterEqual(cap - len(squads), pending, f"mirror slot lost: {ctx}")
+        # Every incomplete pair must be completable RIGHT NOW, and greedily
+        # completing all of them must end with even counts per size.
+        probe = {**ev, "squads": dict(ev["squads"]),
+                 "player_slots_used": ev["player_slots_used"]}
+        for _ in range(pending):
+            odd = sorted(k for k, c in counts.items() if c % 2)
+            for k in odd:
+                self.assertTrue(self._register(probe, k), f"mirror {k} blocked: {ctx}")
+            counts = {}
+            for d in probe["squads"].values():
+                if d["type"] == "infantry" and d["size"] > base:
+                    counts[d["size"]] = counts.get(d["size"], 0) + 1
+        self.assertFalse(any(c % 2 for c in counts.values()), f"odd counts remain: {ctx}")
+
+    def test_random_walks_keep_teams_mirrorable(self):
+        rng = random.Random(42)
+        configs = [
+            dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2),  # pool 8
+            dict(max_player_slots=90),                                           # pool 4
+            dict(max_player_slots=91),                                           # pool 5 (odd rest)
+            dict(max_player_slots=98, max_vehicle_squads=0, max_heli_squads=0,
+                 infantry_squad_size=7),
+        ]
+        for cfg in configs:
+            for _run in range(5):
+                ev = _event(squads={}, player_slots_used=0, **cfg)
+                trace = []
+                for _step in range(150):
+                    if rng.random() < 0.6 or not ev["squads"]:
+                        size = rng.choice([s for s, _ in utils.infantry_size_options(ev)])
+                        if self._register(ev, size):
+                            trace.append(f"+{size}")
+                    else:
+                        sid = rng.choice(list(ev["squads"]))
+                        trace.append(f"-{ev['squads'][sid]['size']}")
+                        ev["player_slots_used"] -= ev["squads"].pop(sid)["size"]
+                    self._check(ev, trace[-15:])
 
 
 class TestI18nKeys(unittest.TestCase):
