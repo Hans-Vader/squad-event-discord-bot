@@ -2259,6 +2259,9 @@ class SquadNameModal(ui.Modal):
         self.add_item(self.squad_name)
 
     async def on_submit(self, interaction):
+        # Modal came from the Continue button, so defer() is a message update on the
+        # select message — with edit_feedback the result REPLACES it instead of appending.
+        interaction.extras["edit_feedback"] = True
         await interaction.response.defer(ephemeral=True)
         await register_squad(interaction, self.guild_id, self.channel_id,
                              self.squad_name.value.strip(), self.squad_type, self.playstyle,
