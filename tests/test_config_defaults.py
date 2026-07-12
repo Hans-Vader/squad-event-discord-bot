@@ -85,13 +85,13 @@ class TestGuildTargetLoad(unittest.TestCase):
                 os.unlink(path)
 
     def test_load_returns_default_dict_when_no_settings(self):
-        obj = bot._GUILD_TARGET.load(GUILD_ID, 0)
+        obj = bot._GUILD_TARGET.load(GUILD_ID, 0, None)
         self.assertIsNotNone(obj)
         for key in DEFAULT_GUILD_SETTINGS:
             self.assertIn(key, obj)
 
     def test_format_property_value_non_not_set_for_each_field(self):
-        obj = bot._GUILD_TARGET.load(GUILD_ID, 0)
+        obj = bot._GUILD_TARGET.load(GUILD_ID, 0, None)
         not_set = t("edit.not_set", "en")
         for num, key, label_key, vtype, special in bot._GUILD_EDIT_PROPERTIES:
             display = bot._format_property_value(obj, key, vtype, "en")
@@ -102,7 +102,7 @@ class TestGuildTargetLoad(unittest.TestCase):
         settings = dict(DEFAULT_GUILD_SETTINGS)
         settings["server_max_players"] = 200
         save_guild_settings(GUILD_ID, settings)
-        obj = bot._GUILD_TARGET.load(GUILD_ID, 0)
+        obj = bot._GUILD_TARGET.load(GUILD_ID, 0, None)
         self.assertEqual(obj["server_max_players"], 200)
 
 

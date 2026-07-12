@@ -97,8 +97,7 @@ def init_db():
             user_assignments    TEXT    NOT NULL DEFAULT '{}',
             status              TEXT    NOT NULL DEFAULT 'active',
             created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
-            updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(guild_id, channel_id, status)
+            updated_at          TEXT    NOT NULL DEFAULT (datetime('now'))
         );
 
         CREATE INDEX IF NOT EXISTS idx_events_guild
@@ -106,9 +105,47 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_events_channel
             ON events(guild_id, channel_id, status);
     """)
+    _migrate_drop_unique_constraint(conn)
     conn.commit()
     conn.close()
     logger.info(f"Database initialised: {DB_FILE}")
+
+
+def _migrate_drop_unique_constraint(conn):
+    """Rebuild `events` without UNIQUE(guild_id, channel_id, status) so a channel can
+    hold multiple active events. Idempotent: detects the old constraint in the stored
+    schema SQL and no-ops once it's gone."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='events'"
+    ).fetchone()
+    if row is None or "UNIQUE(guild_id, channel_id, status)" not in (row[0] or ""):
+        return  # fresh table (no constraint) or already migrated
+    conn.executescript("""
+        PRAGMA foreign_keys=OFF;
+        BEGIN;
+        CREATE TABLE events_new (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id            INTEGER NOT NULL,
+            channel_id          INTEGER NOT NULL,
+            event_data          TEXT    NOT NULL,
+            user_assignments    TEXT    NOT NULL DEFAULT '{}',
+            status              TEXT    NOT NULL DEFAULT 'active',
+            created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+            updated_at          TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO events_new
+            SELECT id, guild_id, channel_id, event_data, user_assignments,
+                   status, created_at, updated_at FROM events;
+        DROP TABLE events;
+        ALTER TABLE events_new RENAME TO events;
+        CREATE INDEX IF NOT EXISTS idx_events_guild
+            ON events(guild_id, status);
+        CREATE INDEX IF NOT EXISTS idx_events_channel
+            ON events(guild_id, channel_id, status);
+        COMMIT;
+        PRAGMA foreign_keys=ON;
+    """)
+    logger.info("Migrated events table: dropped UNIQUE(guild_id, channel_id, status)")
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +216,47 @@ def get_event_by_channel(guild_id: int, channel_id: int) -> Optional[dict]:
         "db_id": row[0],
         "event": event_data,
         "user_assignments": user_assignments,
+    }
+
+
+def get_events_by_channel(guild_id: int, channel_id: int) -> list[dict]:
+    """Return all active events in a channel (usually 1-3), ordered by id."""
+    conn = _get_conn()
+    rows = conn.execute(
+        """SELECT id, event_data, user_assignments
+           FROM events
+           WHERE guild_id = ? AND channel_id = ? AND status = 'active'
+           ORDER BY id""",
+        (guild_id, channel_id),
+    ).fetchall()
+    conn.close()
+    return [
+        {"db_id": r[0], "event": _loads(r[1]), "user_assignments": _loads(r[2])}
+        for r in rows
+    ]
+
+
+def get_event_by_id(guild_id: int, db_id: int) -> Optional[dict]:
+    """Return one active event by primary key, or None.
+
+    Includes channel_id so callers can send messages without a second lookup.
+    """
+    conn = _get_conn()
+    row = conn.execute(
+        """SELECT id, channel_id, event_data, user_assignments
+           FROM events
+           WHERE guild_id = ? AND id = ? AND status = 'active'
+           LIMIT 1""",
+        (guild_id, db_id),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return {
+        "db_id": row[0],
+        "channel_id": row[1],
+        "event": _loads(row[2]),
+        "user_assignments": _loads(row[3]),
     }
 
 

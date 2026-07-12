@@ -319,10 +319,9 @@ Players removed from a squad trigger the waitlist promotion (DM + log channel no
 | Command | Description |
 |---|---|
 | `/create_event` | Create a new event (guided wizard) |
-| `/delete_event` | Delete the event |
 | `/update` | Refresh the event display |
 
-Open and close registration manually via the **⚙️ Admin** button on the event embed.
+A channel can hold **several active events at once** — each is its own post with its own buttons. Manage a specific event (edit, open/close, **delete**) via the **⚙️ Admin** button on that event's post. When a channel-scoped command runs in a channel with more than one active event, the bot shows a picker so you choose which event it applies to.
 
 
 ### Admin Tools

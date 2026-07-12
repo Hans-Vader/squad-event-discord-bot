@@ -24,8 +24,8 @@ def _labels(view):
 class AdminConsolidateButtonTest(unittest.TestCase):
     def _panel(self, mode):
         ev = {"mode": mode, "squads": {}}
-        with mock.patch.object(bot, "_get_channel_event", return_value=(ev, {}, 1)):
-            return bot.AdminActionView(1, 2)
+        with mock.patch.object(bot, "_get_event_by_dbid", return_value=(ev, {}, 1)):
+            return bot.AdminActionView(1, 2, 1)
 
     def test_button_present_in_player_mode(self):
         self.assertIn(t("admin.consolidate_squads", "en"), _labels(self._panel("player")))

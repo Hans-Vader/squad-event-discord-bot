@@ -18,6 +18,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Es gibt derzeit kein aktives Event in diesem Kanal.",
         "en": "There is no active event in this channel.",
     },
+    "general.event_no_longer_exists": {
+        "de": "Dieses Event existiert nicht mehr. Bitte aktualisiere den Kanal.",
+        "en": "This event no longer exists. Please refresh the channel.",
+    },
+    "picker.choose_event": {
+        "de": "In diesem Kanal gibt es mehrere Events – bitte wähle eines aus:",
+        "en": "This channel has multiple events — please pick one:",
+    },
     "general.no_permission": {
         "de": "Du hast keine Berechtigung für diese Aktion.",
         "en": "You do not have permission for this action.",

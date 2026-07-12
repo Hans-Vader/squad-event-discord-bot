@@ -38,10 +38,10 @@ import bot  # noqa: E402
 
 
 def _gather(event, user_assignments=None):
-    with mock.patch.object(bot, "_get_channel_event",
+    with mock.patch.object(bot, "_get_event_by_dbid",
                            return_value=(event, user_assignments or {}, 1)), \
          mock.patch.object(bot, "get_guild_language", return_value="en"):
-        return bot._registered_gather(1, 2)
+        return bot._registered_gather(1, 2, 1)
 
 
 class PlayerModeGatherTest(unittest.TestCase):
@@ -94,9 +94,9 @@ class RepModeGatherTest(unittest.TestCase):
              ("u9", "Cass", "caster")})
 
     def test_no_event_returns_empty(self):
-        with mock.patch.object(bot, "_get_channel_event", return_value=(None, None, None)), \
+        with mock.patch.object(bot, "_get_event_by_dbid", return_value=(None, None, None)), \
              mock.patch.object(bot, "get_guild_language", return_value="en"):
-            event, _, entries = bot._registered_gather(1, 2)
+            event, _, entries = bot._registered_gather(1, 2, 1)
         self.assertIsNone(event)
         self.assertEqual(entries, [])
 
