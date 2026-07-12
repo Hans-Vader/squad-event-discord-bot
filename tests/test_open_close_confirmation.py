@@ -47,7 +47,7 @@ class _Interaction:
 
 def _admin_view():
     v = bot.AdminActionView.__new__(bot.AdminActionView)
-    v.guild_id, v.channel_id = 1, 2
+    v.guild_id, v.channel_id, v.db_id = 1, 2, 7
     return v
 
 
@@ -77,7 +77,7 @@ class OpenConfirmEmbedTest(unittest.TestCase):
 class AdminShowsPromptTest(unittest.IsolatedAsyncioTestCase):
     async def test_open_shows_confirmation_without_opening(self):
         event = {"name": "X", "registration_open": False, "ping_on_open": False}
-        with patch.object(bot, "_get_channel_event", return_value=(event, {}, 7)):
+        with patch.object(bot, "_get_event_by_dbid", return_value=(event, {}, 7)):
             inter = _Interaction()
             await _admin_view()._open(inter)
         self.assertIsInstance(inter.response.sent["view"], bot.OpenConfirmationView)
@@ -91,7 +91,7 @@ class AdminShowsPromptTest(unittest.IsolatedAsyncioTestCase):
             captured["msg"] = msg
 
         with ExitStack() as es:
-            es.enter_context(patch.object(bot, "_get_channel_event", return_value=(event, {}, 7)))
+            es.enter_context(patch.object(bot, "_get_event_by_dbid", return_value=(event, {}, 7)))
             es.enter_context(patch.object(bot, "send_feedback", _fb))
             inter = _Interaction()
             await _admin_view()._open(inter)
@@ -100,7 +100,7 @@ class AdminShowsPromptTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_close_shows_confirmation_without_closing(self):
         event = {"name": "X", "mode": "rep", "registration_open": True, "is_closed": False}
-        with patch.object(bot, "_get_channel_event", return_value=(event, {}, 7)):
+        with patch.object(bot, "_get_event_by_dbid", return_value=(event, {}, 7)):
             inter = _Interaction()
             await _admin_view()._close(inter)
         self.assertIsInstance(inter.response.sent["view"], bot.CloseConfirmationView)
@@ -112,7 +112,7 @@ class ConfirmPerformsActionTest(unittest.IsolatedAsyncioTestCase):
     async def _run_confirm(self, view, event):
         save_spy = MagicMock()
         with ExitStack() as es:
-            es.enter_context(patch.object(bot, "_get_channel_event", return_value=(event, {}, 7)))
+            es.enter_context(patch.object(bot, "_get_event_by_dbid", return_value=(event, {}, 7)))
             es.enter_context(patch.object(bot, "save_event", save_spy))
             es.enter_context(patch.object(bot, "send_feedback", AsyncMock()))
             es.enter_context(patch.object(bot, "send_to_log_channel", AsyncMock()))
@@ -124,21 +124,21 @@ class ConfirmPerformsActionTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_open_confirm_opens_registration(self):
         event = {"name": "X", "registration_open": False, "is_closed": False, "ping_on_open": False}
-        await self._run_confirm(bot.OpenConfirmationView(1, 2), event)
+        await self._run_confirm(bot.OpenConfirmationView(1, 2, 7), event)
         self.assertTrue(event["registration_open"])
         self.assertFalse(event["is_closed"])
 
     async def test_close_confirm_rep_reverts_to_early_access(self):
         event = {"name": "X", "mode": "rep", "registration_open": True, "is_closed": False,
                  "registration_start_time": datetime(2020, 1, 1, 20, 0)}
-        await self._run_confirm(bot.CloseConfirmationView(1, 2), event)
+        await self._run_confirm(bot.CloseConfirmationView(1, 2, 7), event)
         self.assertFalse(event["registration_open"])
         self.assertFalse(event["is_closed"])
         self.assertIsNone(event["registration_start_time"])
 
     async def test_close_confirm_player_mode_locks(self):
         event = {"name": "X", "mode": "player", "registration_open": True, "is_closed": False}
-        await self._run_confirm(bot.CloseConfirmationView(1, 2), event)
+        await self._run_confirm(bot.CloseConfirmationView(1, 2, 7), event)
         self.assertTrue(event["is_closed"])
         self.assertFalse(event["registration_open"])
 

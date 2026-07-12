@@ -69,7 +69,7 @@ class ResolveSquadMetaTest(unittest.TestCase):
 
 class BuildSquadUnregisterConfirmTest(unittest.TestCase):
     def test_returns_embed_naming_squad_and_confirm_view(self):
-        embed, view = bot._build_squad_unregister_confirm(_event(), 1, 2, "sq-1", "en")
+        embed, view = bot._build_squad_unregister_confirm(_event(), 1, 2, 1, "sq-1", "en")
         # The resolved squad name is shown in the prompt the user must confirm.
         self.assertIn("Alpha", embed.description)
         # The shared confirm view carries the selected squad id.
@@ -105,17 +105,17 @@ class SelectorShowsConfirmationTest(unittest.IsolatedAsyncioTestCase):
         async def _spy_unregister(*a, **k):
             unregister_calls.append((a, k))
 
-        orig_get = bot._get_channel_event
+        orig_get = bot._get_event_by_dbid
         orig_unreg = bot.unregister_squad
-        bot._get_channel_event = lambda *a, **k: (event, {}, 0)
+        bot._get_event_by_dbid = lambda *a, **k: (event, {}, 0)
         bot.unregister_squad = _spy_unregister
         try:
             view = bot.UserSquadUnregisterSelector(
-                1, 2, [discord.SelectOption(label="Alpha", value="sq-1")])
+                1, 2, 1, [discord.SelectOption(label="Alpha", value="sq-1")])
             interaction = _FakeInteraction("sq-1")
             await view._selected(interaction)
         finally:
-            bot._get_channel_event = orig_get
+            bot._get_event_by_dbid = orig_get
             bot.unregister_squad = orig_unreg
 
         # Selecting a squad must NOT remove it; that waits for confirmation.

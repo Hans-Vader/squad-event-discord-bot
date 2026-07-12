@@ -319,10 +319,9 @@ Wenn ein Spieler aus einem Squad entfernt wird, wird die Warteliste-Beförderung
 | Befehl | Beschreibung |
 |---|---|
 | `/create_event` | Neues Event erstellen (geführter Wizard) |
-| `/delete_event` | Event löschen |
 | `/update` | Event-Anzeige aktualisieren |
 
-Anmeldung manuell öffnen oder schließen über den **⚙️ Admin**-Button im Event-Embed.
+Ein Kanal kann **mehrere aktive Events gleichzeitig** enthalten — jedes ist ein eigener Beitrag mit eigenen Buttons. Ein bestimmtes Event verwaltest du (bearbeiten, öffnen/schließen, **löschen**) über den **⚙️ Admin**-Button an dessen Beitrag. Läuft ein kanalgebundener Befehl in einem Kanal mit mehreren aktiven Events, zeigt der Bot ein Auswahlmenü, damit du wählst, für welches Event er gilt.
 
 
 ### Admin-Tools

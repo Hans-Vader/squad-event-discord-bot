@@ -77,7 +77,7 @@ class SendFeedbackEditModeTest(unittest.IsolatedAsyncioTestCase):
     async def test_squad_name_modal_replaces_select_message(self):
         # SquadNameModal.on_submit opts into edit_feedback so the registration result
         # replaces the type/playstyle select message instead of appending a new ephemeral.
-        modal = bot.SquadNameModal("1", "2", "infantry", "Normal")
+        modal = bot.SquadNameModal("1", "2", 1, "infantry", "Normal")
         modal.squad_name._value = "Alpha"
         inter = _Interaction(done=False)
         inter.response.defer_calls = []

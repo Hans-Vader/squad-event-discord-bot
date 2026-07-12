@@ -72,8 +72,7 @@ The admin panel opens via the **Admin** button and provides actions grouped per 
 
 | Command | Description |
 |---|---|
-| `/create_event` | Create a new event (guided wizard) |
-| `/delete_event` | Delete the event in this channel |
+| `/create_event` | Create a new event (guided wizard) — a channel can hold several active events at once |
 | `/update` | Refresh event display |
 | `/set_event_roles` | Add roles to the event (ping, squad-rep, community-rep, caster, caster early-access) |
 | `/clear_event_roles` | Clear event roles (all or by category) |
@@ -82,6 +81,8 @@ The admin panel opens via the **Admin** button and provides actions grouped per 
 | `/admin_user_assignments` | Show all user-squad assignments |
 | `/admin_reset_assignment` | Reset a user's assignment |
 | `/export_csv` | Export squad list as CSV |
+
+> **Multiple events per channel:** a channel can hold several active events at the same time — each is its own embed post with its own buttons. To manage a specific event (edit, open/close, delete, …), use the **⚙️ Admin** button on that event's post. When a channel-scoped command (`/update`, `/set_event_roles`, `/admin_waitlist`, `/export_csv`, …) runs in a channel with more than one active event, the bot shows a picker so you choose which event it applies to. There is no separate `/delete_event` command — delete via the **⚙️ Admin** button on the event's post.
 
 ### Server Setup Commands (Admin only)
 
