@@ -4009,6 +4009,10 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
             return False, t("edit.cannot_disable_type_with_entries", lang,
                             type=t(f"embed.type_{type_key}", lang))
 
+    if (key in ("infantry_squad_size", "vehicle_squad_size", "heli_squad_size")
+            and new_value > MAX_SQUAD_PLAYERS):
+        return False, t("edit.squad_size_max", lang, max=MAX_SQUAD_PLAYERS)
+
     if key == "dont_waste_slots" and new_value:
         if event.get("infantry_squad_size", 6) >= MAX_SQUAD_PLAYERS:
             return False, t("edit.dont_waste_max_size", lang,
@@ -4217,6 +4221,9 @@ async def _persist_guild_edit(guild_id, prop, new_value, lang, editor_name):
             return "error", t("set.value_too_low", lang, min=1)
         if vtype == "int_zero" and isinstance(new_value, int) and new_value < 0:
             return "error", t("set.value_too_low", lang, min=0)
+        if (key in ("infantry_squad_size", "vehicle_squad_size", "heli_squad_size")
+                and isinstance(new_value, int) and new_value > MAX_SQUAD_PLAYERS):
+            return "error", t("edit.squad_size_max", lang, max=MAX_SQUAD_PLAYERS)
         settings[key] = new_value
         save_guild_settings(guild_id, settings)
     guild = bot.get_guild(guild_id)
@@ -5845,7 +5852,7 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
         f"**{t('settings.max_caster_slots', lang)}:** {_max_casters}\n"
         f"**{t('settings.max_squads_per_user', lang)}:** {event.get('max_squads_per_user', '?')}"
     )
-    if not dont_waste_slots_active(event):
+    if _unused > 0 and not dont_waste_slots_active(event):
         server_info += f"\n**{_unused_label}:** {_unused}"
     embed.add_field(name=t("wizard.summary_server", lang), value=server_info, inline=False)
 
@@ -6104,7 +6111,7 @@ class EventServerConfigModal(ui.Modal):
         except ValueError:
             await interaction.response.send_message(t("event.invalid_squad_sizes", lang), ephemeral=True)
             return
-        if inf_size < 1 or veh_size < 1 or heli_size < 1:
+        if not all(1 <= s <= MAX_SQUAD_PLAYERS for s in (inf_size, veh_size, heli_size)):
             await interaction.response.send_message(t("event.invalid_squad_sizes", lang), ephemeral=True)
             return
 

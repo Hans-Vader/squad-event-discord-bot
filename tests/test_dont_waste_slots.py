@@ -99,10 +99,11 @@ class TestSizeOptions(unittest.TestCase):
         tiny = _event(max_player_slots=20, dont_waste_slots=False)  # 6 inf seats
         self.assertEqual(utils.infantry_size_options(tiny), [(6, 1)])
 
-    def test_first_pick_locks_size(self):
+    def test_pool_constrains_next_offers(self):
         ev = _event(squads=_squads(7))
-        # one 7 registered: 8 gone, 7 continues (mirror + one more pair),
-        # base loses one slot to the reserved mirror.
+        # one 7 registered (pool 4 → free 2 after mirror reservation): an 8er
+        # pair no longer fits, 7 continues (mirror + one more pair), base
+        # loses one slot to the reserved mirror.
         self.assertEqual(utils.infantry_size_options(ev), [(6, 10), (7, 3)])
 
     def test_pair_completion_and_exhaustion(self):
@@ -125,6 +126,32 @@ class TestSizeOptions(unittest.TestCase):
         self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 4), (8, 2)])
         ev = _event(max_player_slots=91, squads=_squads(8, 8))
         self.assertEqual(utils.infantry_size_options(ev), [(6, 10)])
+
+    def test_pair_rule_uses_leftover_pool(self):
+        # Pool 8 (user scenario): a completed 9er pair leaves 2 seats — a 7er
+        # pair absorbs them instead of the old size lock stranding them.
+        big = dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
+        ev = _event(squads=_squads(9, 9), **big)
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 2)])
+        # A 7er pair may even start before the 9er mirror completes — the
+        # mirror's seats stay reserved.
+        ev = _event(squads=_squads(9), **big)
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 2), (9, 1)])
+        # Fully absorbed: 2x9 + 2x7 = all 8 pool seats used, base only.
+        ev = _event(squads=_squads(9, 9, 7, 7), **big)
+        self.assertEqual(utils.infantry_size_options(ev), [(6, 10)])
+
+    def test_wasted_seats(self):
+        big = dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
+        # Options still open → nothing counts as wasted yet.
+        self.assertEqual(utils.infantry_wasted_seats(_event(**big)), 0)
+        self.assertEqual(utils.infantry_wasted_seats(_event(squads=_squads(9, 9), **big)), 0)
+        # Fully absorbed → 0.
+        self.assertEqual(utils.infantry_wasted_seats(
+            _event(squads=_squads(9, 9, 7, 7), **big)), 0)
+        # U=5 after an 8er pair: 1 seat can never be paired.
+        self.assertEqual(utils.infantry_wasted_seats(
+            _event(max_player_slots=91, squads=_squads(8, 8))), 1)
 
     def test_mirror_slot_reservation(self):
         # 10 base squads + one unpaired 7 → 11 of 12 slots used; the last
@@ -154,7 +181,7 @@ class TestSizeOptions(unittest.TestCase):
                             "h": {"type": "heli", "size": 1}})
         self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 4), (8, 2)])
 
-    def test_locked_size_needs_two_slots_for_new_pair(self):
+    def test_new_pair_needs_two_free_squad_slots(self):
         # 2x7 complete + 9 base squads → one squad slot free: a third 7 would
         # start a pair whose mirror could never register, so it isn't offered.
         ev = _event(squads=_squads(7, 7, *([6] * 9)))
@@ -196,12 +223,25 @@ class TestEmbedHeader(unittest.TestCase):
         return None
 
     def test_oversized_sizes_shown_in_header(self):
-        # Degenerate mixed-size state: counts and possible totals per size.
+        # Over-committed mixed-size state (pool 4 fully consumed): no further
+        # 7s possible, the 8's mirror stays claimable.
         ev = _embed_event(squads=_squads(7, 7, 8, 6))
         field = self._infantry_field(utils.format_event_details(ev, "de"))
-        self.assertIn("[Größe: 6 | (2/4) Größe: 7 | (1/2) Größe: 8]", field.name)
+        self.assertIn("[Größe: 6 | (2/2) Größe: 7 | (1/2) Größe: 8]", field.name)
         field = self._infantry_field(utils.format_event_details(ev, "en"))
-        self.assertIn("[Size: 6 | (2/4) Size: 7 | (1/2) Size: 8]", field.name)
+        self.assertIn("[Size: 6 | (2/2) Size: 7 | (1/2) Size: 8]", field.name)
+
+    def test_header_after_nine_pair_offers_seven(self):
+        # User scenario (pool 8): the 9er pair leaves 2 seats → a 7er pair is
+        # offered instead of stranding them, permanently visible in the header.
+        ev = _embed_event(server_max_players=100, max_player_slots=98,
+                          max_vehicle_squads=2, max_heli_squads=2,
+                          squads=_squads(9, 9))
+        embed = utils.format_event_details(ev, "de")
+        field = self._infantry_field(embed)
+        self.assertIn("[Größe: 6 | (0/2) Größe: 7 | (2/2) Größe: 9]", field.name)
+        # ...and nothing is reported as unused while the 7er pair is still open.
+        self.assertNotIn("Ungenutzt", self._all_values(embed))
 
     def test_header_shows_possible_sizes_before_any_register(self):
         # "Permanently visible": with the mode active the candidate sizes show
@@ -247,6 +287,21 @@ class TestEmbedHeader(unittest.TestCase):
         self.assertNotIn("Ungenutzt", self._all_values(embed))
         embed = utils.format_event_details(_embed_event(dont_waste_slots=False), "de")
         self.assertIn("Ungenutzt", self._all_values(embed))
+
+    def test_residual_shown_while_mode_active(self):
+        # U=5, 8er pair registered: 1 seat can never be paired anymore — it
+        # reappears as "Ungenutzt: 1" even though the mode is on.
+        ev = _embed_event(server_max_players=93, max_player_slots=91,
+                          squads=_squads(8, 8))
+        embed = utils.format_event_details(ev, "de")
+        self.assertIn("Ungenutzt: 1", self._all_values(embed))
+
+    def test_unused_line_hidden_at_zero(self):
+        # "Ungenutzt: 0" is noise — hide the line entirely when nothing is unused.
+        ev = _embed_event(server_max_players=88, max_player_slots=86,
+                          dont_waste_slots=False)  # 72 inf seats = 12 squads, U=0
+        embed = utils.format_event_details(ev, "de")
+        self.assertNotIn("Ungenutzt", self._all_values(embed))
 
 
 class TestSelectValuePlumbing(unittest.TestCase):
@@ -348,6 +403,18 @@ class TestModelPlumbing(unittest.TestCase):
         self.assertTrue(ok)
         self.assertFalse(ev["dont_waste_slots"])
 
+    def test_squad_sizes_capped_at_game_limit(self):
+        # Editing any squad size above 9 is rejected; 9 itself is fine.
+        for key in ("infantry_squad_size", "vehicle_squad_size", "heli_squad_size"):
+            ev = _event()
+            ok, err = bot._apply_property_change(ev, key, "int", None, 10, "de")
+            self.assertFalse(ok, key)
+            self.assertIn("maximal 9 Spieler", err)
+        ev = _event()
+        ok, _err = bot._apply_property_change(ev, "infantry_squad_size", "int", None, 9, "de")
+        self.assertTrue(ok)
+        self.assertEqual(ev["infantry_squad_size"], 9)
+
 
 class TestI18nKeys(unittest.TestCase):
     KEYS = (
@@ -363,6 +430,7 @@ class TestI18nKeys(unittest.TestCase):
         "squad.waitlisted_mirror",
         "embed.server_overview_value_no_unused",
         "edit.property.dont_waste_slots",
+        "edit.squad_size_max",
         "edit.dont_waste_max_size",
         "edit.dont_waste_no_unused",
         "edit.dont_waste_single_unused",

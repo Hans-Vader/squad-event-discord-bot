@@ -268,35 +268,46 @@ def infantry_size_options(event: dict) -> list:
         return [(base, free_slots)]
 
     pending = sum(1 for c in counts.values() if c % 2)
+    consumed = sum((size - base) * c for size, c in counts.items())
+    reserved = sum(size - base for size, c in counts.items() if c % 2)
+    free_pool = max(0, pool - consumed - reserved)
     options = [(base, max(0, free_slots - pending))]
 
-    if counts:
-        # A size is locked in: only sizes already registered are offered until
-        # every oversized squad unregisters again.
-        for size in sorted(counts):
-            allowed = 2 * (pool // (2 * (size - base)))
-            remaining = allowed - counts[size]
-            others_pending = pending - (1 if counts[size] % 2 else 0)
-            avail = max(0, free_slots - others_pending)
-            if counts[size] % 2:
-                # Incomplete pair: the mirror stays registerable (even if a
-                # config edit shrank the pool); anything beyond it only in pairs.
-                after_mirror = max(0, avail - 1)
-                remaining = min(max(1, remaining), 1 + after_mirror - after_mirror % 2)
-                if avail < 1:
-                    remaining = 0
+    # Pair rule: any size whose complete PAIR still fits the remaining pool is
+    # offerable (plus mirrors of incomplete pairs) — the pool gets used up
+    # instead of being locked to the first-picked size.
+    candidates = set(counts) | set(
+        range(base + 1, min(base + free_pool // 2, MAX_SQUAD_PLAYERS) + 1))
+    for size in sorted(candidates):
+        c = counts.get(size, 0)
+        extra = size - base
+        others_pending = pending - (1 if c % 2 else 0)
+        avail = max(0, free_slots - others_pending)
+        if c % 2:
+            # Incomplete pair: the mirror stays registerable (even if a config
+            # edit shrank the pool); anything beyond it only in full pairs.
+            if avail < 1:
+                remaining = 0
             else:
-                remaining = min(remaining, avail - avail % 2)
-            if remaining > 0:
-                options.append((size, remaining))
-    else:
-        fresh_cap = free_slots - (free_slots % 2)  # a new pair needs two squad slots
-        for size in range(base + 1, min(base + pool // 2, MAX_SQUAD_PLAYERS) + 1):
-            allowed = 2 * (pool // (2 * (size - base)))
-            remaining = min(allowed, fresh_cap)
-            if remaining >= 2:
-                options.append((size, remaining))
+                remaining = 1 + 2 * min(free_pool // (2 * extra), (avail - 1) // 2)
+        else:
+            remaining = 2 * min(free_pool // (2 * extra), avail // 2)
+        if remaining > 0:
+            options.append((size, remaining))
     return options
+
+
+def infantry_wasted_seats(event: dict) -> int:
+    """Pool seats that can no longer be absorbed by oversized squads: the
+    leftover once no oversized size is offerable anymore (0 while any option —
+    including a pending mirror — is still open)."""
+    base = event.get("infantry_squad_size", 6)
+    if any(size != base for size, _ in infantry_size_options(event)):
+        return 0
+    consumed = sum(d.get("size", base) - base
+                   for d in event.get("squads", {}).values()
+                   if d.get("type") == "infantry" and d.get("size", base) > base)
+    return max(0, infantry_unused_pool(event) - consumed)
 
 
 def _next_auto_squad_name(event: dict, squad_type: str) -> str:
@@ -1234,12 +1245,15 @@ def format_event_details(event: dict, lang: str = "de",
     # Slot overview — compact inline grid (row 1: server, caster, max/player)
     overview_name_key = "embed.seats_overview" if is_player_mode else "embed.server_overview"
     if dont_waste_slots_active(event):
-        # Unused seats are offered as oversized squads, so the counter is moot.
-        overview_value = t("embed.server_overview_value_no_unused", lang,
-                           cap=server_cap, free=available)
-    else:
+        # Only the residual that no oversized squad can absorb anymore counts
+        # as unused while the mode is active.
+        unused = infantry_wasted_seats(event)
+    if unused > 0:
         overview_value = t("embed.server_overview_value", lang,
                            cap=server_cap, free=available, unused=unused)
+    else:
+        overview_value = t("embed.server_overview_value_no_unused", lang,
+                           cap=server_cap, free=available)
     embed.add_field(name=t(overview_name_key, lang), value=overview_value, inline=True)
     if not is_player_mode:
         embed.add_field(name=t("embed.max_per_user_label", lang, count=max_squads_user), value="\u200b", inline=True)

@@ -103,7 +103,7 @@ Event creation uses a multi-step wizard:
 - Registration start time (date/time or "sofort"/"now" for immediately)
 
 **Step 2 — Modal (Server Configuration):**
-- Server max players, max caster slots (0 = casters disabled), squad sizes (Infantry / Vehicle / Heli), max vehicle squads, max heli squads
+- Server max players, max caster slots (0 = casters disabled), squad sizes (Infantry / Vehicle / Heli, each 1–9), max vehicle squads, max heli squads
 - All pre-filled from server defaults (`/config_defaults`)
 
 **Step 3 — Squad Roles:**
@@ -124,7 +124,7 @@ Event creation uses a multi-step wizard:
 - Max squads per user (1–20)
 
 **Step 7 — Don't waste slots** (only when ≥ 2 slots stay unused):
-- Offer the leftover infantry seats as oversized squads — always in equal numbers per size so both teams can be mirrored; the first oversized registration locks in the size. Hides the "Unused" counter in the embed.
+- Offer the leftover infantry seats as oversized squads — always in equal numbers per size so both teams can be mirrored; any size whose pair still fits the remaining seats is offered. The "Unused" counter only shows seats no pair can absorb anymore.
 
 **Step 8 — Confirmation:**
 - Summary embed with all settings including unused slots — confirm or cancel

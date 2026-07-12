@@ -231,8 +231,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Continue",
     },
     "event.invalid_squad_sizes": {
-        "de": "Ungültiges Format. Verwende: Zahl / Zahl / Zahl (z.B. 6 / 2 / 1)",
-        "en": "Invalid format. Use: Number / Number / Number (e.g. 6 / 2 / 1)",
+        "de": "Ungültiges Format. Verwende: Zahl / Zahl / Zahl (z.B. 6 / 2 / 1), jeweils 1–9 — Squads können maximal 9 Spieler beherbergen.",
+        "en": "Invalid format. Use: Number / Number / Number (e.g. 6 / 2 / 1), each 1–9 — squads can hold at most 9 players.",
     },
     "event.name_label": {
         "de": "Event-Name",
@@ -1652,6 +1652,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "23. Slots nicht verschwenden (größere Squads)",
         "en": "23. Don't waste slots (bigger squads)",
     },
+    "edit.squad_size_max": {
+        "de": "Ungültiger Wert: Squads können maximal {max} Spieler beherbergen.",
+        "en": "Invalid value: squads can hold at most {max} players.",
+    },
     "edit.dont_waste_max_size": {
         "de": "Diese Option kann nicht aktiviert werden: Squads können maximal {max} Spieler beherbergen — bei Squad-Größe {size} sind keine größeren Squads möglich.",
         "en": "This option cannot be enabled: squads can hold at most {max} players — with squad size {size} no bigger squads are possible.",
@@ -2285,12 +2289,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": ("Die Anzahl der Infanterie-Squads ist immer gerade (gleich viele pro Team), "
                "dadurch bleiben {unused} Plätze ungenutzt. Wenn aktiviert, können diese "
                "Plätze durch größere Squads genutzt werden — immer in gleicher Anzahl pro "
-               "Größe, damit beide Teams gespiegelt werden können. "
-               "Die erste Anmeldung einer Übergröße legt die Größe fest."),
+               "Größe, damit beide Teams gespiegelt werden können. Wählbar ist jede Größe, "
+               "deren Paar noch in die freien Plätze passt."),
         "en": ("The infantry squad count is always even (same number per team), which "
                "leaves {unused} seats unused. When enabled, those seats can be used by "
                "bigger squads — always in equal numbers per size so both teams can be "
-               "mirrored. The first oversized registration locks in the size."),
+               "mirrored. Any size whose pair still fits the remaining seats is offered."),
     },
     "wizard.dont_waste_select_placeholder": {
         "de": "Ungenutzte Plätze verwenden...",
