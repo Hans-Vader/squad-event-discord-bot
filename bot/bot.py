@@ -106,6 +106,8 @@ _active_edit_sessions: dict[int, dict] = {}
 # A session whose view's on_timeout never fired is considered stuck after this
 # many seconds, so a new /edit can reclaim it instead of being blocked forever.
 SESSION_STALE_AFTER_SECONDS = 660
+# How often the background sweeper checks for stuck sessions to force-close.
+SESSION_SWEEP_INTERVAL = 120
 # Debounced display update tasks per (guild_id, channel_id)
 _display_update_tasks: dict[int, asyncio.Task] = {}
 
@@ -4015,6 +4017,16 @@ def _prop_short_label(label_key, lang):
     return t(label_key, lang).split(". ", 1)[-1]
 
 
+def _overview_value(text, limit=100):
+    """Clamp a single property's displayed value for the compact overview list.
+
+    Keeps any group field well under Discord's 1024-char cap — a full-length
+    description or image URL otherwise overflowed the 'general' field, making the
+    refresh edit raise (and get swallowed), orphaning the session.
+    """
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
 def _validate_edit_text(text, vtype, lang):
     """Parse/validate typed modal input for a scalar vtype.
 
@@ -4200,17 +4212,55 @@ def _set_active_view(user_id, view):
         session["last_activity"] = time.monotonic()
 
 
-async def _force_close_stale_session(user_id):
-    """Tear down a stuck session and disable its old DM dialog (best-effort)."""
+async def _disable_and_notify_timeout(dm_msg, lang):
+    """Disable a DM dialog's controls and post the timeout notice (best-effort)."""
+    try:
+        await dm_msg.edit(view=None)
+    except discord.HTTPException:
+        pass
+    try:
+        await dm_msg.channel.send(t("edit.timeout", lang))
+    except discord.HTTPException:
+        pass
+
+
+async def _force_close_stale_session(user_id, notify=False):
+    """Tear down a stuck session and disable its old DM dialog (best-effort).
+
+    notify=True also posts the timeout notice — used by the background sweeper
+    when a session's own view timeout never fired, so the user learns it closed.
+    """
     session = _active_edit_sessions.pop(user_id, None)
     if not session:
         return
     dm_msg = session.get("dm_message")
-    if dm_msg is not None:
+    if dm_msg is None:
+        return
+    if notify:
+        # ponytail: a /edit reclaim landing in the ~ms window while this awaits
+        # the teardown can leave one stray "timed out" DM after the new editor
+        # opens — benign (no state corruption); add a per-user lock if it annoys.
+        await _disable_and_notify_timeout(dm_msg, session.get("lang", "de"))
+    else:
         try:
             await dm_msg.edit(view=None)
         except discord.HTTPException:
             pass
+
+
+async def _sweep_stale_sessions():
+    """Force-close every session idle past the stale threshold.
+
+    Backstop for the case where a view's on_timeout never fires (e.g. a refresh
+    edit failed and was swallowed): the session would otherwise linger forever
+    with a dead dialog. The threshold is above the view timeout, so this only
+    acts on genuinely stuck sessions.
+    """
+    now = time.monotonic()
+    stale = [uid for uid, s in list(_active_edit_sessions.items())
+             if now - s.get("last_activity", 0) >= SESSION_STALE_AFTER_SECONDS]
+    for uid in stale:
+        await _force_close_stale_session(uid, notify=True)
 
 
 async def _handle_edit_timeout(view, user_id):
@@ -4224,18 +4274,10 @@ async def _handle_edit_timeout(view, user_id):
     if not session or session.get("active_view") is not view:
         return
     _active_edit_sessions.pop(user_id, None)
-    lang = session.get("lang", "de")
     dm_msg = session.get("dm_message")
     if dm_msg is None:
         return
-    try:
-        await dm_msg.edit(view=None)
-    except discord.HTTPException:
-        pass
-    try:
-        await dm_msg.channel.send(t("edit.timeout", lang))
-    except discord.HTTPException:
-        pass
+    await _disable_and_notify_timeout(dm_msg, session.get("lang", "de"))
 
 
 async def _notify_event_gone(interaction, user_id, lang, via_modal=False):
@@ -4277,7 +4319,7 @@ def _build_edit_main_embed(event, lang, updated_note=None):
             continue
         lines = []
         for num, key, label_key, vtype, special in props:
-            current = _format_property_value(event, key, vtype, lang)
+            current = _overview_value(_format_property_value(event, key, vtype, lang))
             lines.append(f"`{num:>2}.` {_prop_short_label(label_key, lang)}:  `{current}`")
         embed.add_field(name=t(group_key, lang), value="\n".join(lines), inline=False)
     if updated_note:
@@ -4295,7 +4337,7 @@ def _build_guild_main_embed(settings, lang, updated_note=None):
     )
     lines = []
     for num, key, label_key, vtype, special in _GUILD_EDIT_PROPERTIES:
-        current = _format_property_value(settings, key, vtype, lang)
+        current = _overview_value(_format_property_value(settings, key, vtype, lang))
         lines.append(f"`{num:>2}.` {_prop_short_label(label_key, lang)}:  `{current}`")
     embed.add_field(name="​", value="\n".join(lines), inline=False)
     if updated_note:
@@ -6585,6 +6627,17 @@ async def _maybe_spawn_recurrence(old_event: dict, guild_id: int, channel_id: in
     )
 
 
+async def stale_session_sweep_loop():
+    """Background task: force-close DM edit sessions whose view timeout never fired."""
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        try:
+            await asyncio.sleep(SESSION_SWEEP_INTERVAL)
+            await _sweep_stale_sessions()
+        except Exception as e:
+            logger.error(f"Stale session sweep failed: {e}", exc_info=True)
+
+
 async def check_events_loop():
     """Background task: check registration start, reminders, expiry for all events."""
     await bot.wait_until_ready()
@@ -6831,8 +6884,12 @@ async def on_ready():
                 except Exception:
                     pass
 
-    # Start background task
-    bot.loop.create_task(check_events_loop())
+    # Start background tasks once — on_ready re-fires on every gateway reconnect,
+    # so an unguarded create_task would leak a new loop each time.
+    if not getattr(bot, "_bg_tasks_started", False):
+        bot._bg_tasks_started = True
+        bot.loop.create_task(check_events_loop())
+        bot.loop.create_task(stale_session_sweep_loop())
 
 
 # ############################# #
