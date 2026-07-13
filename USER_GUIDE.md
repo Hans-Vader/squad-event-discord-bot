@@ -74,7 +74,7 @@ The button is labeled **Join** (🪖) instead of **Squad**. The flow:
    The role selection is optional — pick nothing and only your name is shown (no parenthetical tag).
 4. Click **Continue** — the bot auto-assigns you to the first non-full squad of that type (creating a new squad if none has free slots), or places you on the waitlist if all slots are full. Your Discord display name is used; there's no name modal to fill in.
 
-Your role(s) are shown in parentheses next to your name in the event embed; with no role only your name is shown, e.g. `Infantry 1 (3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol`. **Squad Leaders always sort to the top of their squad.** Picking **Squad Leader** (alone or alongside other kits) also influences placement: the bot prefers squads without an existing SL and opens a new squad if every current squad already has one.
+Your role(s) are shown in parentheses next to your name in the event embed; with no role only your name is shown, e.g. `Infantry 1 (👥 3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol`. **Squad Leaders always sort to the top of their squad.** Picking **Squad Leader** (alone or alongside other kits) also influences placement: the bot prefers squads without an existing SL and opens a new squad if every current squad already has one.
 
 **One user, one registration.** If you try to register again while already registered, the bot reports that you're already signed up.
 

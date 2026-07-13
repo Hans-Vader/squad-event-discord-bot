@@ -74,7 +74,7 @@ Der Button heißt **Beitreten** (🪖) statt **Squad**. Der Ablauf:
    Die Rollenauswahl ist freiwillig — wählst du nichts, erscheint nur dein Name (ohne Klammer-Zusatz).
 4. Klicke auf **Weiter** — der Bot weist dich automatisch dem ersten nicht vollen Squad dieses Typs zu (erstellt automatisch ein neues Squad, falls nötig) oder setzt dich auf die Warteliste, wenn alle Plätze belegt sind. Dein Discord-Anzeigename wird verwendet; es gibt kein Namensfeld.
 
-Deine gewählten Rollen werden in Klammern hinter deinem Namen im Event-Embed angezeigt; ohne Rolle steht nur dein Name dort, z.B. `Infantry 1 (3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol`. **Squad Leader stehen immer ganz oben in ihrem Squad.** Wählst du **Squad Leader** (allein oder zusammen mit anderen Kits), beeinflusst das auch die Platzierung: Der Bot bevorzugt Squads ohne bestehenden SL und öffnet ein neues Squad, sobald alle aktuellen Squads bereits einen SL haben.
+Deine gewählten Rollen werden in Klammern hinter deinem Namen im Event-Embed angezeigt; ohne Rolle steht nur dein Name dort, z.B. `Infantry 1 (👥 3/6): Alice (Squad Leader, Medic), Bob (Rifleman), Carol`. **Squad Leader stehen immer ganz oben in ihrem Squad.** Wählst du **Squad Leader** (allein oder zusammen mit anderen Kits), beeinflusst das auch die Platzierung: Der Bot bevorzugt Squads ohne bestehenden SL und öffnet ein neues Squad, sobald alle aktuellen Squads bereits einen SL haben.
 
 **Ein User, eine Anmeldung.** Wenn du dich erneut anmeldest, obwohl du bereits registriert bist, meldet der Bot das zurück.
 

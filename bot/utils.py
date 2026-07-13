@@ -1478,7 +1478,7 @@ def format_event_details(event: dict, lang: str = "de",
                                    if number.isdigit() else raw_name)
                     # Header on its own line, members listed below it; blank
                     # line between squads keeps the overview easy to scan.
-                    header = f"**{squad_label}** ({filled}/{data.get('size', 0)})"
+                    header = f"**{squad_label}** (👥 {filled}/{data.get('size', 0)})"
                     if type_key == "infantry" and roles_enabled and filled > 0 and not _squad_has_sl(data):
                         header += f" ⚠️ {t('embed.no_squad_leader', lang)}"
                     text += f"{header}:\n{names}\n\n"
@@ -1488,7 +1488,7 @@ def format_event_details(event: dict, lang: str = "de",
                     rep = data.get("rep_name")
                     rep_suffix = f" — {rep}" if rep else ""
                     ps_prefix = f"[{playstyle}] " if playstyle_enabled else ""
-                    text += f"{ps_prefix}**{data.get('name', squad_id)}** ({sq_size}){rep_suffix}\n"
+                    text += f"{ps_prefix}**{data.get('name', squad_id)}** 👥 {sq_size}{rep_suffix}\n"
             embed.add_field(name=name, value=text.rstrip("\n"), inline=False)
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
@@ -1514,7 +1514,7 @@ def format_event_details(event: dict, lang: str = "de",
                     rep_name = _rest[0] if _rest else None
                     rep_suffix = f" — {rep_name}" if rep_name else ""
                     ps_prefix = f"[{playstyle}] " if playstyle_enabled else ""
-                    wl_text += f"{i+1}. {ps_prefix}**{squad_name}** ({sq_size}){rep_suffix}\n"
+                    wl_text += f"{i+1}. {ps_prefix}**{squad_name}** 👥 {sq_size}{rep_suffix}\n"
             embed.add_field(
                 name=t("embed.type_waitlist_label", lang, type=t(f"embed.type_{type_key}", lang), count=len(wl)),
                 value=wl_text, inline=False)

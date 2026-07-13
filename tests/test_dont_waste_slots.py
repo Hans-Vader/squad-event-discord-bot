@@ -292,6 +292,12 @@ class TestEmbedHeader(unittest.TestCase):
         field = self._infantry_field(utils.format_event_details(ev, "de"))
         self.assertIn("[(2/12) Größe: 6 | (0/2) Größe: 8]", field.name)
 
+    def test_squad_rows_show_size_with_people_icon(self):
+        ev = _embed_event(squads=_squads(7, 6))
+        field = self._infantry_field(utils.format_event_details(ev, "de"))
+        self.assertIn("👥 7", field.value)
+        self.assertIn("👥 6", field.value)
+
     def test_header_plain_when_mode_off(self):
         ev = _embed_event(squads=_squads(6, 6), dont_waste_slots=False)
         field = self._infantry_field(utils.format_event_details(ev, "de"))
