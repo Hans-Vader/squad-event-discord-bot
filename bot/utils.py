@@ -245,12 +245,25 @@ def _allowed_extras(event: dict, free_pool: int) -> list:
             if not (allowed and k not in allowed)]
 
 
-def _pair_plan(free_pool: int, extras: list) -> dict:
+def _max_pairs(event: dict, counts: dict | None = None):
+    """Remaining pair budget from the organizer's oversized-squad cap
+    (`dont_waste_max_squads`), or None when unlimited. With `counts`
+    (registered oversized squads per size, rep mode) an incomplete pair counts
+    as 2 — its mirror is reserved and completing it must never be blocked."""
+    cap = event.get("dont_waste_max_squads")
+    if not cap:
+        return None
+    used = sum(c + (c % 2) for c in (counts or {}).values())
+    return max(0, cap // 2 - used // 2)
+
+
+def _pair_plan(free_pool: int, extras: list, max_pairs: int | None = None) -> dict:
     """Canonical plan for absorbing the remaining pool with oversized pairs:
     least wasted seats first, then the fewest oversized squads, preferring
-    bigger squads on ties. Returns {extra_seats_per_squad: number_of_pairs}."""
+    bigger squads on ties, using at most `max_pairs` pairs (None = unlimited).
+    Returns {extra_seats_per_squad: number_of_pairs}."""
     coins = sorted({2 * e for e in extras if e > 0}, reverse=True)
-    if free_pool < 2 or not coins:
+    if free_pool < 2 or not coins or max_pairs == 0:
         return {}
     reach = {0: {}}  # exactly-absorbed seats -> pair multiset {coin: n}
     for total in range(2, free_pool + 1):
@@ -262,17 +275,20 @@ def _pair_plan(free_pool: int, extras: list) -> dict:
             if best is None or sum(prev.values()) + 1 < sum(best.values()):
                 best = dict(prev)
                 best[coin] = best.get(coin, 0) + 1
-        if best is not None:
+        # The DP minimizes pairs per total, so a total whose minimum exceeds
+        # the cap is unreachable within it (any larger total needs even more).
+        if best is not None and (max_pairs is None or sum(best.values()) <= max_pairs):
             reach[total] = best
     return {coin // 2: n for coin, n in reach[max(reach)].items()}
 
 
-def _pair_cover(target: int, extras: list) -> dict:
+def _pair_cover(target: int, extras: list, max_pairs: int | None = None) -> dict:
     """Minimal set of oversized pairs whose extra seats cover AT LEAST
     `target`: fewest pairs first, then least excess capacity, bigger squads
-    preferred. Returns {extra: n_pairs} ({} when target <= 0 or nothing fits)."""
+    preferred, using at most `max_pairs` pairs. Returns {extra: n_pairs}
+    ({} when target <= 0, nothing fits, or the cap prevents covering)."""
     coins = sorted({2 * e for e in extras if e > 0}, reverse=True)
-    if target <= 0 or not coins:
+    if target <= 0 or not coins or max_pairs == 0:
         return {}
     reach = {0: {}}
     for total in range(2, target + max(coins) + 1):
@@ -284,7 +300,7 @@ def _pair_cover(target: int, extras: list) -> dict:
             if cand is None or sum(prev.values()) + 1 < sum(cand.values()):
                 cand = dict(prev)
                 cand[coin] = cand.get(coin, 0) + 1
-        if cand is not None:
+        if cand is not None and (max_pairs is None or sum(cand.values()) <= max_pairs):
             reach[total] = cand
     best = None
     for total, combo in reach.items():
@@ -305,7 +321,7 @@ def planned_infantry_capacities(event: dict) -> list:
     if not dont_waste_slots_active(event):
         return [base] * cap
     pool = infantry_unused_pool(event)
-    plan = _pair_plan(pool, _allowed_extras(event, pool))
+    plan = _pair_plan(pool, _allowed_extras(event, pool), _max_pairs(event))
     oversized = sorted(base + extra
                        for extra, pairs in plan.items()
                        for _ in range(2 * pairs))
@@ -356,7 +372,8 @@ def infantry_size_options(event: dict) -> list:
     # Offered are the pairs of the canonical plan (least waste, then fewest
     # oversized squads — so as many regular squads as possible), plus mirrors
     # of incomplete pairs. The organizer may additionally whitelist sizes.
-    plan = _pair_plan(free_pool, _allowed_extras(event, free_pool))
+    plan = _pair_plan(free_pool, _allowed_extras(event, free_pool),
+                      _max_pairs(event, counts))
     candidates = set(counts) | {base + e for e in plan}
     for size in sorted(candidates):
         c = counts.get(size, 0)
@@ -386,7 +403,7 @@ def infantry_wasted_seats(event: dict) -> int:
     base = event.get("infantry_squad_size", 6)
     pool = infantry_unused_pool(event)
     if event.get("mode", "rep") == "player":
-        plan = _pair_plan(pool, _allowed_extras(event, pool))
+        plan = _pair_plan(pool, _allowed_extras(event, pool), _max_pairs(event))
         return max(0, pool - sum(2 * extra * n for extra, n in plan.items()))
     if any(size != base for size, _ in infantry_size_options(event)):
         return 0
@@ -514,7 +531,8 @@ def _replan_player_capacities(event: dict, squads: dict, type_names: list) -> li
     players = sum(len(squads[n].get("members", [])) for n in type_names)
     n_exist = len(type_names)
     overflow = max(0, players - n_exist * base)
-    cover = _pair_cover(overflow, _allowed_extras(event, infantry_unused_pool(event)))
+    cover = _pair_cover(overflow, _allowed_extras(event, infantry_unused_pool(event)),
+                        _max_pairs(event))
     oversized = sorted(base + extra
                        for extra, pairs in cover.items()
                        for _ in range(2 * pairs))
@@ -1478,7 +1496,7 @@ def format_event_details(event: dict, lang: str = "de",
                                    if number.isdigit() else raw_name)
                     # Header on its own line, members listed below it; blank
                     # line between squads keeps the overview easy to scan.
-                    header = f"**{squad_label}** ({filled}/{data.get('size', 0)})"
+                    header = f"**{squad_label}** (👥 {filled}/{data.get('size', 0)})"
                     if type_key == "infantry" and roles_enabled and filled > 0 and not _squad_has_sl(data):
                         header += f" ⚠️ {t('embed.no_squad_leader', lang)}"
                     text += f"{header}:\n{names}\n\n"
@@ -1488,7 +1506,7 @@ def format_event_details(event: dict, lang: str = "de",
                     rep = data.get("rep_name")
                     rep_suffix = f" — {rep}" if rep else ""
                     ps_prefix = f"[{playstyle}] " if playstyle_enabled else ""
-                    text += f"{ps_prefix}**{data.get('name', squad_id)}** ({sq_size}){rep_suffix}\n"
+                    text += f"{ps_prefix}**{data.get('name', squad_id)}** (👥 {sq_size}){rep_suffix}\n"
             embed.add_field(name=name, value=text.rstrip("\n"), inline=False)
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
@@ -1514,7 +1532,7 @@ def format_event_details(event: dict, lang: str = "de",
                     rep_name = _rest[0] if _rest else None
                     rep_suffix = f" — {rep_name}" if rep_name else ""
                     ps_prefix = f"[{playstyle}] " if playstyle_enabled else ""
-                    wl_text += f"{i+1}. {ps_prefix}**{squad_name}** ({sq_size}){rep_suffix}\n"
+                    wl_text += f"{i+1}. {ps_prefix}**{squad_name}** (👥 {sq_size}){rep_suffix}\n"
             embed.add_field(
                 name=t("embed.type_waitlist_label", lang, type=t(f"embed.type_{type_key}", lang), count=len(wl)),
                 value=wl_text, inline=False)

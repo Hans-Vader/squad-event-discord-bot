@@ -292,6 +292,12 @@ class TestEmbedHeader(unittest.TestCase):
         field = self._infantry_field(utils.format_event_details(ev, "de"))
         self.assertIn("[(2/12) Größe: 6 | (0/2) Größe: 8]", field.name)
 
+    def test_squad_rows_show_size_with_people_icon(self):
+        ev = _embed_event(squads=_squads(7, 6))
+        field = self._infantry_field(utils.format_event_details(ev, "de"))
+        self.assertIn("👥 7", field.value)
+        self.assertIn("👥 6", field.value)
+
     def test_header_plain_when_mode_off(self):
         ev = _embed_event(squads=_squads(6, 6), dont_waste_slots=False)
         field = self._infantry_field(utils.format_event_details(ev, "de"))
@@ -559,6 +565,8 @@ class TestPairingInvariants(unittest.TestCase):
                  infantry_squad_size=7),
             dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2,
                  dont_waste_allowed_sizes=[7, 9]),                            # whitelist
+            dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2,
+                 dont_waste_max_squads=2),                                    # squad cap
         ]
         for cfg in configs:
             for _run in range(5):
@@ -574,6 +582,77 @@ class TestPairingInvariants(unittest.TestCase):
                         trace.append(f"-{ev['squads'][sid]['size']}")
                         ev["player_slots_used"] -= ev["squads"].pop(sid)["size"]
                     self._check(ev, trace[-15:])
+
+
+class TestMaxSquadsCap(unittest.TestCase):
+    """Organizer cap on the total number of oversized squads
+    (`dont_waste_max_squads`, always even — pairs)."""
+
+    def _ev(self, **over):
+        # pool 8 (98 seats, veh 2×2, heli 2×1 → 92 infantry seats, cap 14)
+        return _event(max_player_slots=98, max_vehicle_squads=2,
+                      max_heli_squads=2, **over)
+
+    def test_pair_plan_capped(self):
+        self.assertEqual(utils._pair_plan(8, [1, 2, 3]), {3: 1, 1: 1})
+        # One pair only → best single pair absorbs 6, wastes 2.
+        self.assertEqual(utils._pair_plan(8, [1, 2, 3], max_pairs=1), {3: 1})
+        self.assertEqual(utils._pair_plan(8, [1, 2, 3], max_pairs=0), {})
+
+    def test_pair_cover_capped(self):
+        self.assertEqual(utils._pair_cover(6, [1, 2, 3], max_pairs=1), {3: 1})
+        # Cap prevents covering the target → {} (replan keeps capacities).
+        self.assertEqual(utils._pair_cover(8, [1, 2, 3], max_pairs=1), {})
+
+    def test_options_offer_only_capped_plan(self):
+        opts = dict(utils.infantry_size_options(self._ev(dont_waste_max_squads=2)))
+        self.assertEqual(opts.get(9), 2)
+        self.assertNotIn(7, opts)
+
+    def test_cap_reached_stops_offers_and_reports_waste(self):
+        ev = self._ev(dont_waste_max_squads=2, squads=_squads(9, 9))
+        self.assertEqual(utils.infantry_size_options(ev)[1:], [])
+        self.assertEqual(utils.infantry_wasted_seats(ev), 2)
+
+    def test_mirror_completion_beats_cap(self):
+        # Cap lowered below the started pairs: the 7er mirror must stay
+        # registerable (equal numbers win), nothing new is offered.
+        ev = self._ev(dont_waste_max_squads=2, squads=_squads(9, 9, 7))
+        opts = dict(utils.infantry_size_options(ev))
+        self.assertEqual(opts.get(7), 1)
+        self.assertNotIn(9, opts)
+
+    def test_player_layout_capped(self):
+        # 44 seats, base 6 → cap 6 squads, pool 8.
+        ev = _event(mode="player", max_player_slots=44,
+                    max_vehicle_squads=0, max_heli_squads=0)
+        self.assertEqual(utils.planned_infantry_capacities(ev),
+                         [6, 6, 7, 7, 9, 9])
+        ev["dont_waste_max_squads"] = 2
+        self.assertEqual(utils.planned_infantry_capacities(ev),
+                         [6, 6, 6, 6, 9, 9])
+        self.assertEqual(utils.infantry_wasted_seats(ev), 2)
+
+    def test_editor_validation(self):
+        ev = self._ev()
+        for bad in (3, 1, -2):
+            ok, _err = bot._apply_property_change(
+                ev, "dont_waste_max_squads", "int_nullable", None, bad, "de")
+            self.assertFalse(ok, f"odd/invalid cap {bad} accepted")
+        ok, err = bot._apply_property_change(
+            ev, "dont_waste_max_squads", "int_nullable", None, 4, "de")
+        self.assertTrue(ok, err)
+        self.assertEqual(ev["dont_waste_max_squads"], 4)
+        ok, _err = bot._apply_property_change(
+            ev, "dont_waste_max_squads", "int_nullable", None, None, "de")
+        self.assertTrue(ok)
+        self.assertIsNone(ev["dont_waste_max_squads"])
+
+    def test_model_plumbing(self):
+        ev = database.build_default_event(
+            dict(database.DEFAULT_GUILD_SETTINGS), "E", "01.01.2030", "20:00")
+        self.assertIsNone(ev.get("dont_waste_max_squads", 0))
+        self.assertIn("dont_waste_max_squads", database._CARRY_OVER_KEYS)
 
 
 def _player_event(**over):

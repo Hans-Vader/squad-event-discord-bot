@@ -135,6 +135,7 @@ _EDIT_PROPERTIES = [
     (22, "player_roles_enabled",   "edit.property.player_roles_enabled","bool",         None),
     (23, "dont_waste_slots",       "edit.property.dont_waste_slots",    "bool",         None),
     (24, "dont_waste_allowed_sizes", "edit.property.dont_waste_sizes",  "size_list",    None),
+    (25, "dont_waste_max_squads",  "edit.property.dont_waste_max",      "int_nullable", None),
 ]
 
 
@@ -3843,6 +3844,8 @@ def _format_property_value(event, key, vtype, lang):
     """Format a property value for display in the edit list."""
     not_set = t("edit.not_set", lang)
     val = event.get(key)
+    if key == "dont_waste_max_squads" and not val:
+        return t("edit.max_unlimited", lang)
     if vtype == "bool":
         return t("edit.bool.enabled", lang) if val else t("edit.bool.disabled", lang)
     if vtype in ("string", "string_nullable"):
@@ -4103,6 +4106,11 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
         if any(k <= _base or k > MAX_SQUAD_PLAYERS for k in new_value):
             return False, t("edit.dont_waste_sizes_invalid", lang,
                             base=_base, max=MAX_SQUAD_PLAYERS)
+
+    if key == "dont_waste_max_squads" and new_value:
+        # Oversized squads always come in pairs, so the cap must be even.
+        if new_value < 2 or new_value % 2:
+            return False, t("edit.dont_waste_max_invalid", lang)
 
     if key == "dont_waste_slots" and new_value:
         if event.get("infantry_squad_size", 6) >= MAX_SQUAD_PLAYERS:
@@ -5819,16 +5827,37 @@ class WizardDontWasteSlotsView(BaseView):
             self.sizes_select.callback = self._sizes_selected
             self.add_item(self.sizes_select)
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=2)
+        # Cap on the total number of oversized squads (always even — they come
+        # in pairs). Only offered when more than one pair fits at all.
+        max_total = min(2 * (pool // 2), _get_max_infantry_squads(event))
+        self.max_select = None
+        if max_total >= 4:
+            current_max = event.get("dont_waste_max_squads") or 0
+            self.max_select = ui.Select(
+                placeholder=t("wizard.dont_waste_max_placeholder", lang),
+                options=[discord.SelectOption(
+                    label=t("wizard.dont_waste_max_unlimited", lang),
+                    value="0", default=current_max == 0)] + [
+                    discord.SelectOption(
+                        label=t("wizard.dont_waste_max_option", lang,
+                                n=n, per_team=n // 2),
+                        value=str(n), default=n == current_max)
+                    for n in range(2, max_total + 1, 2)],
+                min_values=1, max_values=1, row=2)
+            self.max_select.callback = self._max_selected
+            self.add_item(self.max_select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=3)
         skip_btn.callback = self._skip
         self.add_item(skip_btn)
 
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=2)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=3)
         continue_btn.callback = self._continue
         self.add_item(continue_btn)
 
         self._selected_enabled = None
         self._selected_sizes = None
+        self._selected_max = None
 
     async def _mode_selected(self, interaction):
         self._selected_enabled = self.mode_select.values[0] == "yes"
@@ -5836,6 +5865,10 @@ class WizardDontWasteSlotsView(BaseView):
 
     async def _sizes_selected(self, interaction):
         self._selected_sizes = sorted(int(v) for v in self.sizes_select.values)
+        await interaction.response.defer()
+
+    async def _max_selected(self, interaction):
+        self._selected_max = int(self.max_select.values[0])
         await interaction.response.defer()
 
     def _save_selections(self):
@@ -5846,6 +5879,8 @@ class WizardDontWasteSlotsView(BaseView):
             self.event["dont_waste_allowed_sizes"] = (
                 None if set(self._selected_sizes) == set(self._candidates)
                 else self._selected_sizes)
+        if self._selected_max is not None:
+            self.event["dont_waste_max_squads"] = self._selected_max or None
 
     async def _to_confirmation(self, interaction):
         self._save_selections()
@@ -5930,6 +5965,9 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
         allowed_sizes = event.get("dont_waste_allowed_sizes")
         if event.get("dont_waste_slots", False) and allowed_sizes:
             dw_val += " (" + ", ".join(str(s) for s in allowed_sizes) + ")"
+        max_squads = event.get("dont_waste_max_squads")
+        if event.get("dont_waste_slots", False) and max_squads:
+            dw_val += f" · max. {max_squads}"
         embed.add_field(name=t("wizard.summary_dont_waste", lang), value=dw_val, inline=True)
 
     if event.get("registration_start_time") is not None:
@@ -7420,35 +7458,6 @@ async def export_csv_cmd(interaction: discord.Interaction):
     await _resolve_command_event(interaction, lang, _do)
 
 
-# ############################# #
-# TEST COMMAND                  #
-# ############################# #
-
-@bot.tree.command(name="test", description="Run the test suite (organizer only)")
-async def test_command(interaction: discord.Interaction):
-    if not await check_organizer(interaction):
-        return
-    await interaction.response.defer(ephemeral=True)
-
-    import subprocess
-    try:
-        result = subprocess.run(
-            [sys.executable, "Test/test.py"],
-            capture_output=True, text=True, timeout=30,
-        )
-        output_text = result.stdout
-        if result.stderr:
-            output_text += "\n--- STDERR ---\n" + result.stderr
-    except subprocess.TimeoutExpired:
-        output_text = "Test timed out after 30 seconds."
-    except Exception as e:
-        output_text = f"Error running tests: {e}"
-
-    buf = io.BytesIO(output_text.encode("utf-8"))
-    file = discord.File(fp=buf, filename=f"test_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
-    await interaction.followup.send("Test results:", file=file, ephemeral=True)
-
-
 @bot.tree.command(name="sync", description="Sync slash commands (admin only)")
 async def sync_command(interaction: discord.Interaction):
     if not await check_admin(interaction):
@@ -7490,8 +7499,7 @@ async def help_command(interaction: discord.Interaction):
             "`/set_language` - Sprache ändern\n"
             "`/set_log_channel` - Log-Kanal setzen\n"
             "`/config_defaults` - Standard-Event-Einstellungen bearbeiten\n"
-            "`/sync` - Slash-Commands synchronisieren\n"
-            "`/test` - Test-Suite ausführen"
+            "`/sync` - Slash-Commands synchronisieren"
         ), inline=False)
     else:
         embed.add_field(name="Events", value=(
@@ -7520,8 +7528,7 @@ async def help_command(interaction: discord.Interaction):
             "`/set_language` - Change language\n"
             "`/set_log_channel` - Set log channel\n"
             "`/config_defaults` - Edit default event settings\n"
-            "`/sync` - Sync slash commands\n"
-            "`/test` - Run test suite"
+            "`/sync` - Sync slash commands"
         ), inline=False)
 
     await interaction.response.send_message(embed=embed, ephemeral=True)

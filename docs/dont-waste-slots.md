@@ -17,6 +17,7 @@ These rules hold at every moment, in every mode:
 3. **9-player limit.** No squad ever exceeds 9 players — the in-game maximum. This also caps the base squad size everywhere it can be configured (creation modal, DM editor, guild defaults: values 1–9).
 4. **Minimal oversized count.** Offered are the sizes of a canonical plan that uses the leftover seats with — in priority order — the **least waste**, then the **fewest oversized squads**, preferring **bigger squads** on ties. Pool 8 → one 9er pair + one 7er pair (4 oversized, 0 wasted), *not* eight 7-player squads. Pool 4 → one 8er pair, *not* two 7er pairs.
 5. **Size whitelist (optional).** The creator can restrict which oversized sizes are allowed at all — e.g. only 7s, or 7s and 8s but no 9s. The plan then minimizes within the allowed sizes (pool 8 with only 8/9 allowed → two 8er pairs, because a lone 9er pair would waste 2 seats). A pair that no longer fits the pool is never offered; completing an already-started pair always stays possible, even if the whitelist later excludes that size — equal numbers win.
+6. **Squad-count cap (optional).** The creator can cap the **total number of oversized squads** — always an even value, since they come in pairs (cap 2 = one per team). The plan then absorbs as many seats as it can within the cap (pool 8, cap 2 → one 9er pair, 2 seats wasted); the unabsorbable rest shows up as "Unused". Like the whitelist, the cap never blocks completing an already-started pair — if an admin lowers it below the started pairs, mirrors stay registerable but nothing new is offered.
 
 ## Representative Mode
 
@@ -52,9 +53,9 @@ Nobody picks sizes — the bot plans the capacities:
 
 ## Configuration
 
-- **Wizard step "Don't waste slots"** — appears in both modes, but only when the feature could do anything (≥ 2 reclaimable seats and base size below 9). Contains the on/off select and, when more than one size is possible, the multi-select of allowed oversized sizes (default: all).
-- **DM editor** — property **23** toggles the mode (enabling is rejected with a specific error when there are no unused seats, only a single unpairable one, or the base size is already 9); property **24** sets the allowed sizes as comma-separated text ("7, 8"; empty = all; values must be above the base size and at most 9).
-- Stored per event (`dont_waste_slots`, `dont_waste_allowed_sizes`), carried over to recurring follow-up events, default off.
+- **Wizard step "Don't waste slots"** — appears in both modes, but only when the feature could do anything (≥ 2 reclaimable seats and base size below 9). Contains the on/off select, the multi-select of allowed oversized sizes (when more than one size is possible; default: all), and a select capping the total number of oversized squads (when more than one pair fits; offered values: unlimited, 2, 4, … up to the feasible maximum).
+- **DM editor** — property **23** toggles the mode (enabling is rejected with a specific error when there are no unused seats, only a single unpairable one, or the base size is already 9); property **24** sets the allowed sizes as comma-separated text ("7, 8"; empty = all; values must be above the base size and at most 9); property **25** sets the squad-count cap (even number of at least 2; 0 or empty = unlimited).
+- Stored per event (`dont_waste_slots`, `dont_waste_allowed_sizes`, `dont_waste_max_squads`), carried over to recurring follow-up events, default off.
 
 ## Guarantees and Limits
 

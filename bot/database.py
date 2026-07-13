@@ -111,6 +111,8 @@ def init_db():
     logger.info(f"Database initialised: {DB_FILE}")
 
 
+# ponytail: one-time migration — safe to delete once the live DB has booted on this code
+#           (self-disabling no-op thereafter; fresh DBs never get the constraint).
 def _migrate_drop_unique_constraint(conn):
     """Rebuild `events` without UNIQUE(guild_id, channel_id, status) so a channel can
     hold multiple active events. Idempotent: detects the old constraint in the stored
@@ -431,6 +433,7 @@ def build_default_event(settings: dict, name: str, date: str, time_str: str,
         "mode": overrides.get("mode", "rep"),
         "dont_waste_slots": overrides.get("dont_waste_slots", False),
         "dont_waste_allowed_sizes": overrides.get("dont_waste_allowed_sizes", None),
+        "dont_waste_max_squads": overrides.get("dont_waste_max_squads", None),
         "playstyle_enabled": overrides.get("playstyle_enabled", True),
         "player_roles_enabled": overrides.get("player_roles_enabled", True),
         "community_rep_cap_percent": overrides.get("community_rep_cap_percent", None),
@@ -461,6 +464,7 @@ _CARRY_OVER_KEYS = (
     "mode",
     "dont_waste_slots",
     "dont_waste_allowed_sizes",
+    "dont_waste_max_squads",
     "playstyle_enabled",
     "player_roles_enabled",
     "community_rep_cap_percent",
