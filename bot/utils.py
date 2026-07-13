@@ -403,13 +403,26 @@ def infantry_wasted_seats(event: dict) -> int:
     base = event.get("infantry_squad_size", 6)
     pool = infantry_unused_pool(event)
     if event.get("mode", "rep") == "player":
+        # Player mode plans the whole layout, so the plan absorption is the
+        # full picture — the residual (incl. any cap-stranded seats) is waste.
         plan = _pair_plan(pool, _allowed_extras(event, pool), _max_pairs(event))
         return max(0, pool - sum(2 * extra * n for extra, n in plan.items()))
+    counts: dict[int, int] = {}
+    for d in event.get("squads", {}).values():
+        size = d.get("size", base)
+        if d.get("type") == "infantry" and size > base:
+            counts[size] = counts.get(size, 0) + 1
+    consumed = sum((size - base) * c for size, c in counts.items())
     if any(size != base for size, _ in infantry_size_options(event)):
-        return 0
-    consumed = sum(d.get("size", base) - base
-                   for d in event.get("squads", {}).values()
-                   if d.get("type") == "infantry" and d.get("size", base) > base)
+        # Optimistic while options are open: only seats no further pair can
+        # absorb (cap/whitelist-stranded, given what's already registered) are
+        # wasted. Reserved mirror seats of incomplete pairs will be filled, so
+        # they leave the free pool and don't count as waste.
+        reserved = sum(size - base for size, c in counts.items() if c % 2)
+        free_pool = max(0, pool - consumed - reserved)
+        plan = _pair_plan(free_pool, _allowed_extras(event, free_pool),
+                          _max_pairs(event, counts))
+        return max(0, free_pool - sum(2 * extra * n for extra, n in plan.items()))
     return max(0, pool - consumed)
 
 

@@ -614,6 +614,31 @@ class TestMaxSquadsCap(unittest.TestCase):
         self.assertEqual(utils.infantry_size_options(ev)[1:], [])
         self.assertEqual(utils.infantry_wasted_seats(ev), 2)
 
+    def test_empty_state_cap_floor_reported(self):
+        # No squads yet + cap 2 on pool 8: only one 9er pair (6 seats) can ever
+        # be absorbed, so 2 seats are stranded from the start — must show even
+        # while the oversized option is still open.
+        ev = self._ev(dont_waste_max_squads=2)
+        self.assertEqual(utils.infantry_wasted_seats(ev), 2)
+        # No cap (or a cap that fits) still absorbs the whole pool → 0.
+        self.assertEqual(utils.infantry_wasted_seats(self._ev()), 0)
+        self.assertEqual(
+            utils.infantry_wasted_seats(self._ev(dont_waste_max_squads=4)), 0)
+
+    def test_cap_floor_accounts_for_registrations(self):
+        # The floor must use what's actually registered, not a from-scratch
+        # plan: four oversized squads filling the whole pool waste nothing even
+        # though a from-scratch cap-2 plan would absorb only 6 of 8.
+        self.assertEqual(utils.infantry_wasted_seats(
+            self._ev(dont_waste_max_squads=2, squads=_squads(9, 9, 7, 7))), 0)
+        # 7er mirror still open (would reach full absorption) → nothing wasted.
+        self.assertEqual(utils.infantry_wasted_seats(
+            self._ev(dont_waste_max_squads=2, squads=_squads(9, 9, 7))), 0)
+        # Cap lowered to 2 after a 9er pair registered: the second pair the pool
+        # could take is now forbidden, so its 2 seats are genuinely stranded.
+        self.assertEqual(utils.infantry_wasted_seats(
+            self._ev(dont_waste_max_squads=2, squads=_squads(9, 9))), 2)
+
     def test_mirror_completion_beats_cap(self):
         # Cap lowered below the started pairs: the 7er mirror must stay
         # registerable (equal numbers win), nothing new is offered.
