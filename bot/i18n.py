@@ -713,8 +713,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "{cap} slots ({free} free)",
     },
     "embed.max_per_user_label": {
-        "de": "👤 Max Squads pro Spieler: {count}",
-        "en": "👤 Max squads per user: {count}",
+        "de": "👤 Squads pro Spieler: {count}",
+        "en": "👤 Squads per user: {count}",
     },
     "embed.no_entries": {
         "de": "-",
