@@ -9,6 +9,7 @@ cases (including the bug where the old code crashed on a NameError), the
 vehicle/heli disable guard, slot recalculation, and the recurrence-fits check.
 """
 
+import asyncio
 import os
 import sys
 import unittest
@@ -170,6 +171,79 @@ class TestApplyPropertyChange(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(err)
         self.assertEqual(ev["recurrence"], original)
+
+
+class TestOverviewEmbedFieldLimits(unittest.TestCase):
+    """The overview embed must never build a field over Discord's 1024-char cap.
+
+    Regression: a long description (or image URL) overflowed the 'general' field,
+    so the refresh dm_msg.edit raised HTTPException, got swallowed, and orphaned
+    the session on a view whose timeout never started — a stuck, never-expiring
+    dialog.
+    """
+
+    def test_long_description_field_within_cap(self):
+        ev = _event(description="D" * 1024)  # modal max_length
+        embed = bot._build_edit_main_embed(ev, "de")
+        for field in embed.fields:
+            self.assertLessEqual(len(field.value), 1024, field.name)
+
+    def test_long_image_url_field_within_cap(self):
+        ev = _event(embed_image_url="https://example.com/" + "a" * 1024 + ".png")
+        embed = bot._build_edit_main_embed(ev, "de")
+        for field in embed.fields:
+            self.assertLessEqual(len(field.value), 1024, field.name)
+
+
+class TestStaleSessionSweep(unittest.TestCase):
+    """The sweeper must force-close sessions whose view timeout never fired."""
+
+    def setUp(self):
+        bot._active_edit_sessions.clear()
+
+    def tearDown(self):
+        bot._active_edit_sessions.clear()
+
+    def test_stale_session_closed_fresh_kept(self):
+        now = bot.time.monotonic()
+        bot._active_edit_sessions[1] = {  # stale: no dm_message → pure pop
+            "lang": "de", "dm_message": None, "active_view": None,
+            "last_activity": now - bot.SESSION_STALE_AFTER_SECONDS - 1,
+        }
+        bot._active_edit_sessions[2] = {  # fresh
+            "lang": "de", "dm_message": None, "active_view": None,
+            "last_activity": now,
+        }
+        asyncio.run(bot._sweep_stale_sessions())
+        self.assertNotIn(1, bot._active_edit_sessions)
+        self.assertIn(2, bot._active_edit_sessions)
+
+    def test_stale_session_notify_disables_view_and_posts_notice(self):
+        class FakeChannel:
+            def __init__(self):
+                self.sent = []
+
+            async def send(self, text):
+                self.sent.append(text)
+
+        class FakeMessage:
+            def __init__(self):
+                self.channel = FakeChannel()
+                self.edited_view = "unset"
+
+            async def edit(self, *, view):
+                self.edited_view = view
+
+        dm = FakeMessage()
+        now = bot.time.monotonic()
+        bot._active_edit_sessions[1] = {
+            "lang": "de", "dm_message": dm, "active_view": None,
+            "last_activity": now - bot.SESSION_STALE_AFTER_SECONDS - 1,
+        }
+        asyncio.run(bot._sweep_stale_sessions())
+        self.assertNotIn(1, bot._active_edit_sessions)
+        self.assertIsNone(dm.edited_view)  # controls disabled
+        self.assertEqual(dm.channel.sent, [t("edit.timeout", "de")])
 
 
 class TestNewI18nKeys(unittest.TestCase):
