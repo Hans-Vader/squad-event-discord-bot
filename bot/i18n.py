@@ -1692,6 +1692,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Diese Option kann nicht aktiviert werden: Bei der aktuellen Konfiguration gibt es keine ungenutzten Slots.",
         "en": "This option cannot be enabled: with the current configuration there are no unused slots.",
     },
+    "edit.property.dont_waste_max": {
+        "de": "25. Max. übergroße Squads (leer/0 = unbegrenzt)",
+        "en": "25. Max. oversized squads (empty/0 = unlimited)",
+    },
+    "edit.max_unlimited": {
+        "de": "Unbegrenzt",
+        "en": "Unlimited",
+    },
+    "edit.dont_waste_max_invalid": {
+        "de": "Ungültiger Wert: Übergroße Squads entstehen paarweise (eins pro Team) — die Obergrenze muss eine gerade Zahl ab 2 sein, oder 0 für unbegrenzt.",
+        "en": "Invalid value: oversized squads come in pairs (one per team) — the cap must be an even number of at least 2, or 0 for unlimited.",
+    },
     "edit.dont_waste_single_unused": {
         "de": "Diese Option kann nicht aktiviert werden: Es ist nur 1 Slot ungenutzt — übergroße Squads müssen immer in gleicher Anzahl (paarweise, eins pro Team) gebildet werden.",
         "en": "This option cannot be enabled: only 1 slot is unused — oversized squads must always come in equal numbers (in pairs, one per team).",
@@ -2337,6 +2349,18 @@ _STRINGS: dict[str, dict[str, str]] = {
     "wizard.dont_waste_size_option": {
         "de": "{size} Spieler",
         "en": "{size} players",
+    },
+    "wizard.dont_waste_max_placeholder": {
+        "de": "Max. Anzahl übergroßer Squads (Standard: unbegrenzt)...",
+        "en": "Max. number of oversized squads (default: unlimited)...",
+    },
+    "wizard.dont_waste_max_unlimited": {
+        "de": "Unbegrenzt",
+        "en": "Unlimited",
+    },
+    "wizard.dont_waste_max_option": {
+        "de": "{n} übergroße Squads ({per_team} pro Team)",
+        "en": "{n} oversized squads ({per_team} per team)",
     },
     "wizard.dont_waste_enabled": {
         "de": "Slots nicht verschwenden aktivieren",
