@@ -6109,12 +6109,14 @@ class WizardConfirmationView(BaseView):
                 except discord.Forbidden:
                     pass
 
-        # Ping community reps about early access (only if regular registration isn't already open)
+        # Ping community reps + caster early-access users (only if regular registration isn't already open)
+        early_role_ids = list(self.event.get("community_rep_role_ids", [])) + list(self.event.get("caster_community_role_ids", []))
+        early_user_ids = list(self.event.get("community_rep_user_ids", [])) + list(self.event.get("caster_community_user_ids", []))
         if (self.event.get("ping_on_open", False)
                 and not self.event.get("registration_open", False)
-                and (self.event.get("community_rep_role_ids") or self.event.get("community_rep_user_ids"))):
-            mentions = [f"<@&{rid}>" for rid in self.event.get("community_rep_role_ids", [])]
-            mentions += [f"<@{uid}>" for uid in self.event.get("community_rep_user_ids", [])]
+                and (early_role_ids or early_user_ids)):
+            mentions = [f"<@&{rid}>" for rid in early_role_ids]
+            mentions += [f"<@{uid}>" for uid in early_user_ids]
             early_ping_text = " ".join(mentions) + " "
             try:
                 ping_msg = await channel.send(
