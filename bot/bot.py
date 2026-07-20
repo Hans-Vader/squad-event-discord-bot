@@ -41,7 +41,7 @@ from utils import (
     format_event_details, build_event_summary_embed,
     send_to_log_channel, set_log_channel, get_log_channel,
     export_log_file, clear_log_file, logger,
-    resolve_event_defaults, role_label,
+    resolve_event_defaults, role_label, role_emoji,
     _player_register, _player_unregister, _player_remove_from_waitlist,
     _player_waitlist_type, _player_self_unregister,
     _add_tentative, _remove_tentative, _player_tentative_entry, _player_tentative_type,
@@ -2171,6 +2171,7 @@ class PlayerTypePickerView(BaseView):
             opt.default = (opt.value == self.selected_type)
         if self.roles_enabled and self.role_select is not None:
             role_opts = [discord.SelectOption(label=role_label(r, lang), value=r,
+                                              emoji=role_emoji(r),
                                               default=(r in self.selected_roles))
                          for r in ROLES_BY_TYPE.get(self.selected_type, [])]
             self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
@@ -3185,7 +3186,8 @@ class _AdminPlayerAddView(BaseView):
             opt.default = (opt.value == self.selected_type)
         lang = get_guild_language(self.guild_id)
         if self.roles_enabled and self.role_select is not None:
-            role_opts = [discord.SelectOption(label=role_label(r, lang), value=r)
+            role_opts = [discord.SelectOption(label=role_label(r, lang), value=r,
+                                              emoji=role_emoji(r))
                          for r in ROLES_BY_TYPE.get(self.selected_type, [])]
             self.role_select.options = role_opts or [discord.SelectOption(label="—", value="__placeholder__")]
             self.role_select.disabled = not role_opts

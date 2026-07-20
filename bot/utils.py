@@ -142,6 +142,38 @@ def role_label(role, lang):
     return _ROLE_LABEL_TRANSLATIONS.get(role, {}).get(lang, role)
 
 
+# Custom Discord emoji per role value (guild-uploaded Squad kit icons). Used as
+# the dropdown option icon and — replacing the text label — in the event embed.
+# Driver+Gunner intentionally share :crewman:, Spotter reuses infantry :scout:
+# (different squad types never share one dropdown). Roles absent here fall back
+# to the text label.
+ROLE_EMOJI = {
+    "Squad Leader":       "<:sl:1528767128973475980>",
+    "Medic":              "<:medic:1528767121503420466>",
+    "Rifleman":           "<:rm:1528767125651722440>",
+    "Automatic Rifleman": "<:lmg:1528767119125123072>",
+    "Machine Gunner":     "<:hmg:1528767116440764417>",
+    "Combat Engineer":    "<:combat2:1528767109054861352>",
+    "Light Anti Tank":    "<:lat2:1528767117825016018>",
+    "Heavy Anti Tank":    "<:hat:1528767115392192553>",
+    "Grenadier":          "<:gran:1528767113739632640>",
+    "Marksman":           "<:marksman:1528767120475820152>",
+    "Scout":              "<:scout:1528767127841017896>",
+    "Logi driver":        "<:logi:1528772382821580990>",
+    "Mortar":             "<:mortar:1528767122551996498>",
+    "Driver":             "<:crewman:1528767110493245522>",
+    "Gunner":             "<:crewman:1528767110493245522>",
+    "Commander":          "<:vic_sl:1528767134803558570>",
+    "Pilot":              "<:pilot:1528767123600441445>",
+    "Spotter":            "<:scout:1528767127841017896>",
+}
+
+
+def role_emoji(role):
+    """Custom-emoji string for a role value, or None if none is mapped."""
+    return ROLE_EMOJI.get(role)
+
+
 def _get_member_roles(member: dict) -> list:
     """Return a list of role values for a member, supporting both the new
     `roles` (list) and the legacy `role` (string) schemas."""
@@ -164,7 +196,7 @@ def _format_role_suffix(roles, lang) -> str:
     so callers append it directly to a name — a role-less player gets no empty
     "()" tail and no "(Egal)" placeholder.
     """
-    labels = [role_label(r, lang) for r in (roles or []) if r]
+    labels = [role_emoji(r) or role_label(r, lang) for r in (roles or []) if r]
     return f" ({', '.join(labels)})" if labels else ""
 
 
