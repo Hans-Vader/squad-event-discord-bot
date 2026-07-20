@@ -966,7 +966,7 @@ ROLES_BY_TYPE = {
     "infantry": [
         "Squad Leader", "Medic", "Rifleman", "Automatic Rifleman",
         "Machine Gunner", "Combat Engineer", "Light Anti Tank",
-        "Heavy Anti Tank", "Grenadier", "Marksman", "Scout",
+        "Heavy Anti Tank", "Grenadier", "Marksman", "Scout", "Sniper",
         "Logi driver", "Mortar",
     ],
     "vehicle": ["Driver", "Gunner", "Commander"],

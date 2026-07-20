@@ -159,6 +159,7 @@ ROLE_EMOJI = {
     "Grenadier":          "<:gran:1528767113739632640>",
     "Marksman":           "<:marksman:1528767120475820152>",
     "Scout":              "<:scout:1528767127841017896>",
+    "Sniper":             "<:sniper:1528767130156404936>",
     "Logi driver":        "<:logi:1528772382821580990>",
     "Mortar":             "<:mortar:1528767122551996498>",
     "Driver":             "<:crewman:1528767110493245522>",
