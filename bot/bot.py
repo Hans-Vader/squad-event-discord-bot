@@ -23,7 +23,7 @@ import csv
 import io
 import re
 
-from config import TOKEN, ADMIN_IDS, REGISTRATION_CHECK_INTERVAL, REGISTRATION_CHECK_INTERVAL_FAST, REGISTRATION_CRITICAL_WINDOW
+from config import TOKEN, ADMIN_IDS, REGISTRATION_CHECK_INTERVAL, REGISTRATION_CHECK_INTERVAL_FAST, REGISTRATION_CRITICAL_WINDOW, DEBUG_MODE
 from database import (
     init_db, get_guild_settings, save_guild_settings, guild_is_configured,
     get_guild_language, get_event_by_channel, get_events_by_channel,
@@ -41,7 +41,7 @@ from utils import (
     format_event_details, build_event_summary_embed,
     send_to_log_channel, set_log_channel, get_log_channel,
     export_log_file, clear_log_file, logger,
-    resolve_event_defaults, role_label, role_emoji,
+    resolve_event_defaults, role_label, role_emoji, set_application_emojis,
     _player_register, _player_unregister, _player_remove_from_waitlist,
     _player_waitlist_type, _player_self_unregister,
     _add_tentative, _remove_tentative, _player_tentative_entry, _player_tentative_type,
@@ -969,7 +969,7 @@ ROLES_BY_TYPE = {
         "Heavy Anti Tank", "Grenadier", "Marksman", "Scout", "Sniper",
         "Logi driver", "Mortar",
     ],
-    "vehicle": ["Driver", "Gunner", "Commander"],
+    "vehicle": ["Driver", "Gunner"],
     "heli":    ["Pilot", "Spotter", "Gunner"],
 }
 
@@ -6869,6 +6869,15 @@ async def on_ready():
     logger.info(f"Bot logged in as {bot.user}")
     init_db()
 
+    # Load role icons from the bot's application emojis (global IDs, valid in every
+    # guild). Re-fetched on each reconnect — one cheap HTTP call that self-heals if
+    # the hoster uploads emojis after boot. Missing/failed -> text-label fallback.
+    try:
+        n = set_application_emojis(await bot.fetch_application_emojis())
+        logger.info("Application emojis loaded: %d", n)
+    except Exception as e:
+        logger.warning("Could not load application emojis; role icons fall back to text: %s", e)
+
     # Initialize log channels for all guilds
     for guild in bot.guilds:
         settings = get_guild_settings(guild.id)
@@ -6880,11 +6889,12 @@ async def on_ready():
             ch = guild.get_channel(log_channel_id)
             if ch:
                 set_log_channel(guild.id, ch)
-                lang = settings.get("language", "de")
-                try:
-                    await ch.send(t("log.bot_started", lang, bot_name=str(bot.user)))
-                except Exception:
-                    pass
+                if DEBUG_MODE:
+                    lang = settings.get("language", "de")
+                    try:
+                        await ch.send(t("log.bot_started", lang, bot_name=str(bot.user)))
+                    except Exception:
+                        pass
 
     # Start background tasks once — on_ready re-fires on every gateway reconnect,
     # so an unguarded create_task would leak a new loop each time.
