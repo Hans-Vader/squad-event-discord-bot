@@ -303,6 +303,26 @@ class TestEmbedHeader(unittest.TestCase):
         field = self._infantry_field(utils.format_event_details(ev, "de"))
         self.assertIn("[Größe: 6]", field.name)
 
+    def test_zero_capacity_type_hidden(self):
+        # Vehicles consume every seat (50×2 = 100) → infantry derives to 0/0.
+        # An empty type with no capacity must not appear at all.
+        ev = _embed_event(server_max_players=100, max_vehicle_squads=50,
+                          max_heli_squads=0, squads={})
+        embed = utils.format_event_details(ev, "de")
+        self.assertIsNone(self._infantry_field(embed))
+        # ...but the type that does have capacity stays.
+        self.assertTrue(any("Fahrz" in f.name for f in embed.fields))
+
+    def test_zero_capacity_type_with_squads_still_shown(self):
+        # Capacity edited down to 0 after a squad signed up: the registered
+        # squad must stay visible instead of silently vanishing.
+        ev = _embed_event(server_max_players=100, max_vehicle_squads=50,
+                          max_heli_squads=0, dont_waste_slots=False,
+                          squads=_squads(6))
+        field = self._infantry_field(utils.format_event_details(ev, "de"))
+        self.assertIsNotNone(field)
+        self.assertIn("(1/0)", field.name)
+
     def test_header_user_example(self):
         # Server 100, 2 casters, no vehicle/heli → 16 base squads, 2 leftover
         # seats, one 7er registered: ⚔️ Infanterie (1/16) [Größe: 6 | (1/2) Größe: 7]

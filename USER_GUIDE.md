@@ -68,7 +68,7 @@ The button is labeled **Join** (🪖) instead of **Squad**. The flow:
 2. Select your squad type from the dropdown: Infantry, Vehicle, or Heli
 3. **Optionally** pick one or more in-squad roles — *only if the event creator enabled role selection* (see creation Step 7; when disabled there is no role dropdown and no roles are shown). The dropdown is marked "(optional)", adapts to your type and supports multi-select:
    - **Infantry**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout, Logi driver, Mortar
-   - **Vehicle**: Driver, Gunner, Commander
+   - **Vehicle**: Driver, Gunner
    - **Heli**: Pilot, Spotter, Gunner
 
    The role selection is optional — pick nothing and only your name is shown (no parenthetical tag).

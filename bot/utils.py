@@ -142,6 +142,60 @@ def role_label(role, lang):
     return _ROLE_LABEL_TRANSLATIONS.get(role, {}).get(lang, role)
 
 
+# Role value -> Discord *application-emoji name* (the Squad kit icons). The hoster
+# uploads these emojis once to the bot's application (Developer Portal -> Emoji);
+# app-emoji IDs are global, so a single set works across every guild the bot is in.
+# The actual "<:name:id>" strings are resolved by name at startup (see
+# set_application_emojis, called from on_ready) and cached in _APP_EMOJI. Roles whose
+# emoji is absent fall back to the text label. Driver takes the crew-leader icon
+# :vic_sl:, Gunner :crewman:, Spotter reuses infantry :scout: (different squad types
+# never share one dropdown, so the reuse is safe).
+ROLE_EMOJI_NAME = {
+    "Squad Leader":       "sl",
+    "Medic":              "medic",
+    "Rifleman":           "rm",
+    "Automatic Rifleman": "lmg",
+    "Machine Gunner":     "hmg",
+    "Combat Engineer":    "combat",
+    "Light Anti Tank":    "lat",
+    "Heavy Anti Tank":    "hat",
+    "Grenadier":          "gran",
+    "Marksman":           "marksman",
+    "Scout":              "scout",
+    "Sniper":             "sniper",
+    "Logi driver":        "logi",
+    "Mortar":             "mortar",
+    "Driver":             "vic_sl",
+    "Gunner":             "crewman",
+    "Pilot":              "pilot",
+    "Spotter":            "scout",
+}
+
+# name -> "<:name:id>" string, populated from the bot's application emojis at startup.
+_APP_EMOJI: dict = {}
+
+
+def set_application_emojis(emojis) -> int:
+    """Rebuild the name->emoji-string cache from the bot's application emojis
+    (the list returned by Client.fetch_application_emojis()). Returns the count."""
+    global _APP_EMOJI
+    _APP_EMOJI = {e.name: str(e) for e in emojis}
+    return len(_APP_EMOJI)
+
+
+def role_emoji(role):
+    """Custom-emoji string for a role value, or None if its application emoji
+    isn't uploaded (callers fall back to the text label)."""
+    name = ROLE_EMOJI_NAME.get(role)
+    return _APP_EMOJI.get(name) if name else None
+
+
+def unarmed_emoji():
+    """Icon shown when the role picker is enabled but the player chose no role.
+    Resolves the "unarmed" application emoji, or None if it isn't uploaded."""
+    return _APP_EMOJI.get("unarmed")
+
+
 def _get_member_roles(member: dict) -> list:
     """Return a list of role values for a member, supporting both the new
     `roles` (list) and the legacy `role` (string) schemas."""
@@ -157,15 +211,22 @@ def _squad_has_sl(squad) -> bool:
     return any("Squad Leader" in _get_member_roles(m) for m in squad.get("members", []))
 
 
-def _format_role_suffix(roles, lang) -> str:
-    """Render a player's roles as a parenthetical suffix, or "" when none.
+def _format_role_suffix(roles, lang, roles_enabled=True) -> str:
+    """Render a player's roles as a parenthetical suffix.
 
     Returns the COMPLETE suffix including the surrounding parentheses (" (a, b)")
-    so callers append it directly to a name — a role-less player gets no empty
-    "()" tail and no "(Egal)" placeholder.
+    so callers append it directly to a name. When the role picker is enabled but
+    the player chose no role, shows the "unarmed" icon (falling back to "" if that
+    emoji isn't uploaded — no "(Egal)" text placeholder). Returns "" entirely when
+    roles are disabled for the event.
     """
-    labels = [role_label(r, lang) for r in (roles or []) if r]
-    return f" ({', '.join(labels)})" if labels else ""
+    if not roles_enabled:
+        return ""
+    labels = [role_emoji(r) or role_label(r, lang) for r in (roles or []) if r]
+    if not labels:
+        icon = unarmed_emoji()
+        return f" ({icon})" if icon else ""
+    return f" ({', '.join(labels)})"
 
 
 def _waitlist_key(squad_type: str) -> str:
@@ -1431,7 +1492,8 @@ def format_event_details(event: dict, lang: str = "de",
     if not is_player_mode:
         embed.add_field(name=t("embed.max_per_user_label", lang, count=max_squads_user), value="\u200b", inline=True)
 
-    # Squad type fields — each type always shown with count/max
+    # Squad type fields — each type with capacity shown as count/max
+    # (types with zero capacity and no registrations are skipped below)
     squads = event.get("squads", {})
     infantry_squads = {n: d for n, d in squads.items() if d.get("type") == "infantry"}
     vehicle_squads = {n: d for n, d in squads.items() if d.get("type") == "vehicle"}
@@ -1442,7 +1504,10 @@ def format_event_details(event: dict, lang: str = "de",
         (vehicle_squads, "vehicle", vehicle_count, max_vehicles, veh_size),
         (heli_squads, "heli", heli_count, max_helis, heli_size),
     ]:
-        if type_key != "infantry" and max_count == 0:
+        # A type with no capacity is hidden entirely — unless it still holds
+        # registered squads (e.g. capacity was edited down after sign-ups), in
+        # which case we must not make existing registrants disappear.
+        if max_count == 0 and not squad_group:
             continue
         size_label = "Größe" if lang == "de" else "Size"
         size_info = f"{size_label}: {size}"
@@ -1496,8 +1561,8 @@ def format_event_details(event: dict, lang: str = "de",
                         key=lambda m: 0 if "Squad Leader" in _get_member_roles(m) else 1)
                     parts = []
                     for m in sorted_members:
-                        rls = _get_member_roles(m) if roles_enabled else []
-                        parts.append(f"**{m.get('name', '?')}**{_format_role_suffix(rls, lang)}")
+                        rls = _get_member_roles(m)
+                        parts.append(f"**{m.get('name', '?')}**{_format_role_suffix(rls, lang, roles_enabled)}")
                     # One registered player per line for readability; roles of a
                     # single player stay comma-joined on that player's line.
                     names = "\n".join(parts) or "—"
@@ -1539,7 +1604,7 @@ def format_event_details(event: dict, lang: str = "de",
                         wl_roles = [role_data]
                     else:
                         wl_roles = []
-                    wl_text += f"{i+1}. **{player_name}**{_format_role_suffix(wl_roles if roles_enabled else [], lang)}\n"
+                    wl_text += f"{i+1}. **{player_name}**{_format_role_suffix(wl_roles, lang, roles_enabled)}\n"
                 else:
                     squad_name, _squad_type, playstyle, sq_size, _squad_id, *_rest = entry
                     rep_name = _rest[0] if _rest else None
@@ -1578,7 +1643,7 @@ def format_event_details(event: dict, lang: str = "de",
             entries = [e for e in tentative if e.get("type") == type_key]
             if not entries:
                 continue
-            lines = [f"**{e.get('name', '?')}**{_format_role_suffix(_get_member_roles(e) if roles_enabled else [], lang)}"
+            lines = [f"**{e.get('name', '?')}**{_format_role_suffix(_get_member_roles(e), lang, roles_enabled)}"
                      for e in entries]
             embed.add_field(
                 name=t("embed.tentative_label", lang,

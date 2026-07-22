@@ -68,7 +68,7 @@ Der Button heißt **Beitreten** (🪖) statt **Squad**. Der Ablauf:
 2. Wähle deinen Squad-Typ im Dropdown: Infanterie, Fahrzeug oder Heli
 3. Wähle **optional** eine oder mehrere Rollen im Squad — *nur wenn der Event-Ersteller die Rollenauswahl aktiviert hat* (siehe Erstellung Schritt 7; ist sie deaktiviert, gibt es kein Rollen-Dropdown und es werden keine Rollen angezeigt). Das Dropdown ist als „(optional)" gekennzeichnet, passt sich deinem Typ an und erlaubt Mehrfachauswahl:
    - **Infanterie**: Squad Leader, Medic, Rifleman, Automatic Rifleman, Machine Gunner, Combat Engineer, Light Anti Tank, Heavy Anti Tank, Grenadier, Marksman, Scout, Logi-Fahrer, Mörser
-   - **Fahrzeug**: Driver, Gunner, Commander
+   - **Fahrzeug**: Driver, Gunner
    - **Heli**: Pilot, Spotter, Gunner
 
    Die Rollenauswahl ist freiwillig — wählst du nichts, erscheint nur dein Name (ohne Klammer-Zusatz).

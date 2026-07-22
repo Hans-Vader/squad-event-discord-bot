@@ -204,6 +204,39 @@ Permission integer: `397284488256`. Alternatively, grant **Administrator** for a
 
 The bot does **not** need: Manage Roles, Manage Channels, Manage Server, Kick/Ban/Moderate Members, Manage Nicknames, voice permissions, or Add Reactions.
 
+### Role Icons (optional)
+
+Squad roles can display a custom kit icon in the registration dropdown and event embed.
+These come from **Application Emojis** on your bot: upload the images once under
+**Developer Portal → your application → Emoji**. Application-emoji IDs are global, so a
+single set works in every server the bot joins — no per-guild upload, no config to edit.
+
+Name each emoji exactly as listed; the bot resolves them by name on startup. Any emoji
+you skip simply falls back to the role's text label (nothing breaks).
+
+| Emoji name | Role(s) |
+|---|---|
+| `sl` | Squad Leader |
+| `medic` | Medic |
+| `rm` | Rifleman |
+| `lmg` | Automatic Rifleman |
+| `hmg` | Machine Gunner |
+| `combat` | Combat Engineer |
+| `lat` | Light Anti Tank |
+| `hat` | Heavy Anti Tank |
+| `gran` | Grenadier |
+| `marksman` | Marksman |
+| `scout` | Scout, Spotter |
+| `sniper` | Sniper |
+| `logi` | Logi driver |
+| `mortar` | Mortar |
+| `crewman` | Gunner |
+| `vic_sl` | Driver |
+| `pilot` | Pilot |
+| `unarmed` | shown when the role picker is on but a player chose no role |
+
+On startup the log shows `Application emojis loaded: N`.
+
 ### Docker (recommended)
 
 1. Clone the repository:
