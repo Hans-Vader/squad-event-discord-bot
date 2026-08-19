@@ -148,27 +148,20 @@ Nach der Modus-Wahl führt dich ein mehrstufiger Wizard durch:
 - Event-Name, Datum, Uhrzeit, Beschreibung
 - Anmeldezeitpunkt (Datum/Uhrzeit oder „sofort"/„jetzt" für sofortige Öffnung)
 
-**Schritt 2 — Infanterie-Zusammenstellung:**
-- Erst eine Squad-Größe wählen, dann wie viele Squads es davon geben soll. Für weitere Größen einfach die nächste Größe wählen — der Schritt zeigt laufend die Zusammenstellung und die Gesamtzahl der Plätze.
-- Die Infanterie eines Events ist eine Liste aus `Anzahl × Größe` — zum Beispiel 10 × 6, 2 × 7 und 4 × 8. Die **Gesamtkapazität ergibt sich daraus**: alle Squad-Plätze plus Fahrzeug- und Heli-Squads plus Caster-Slots. Es gibt keine separate Zahl „Server Max Spieler" mehr und damit auch keinen Verschnitt, keinen „Ungenutzt"-Zähler und nichts, was noch aufgefüllt werden müsste.
-- Die Anzahl wird per Dropdown gewählt und bietet **gerade** Werte an (plus `1` für Mini-Events). Gerade Anzahlen sind das, was die Spiegelung auf zwei gleich starke Teams erlaubt — weil nur gerade Werte angeboten werden, braucht diese Regel keine Fehlermeldung mehr. Anzahl `0` entfernt die Größe.
-- Größen reichen von 1 bis **9 Spielern** — das Squad-Limit im Spiel.
-- Jede Größe hat ihre **eigene, unabhängige Quote**. Ein angemeldetes 7er-Squad verbraucht nie Kapazität, die für die 6er gedacht war; eine Größe bleibt wählbar, bis ihre eigene Anzahl aufgebraucht ist. Der Infanterie-Header zeigt je Größe einen `(angemeldet/konfiguriert)`-Zähler — z. B. `⚔️ Infanterie (3/16) [(1/10) Größe: 6 | (1/2) Größe: 7 | (1/4) Größe: 8]`.
-- **Spieler-Modus:** niemand wählt eine Größe; der Bot legt die konfigurierten Squads in der eingetragenen Reihenfolge an und füllt sie auf.
-- Die Zusammenstellung lässt sich jederzeit über den DM-Editor ändern (Eigenschaft 5) und als guild-weiter Standard über `/config_defaults`.
+**Schritt 2 — Kapazität:**
+- Ein Schritt für alles, was die Platzzahl ausmacht: **Gruppe** wählen (Infanterie, Fahrzeuge, Helis, Caster), dann **Größe**, dann **Anzahl**. Die Infanterie kann mehrere Größen gleichzeitig führen — für eine weitere einfach die nächste Größe wählen; Anzahl `0` entfernt eine.
+- Der Schritt zeigt die Kapazitäts-Tabelle mit der laufenden Gesamtzahl und aktualisiert sie nach **jeder** Auswahl. Überschreitet die Summe die Warngrenze der Guild, steht der Hinweis direkt hier und nicht erst bei der Bestätigung.
+- Fahrzeuge und Helis führen je genau eine Größe, dort ändert die Größenauswahl sie also direkt; Caster haben gar keine Squad-Größe, nur eine Platzzahl. Die Caster-Gruppe erscheint nur im Vertreter-Modus.
+- Die Dropdown-Optionen sagen, was sie bedeuten (`4 Squads à 8 = 32 Plätze`, `6 Squads, 12 Plätze`) — eine nackte Zahl wäre nichtssagend, sobald sie den Platzhalter ersetzt.
 
-**Schritt 3 — Fahrzeug- und Heli-Squads:**
-- Anzahl und Größe für beide, alles per Dropdown. Überspringen übernimmt die Vorgaben deines Servers.
-- Alle Werte vorausgefüllt aus den Server-Standardwerten (`/config_defaults`)
-
-**Schritt 4 — Anmelde-Rollen:**
+**Schritt 3 — Anmelde-Rollen:**
 - Rollen mit Anmeldeberechtigung — Rollen, deren Mitglieder Squads anmelden dürfen / beitreten können (Rollen-Gate)
 - Rollen mit Vorab-Zugang — Rollen, deren Mitglieder **vor** Anmeldungsstart anmelden dürfen
 - Benachrichtigung bei Öffnung — Ob diese Rollen bei Anmeldungsstart per @-Erwähnung benachrichtigt werden (wird nur gefragt, wenn die Anmeldung nicht sofort öffnet)
 
 > Diese beiden sind **nur Rollen** — einzelne User können hier nicht ausgewählt werden (Caster in Schritt 5 erlauben weiterhin User).
 
-**Schritt 5 — Slot-Limits (nur sichtbar, wenn eine Anmelde-Rolle konfiguriert ist):**
+**Schritt 4 — Slot-Limits (nur sichtbar, wenn eine Anmelde-Rolle konfiguriert ist):**
 
 Begrenze optional, wie viel jede Anmeldegruppe belegen darf. Caster zählen nie mit, und Prozente beziehen sich nur auf die Spieler-Slots. Mitglieder, die das Limit ihrer Gruppe überschreiten, werden mit einer Meldung abgelehnt.
 - Rollen mit Vorab-Zugang — max. **% der Spieler-Slots** (alle Vorab-Rollen teilen sich dieses Kontingent)
@@ -179,20 +172,22 @@ Die beiden Vorab-Zugang-Limits (% und Squads pro Rolle) gelten **nur bis zur Öf
 
 Im Spieler-Modus wird nur das %-Limit für Vorab-Zugang angezeigt.
 
-**Schritt 6 — Caster-Rollen (nur Vertreter-Modus — im Spieler-Modus übersprungen):**
+**Schritt 5 — Caster-Rollen (nur Vertreter-Modus — im Spieler-Modus übersprungen):**
 - Caster Rollen/User — Wer sich als Caster anmelden darf (Rollen-Gate)
 - Caster-Early-Access Rollen/User — Wer sich als Caster **vor** Anmeldungsstart anmelden darf
 - Ping bei Öffnung
 
-**Schritt 7 — Timing:**
+**Schritt 6 — Timing:**
 - Event-Erinnerung — Benachrichtigung X Minuten vor Event-Start (0 = deaktiviert)
 - Countdown — Nachricht X Sekunden vor Anmeldungsstart (wird bei Öffnung automatisch gelöscht)
 
-**Schritt 8 — Spielstil & Squad-Limit (Vertreter-Modus) / Rollen-Auswahl (Spieler-Modus):**
+**Schritt 7 — Spielstil & Squad-Limit (Vertreter-Modus) / Rollen-Auswahl (Spieler-Modus):**
 - *Vertreter-Modus:* Spielstil-Auswahl — ob Squads bei der Anmeldung einen Spielstil wählen. Plus Max. Squads pro Spieler (1–20) — wird hier nur gefragt, wenn **keine** Anmelde-Rolle gesetzt ist; mit Rollen-Gate wird dies in Schritt 4 (Slot-Limits) festgelegt.
 - *Spieler-Modus:* Rollen-Auswahl — ob Spieler bei der Anmeldung eine Rolle im Squad (Squad Leader, Medic, Pilot, …) wählen können. **Ist sie deaktiviert, gibt es kein Rollen-Dropdown und im Embed werden keine Rollen angezeigt.** Standard: aktiviert. Kann später auch über den DM-Editor geändert werden.
 
-**Schritt 9 — Bestätigung:**
+Jeder Schritt hat einen **Zurück**-Button, auch die Bestätigung — vom ersten Schritt aus öffnen sich die Basis-Angaben (Name, Datum, Uhrzeit, …) erneut, vorbefüllt. Auf dem Rückweg geht nichts verloren, was du schon eingestellt hast. Bleibt ein Schritt 15 Minuten unberührt, beendet sich der Assistent mit einer Erklärung; angelegt wird erst mit der Bestätigung.
+
+**Schritt 8 — Bestätigung:**
 - Zusammenfassungs-Embed mit der Kapazitäts-Tabelle (`Anzahl × Größe` je Squad-Gruppe plus abgeleitete Gesamtzahl) — Bestätigen oder Abbrechen. Liegt die Summe über der Warngrenze, wird das angemerkt, blockiert aber nichts.
 
 Jeder Schritt kann übersprungen werden — ohne Auswahl werden die Server-Standardwerte verwendet. Rollen können auch nachträglich mit `/set_event_roles` konfiguriert werden.

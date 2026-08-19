@@ -3877,7 +3877,10 @@ _SQUAD_SIZE_PRESETS = list(range(1, MAX_SQUAD_PLAYERS + 1))
 _USER_SQUAD_PRESETS = list(range(1, 11))
 _REMINDER_PRESETS = [None, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440]
 _CAPACITY_LIMIT_PRESETS = [None, 40, 50, 60, 80, 90, 100, 120, 150, 200]
-_COUNTDOWN_PRESETS = [0, 10, 30, 60, 120, 300, 600]
+# Shared by the guild defaults and the wizard's timing step: every value needs a
+# `wizard.countdown_{n}s` label, and offering different sets on the two surfaces
+# only invites a stored value the other one cannot name.
+_COUNTDOWN_PRESETS = [0, 10, 60, 300, 600, 900, 1800, 3600, 7200, 14400, 28800]
 # How many squads of one size. Even, because both teams get half of each size —
 # offering only even values is why that rule needs no error message. 1 stays
 # available for tiny events, mirroring the old cap-below-2 exemption.
@@ -3916,6 +3919,25 @@ def _format_count_value(count, lang):
         return str(int(count))
     except (TypeError, ValueError):
         return t("limit.none", lang)
+
+
+def _format_countdown(seconds, lang) -> str:
+    """Countdown label. Falls back to plain seconds for a value that has no
+    dedicated key — a legacy stored value must not render as `[missing: ...]`."""
+    if not seconds:
+        return t("wizard.countdown_none", lang)
+    label = t(f"wizard.countdown_{seconds}s", lang)
+    return t("edit.seconds", lang, count=seconds) if label.startswith("[missing:") else label
+
+
+def _effective_countdown(event, settings):
+    """What the countdown will actually be. `None` on the event means "inherit
+    the guild default", so showing it as "no countdown" told the organizer the
+    opposite of what happens (see the resolution in the registration task)."""
+    stored = event.get("countdown_seconds")
+    if stored is not None:
+        return stored
+    return (settings or DEFAULT_GUILD_SETTINGS).get("registration_countdown_seconds", 60)
 
 
 def _format_squads_per_user(count, lang):
@@ -4147,11 +4169,6 @@ def _visible_edit_properties(event):
 # and returns to the overview; Done closes the session. Session state lives in
 # _active_edit_sessions; every view's on_timeout tears the session down.
 # ═══════════════════════════════════════════════════════════════════════════
-
-def _prop_short_label(label_key, lang):
-    """Property label without the leading 'NN. ' numbering used in the embed."""
-    return t(label_key, lang).split(". ", 1)[-1]
-
 
 def _overview_value(text, limit=100):
     """Clamp a single property's displayed value for the compact overview list.
@@ -4459,7 +4476,7 @@ def _build_edit_main_embed(event, lang, updated_note=None):
         lines = []
         for num, key, label_key, vtype, special in props:
             current = _overview_value(_format_property_value(event, key, vtype, lang))
-            lines.append(f"`{num:>2}.` {_prop_short_label(label_key, lang)}:  `{current}`")
+            lines.append(f"`{num:>2}.` {t(label_key, lang)}:  `{current}`")
         embed.add_field(name=t(group_key, lang), value="\n".join(lines), inline=False)
     if updated_note:
         embed.add_field(name="​", value=f"✅ {updated_note}", inline=False)
@@ -4477,7 +4494,7 @@ def _build_guild_main_embed(settings, lang, updated_note=None):
     lines = []
     for num, key, label_key, vtype, special in _GUILD_EDIT_PROPERTIES:
         current = _overview_value(_format_property_value(settings, key, vtype, lang))
-        lines.append(f"`{num:>2}.` {_prop_short_label(label_key, lang)}:  `{current}`")
+        lines.append(f"`{num:>2}.` {t(label_key, lang)}:  `{current}`")
     embed.add_field(name="​", value="\n".join(lines), inline=False)
     if updated_note:
         embed.add_field(name="​", value=f"✅ {updated_note}", inline=False)
@@ -4631,7 +4648,7 @@ async def _persist_event_edit(guild_id, channel_id, db_id, prop, new_value, lang
 
 def _edit_success_note(prop, lang, warning=None):
     _num, _key, label_key, _vtype, _special = prop
-    note = t("edit.updated_inline", lang, prop=_prop_short_label(label_key, lang))
+    note = t("edit.updated_inline", lang, prop=t(label_key, lang))
     # Advisory only — the edit is already saved by the time this is rendered.
     return f"{note}\n{warning}" if warning else note
 
@@ -4648,7 +4665,7 @@ def _build_shrink_confirm_embed(prop, new_value, shed, lang):
     embed = discord.Embed(
         title=t("edit.confirm_shrink_title", lang),
         description=t("edit.confirm_shrink_body", lang,
-                      prop=_prop_short_label(label_key, lang),
+                      prop=t(label_key, lang),
                       value=_format_property_value({key: new_value}, key, vtype, lang),
                       count=len(shed)),
         color=discord.Color.orange(),
@@ -4776,7 +4793,7 @@ async def _show_property_editor(interaction, user_id, guild_id, channel_id, db_i
     if target.kind == "event" and not obj:
         await _notify_event_gone(interaction, user_id, lang)
         return
-    label = _prop_short_label(label_key, lang)
+    label = t(label_key, lang)
     current_display = _format_property_value(obj, key, vtype, lang)
 
     def _editor_embed(extra=None):
@@ -4828,7 +4845,9 @@ class EditMainView(ui.View):
             visible = _visible_edit_properties(event) if event else list(_EDIT_PROPERTIES)
         # Keep the leading "NN. " numbering so dropdown entries line up with the
         # numbered overview list above.
-        options = [discord.SelectOption(label=t(p[2], lang)[:100], value=p[1])
+        # Numbered from the table, never from the string: the numbers used to be
+        # baked into the i18n labels and drifted the moment a property was removed.
+        options = [discord.SelectOption(label=f"{p[0]}. {t(p[2], lang)}"[:100], value=p[1])
                    for p in visible]
         select = ui.Select(placeholder=t("edit.pick_property", lang), options=options,
                            min_values=1, max_values=1)
@@ -4944,7 +4963,7 @@ class EditScalarModal(ui.Modal):
 
     def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop):
         num, key, label_key, vtype, special = prop
-        super().__init__(title=_prop_short_label(label_key, lang)[:45])
+        super().__init__(title=t(label_key, lang)[:45])
         self.user_id = user_id
         self.guild_id = guild_id
         self.channel_id = channel_id
@@ -5056,7 +5075,7 @@ class EditCompositionView(_EditDialogView):
         pairs = [[s, n] for s, n in sorted(self.composition.items()) if n > 0]
         total = sum(s * n for s, n in pairs)
         return discord.Embed(
-            title=_prop_short_label(self.prop[2], self.lang),
+            title=t(self.prop[2], self.lang),
             description=t("edit.composition_current", self.lang,
                           value=_format_composition(pairs, self.lang), total=total),
             color=discord.Color.blurple())
@@ -5576,157 +5595,321 @@ def _wizard_step_text(title_key, desc_key, lang, **kw):
     return f"**{t(title_key, lang)}**\n{t(desc_key, lang, **kw)}"
 
 
-class WizardInfantryView(BaseView):
-    """Step 1: build the infantry composition — pick a size, pick how many.
+# ── /create_event wizard ───────────────────────────────────────────────────
+# Every step carries the same six pieces of state, renders the same navigation
+# row and takes part in the same Back stack, so a step only has to declare its
+# own selects and its `step_body()`.
 
-    Same two-select shape as the editor's `EditCompositionView`, and for the same
-    reason: Discord allows 5 action rows but a composition can hold up to
-    MAX_SQUAD_PLAYERS sizes, so one select per size would overflow.
+# Nothing is persisted before the confirmation step, so a timeout throws the
+# whole configuration away — hence generous, and hence the notice in on_timeout.
+_WIZARD_TIMEOUT = 900
+
+_wizard_history: dict = {}   # user id -> [async (interaction) -> None]
+
+
+def _wizard_key(user):
+    return getattr(user, "id", user)
+
+
+def _wizard_push(user, rebuild):
+    """Remember how to get back to a step.
+
+    Stores a rebuild callable rather than the view instance: a rebuilt view gets
+    a fresh timeout and reads the current values out of the shared `event` dict,
+    so going back never shows a stale form.
+    """
+    async def _go(interaction):
+        await rebuild().render(interaction)
+    _wizard_history.setdefault(_wizard_key(user), []).append(_go)
+
+
+def _wizard_push_step(user, step):
+    """Remember a non-view step (the opening modal) as a Back target."""
+    _wizard_history.setdefault(_wizard_key(user), []).append(step)
+
+
+def _wizard_pop(user):
+    stack = _wizard_history.get(_wizard_key(user))
+    return stack.pop() if stack else None
+
+
+def _wizard_reset(user):
+    _wizard_history.pop(_wizard_key(user), None)
+
+
+def _wizard_step_text(title_key, desc_key, lang, **kw):
+    return f"**{t(title_key, lang)}**\n{t(desc_key, lang, **kw)}"
+
+
+class WizardStepView(BaseView):
+    """Base for every /create_event step."""
+
+    def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
+        super().__init__(timeout=_WIZARD_TIMEOUT, title=type(self).__name__)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.event = event
+        self.user_assignments = user_assignments
+        self.settings = settings
+        self.interaction_user = interaction_user
+        self.lang = get_guild_language(guild_id)
+
+    # ── rendering ─────────────────────────────────────────────────────────
+    def step_body(self):
+        """(content, embed) for this step — one of the two is None."""
+        raise NotImplementedError
+
+    def rebuild(self):
+        return self.make(type(self))
+
+    def make(self, cls, **kw):
+        """Build another step from the shared wizard state."""
+        return cls(self.guild_id, self.channel_id, self.event,
+                   self.user_assignments, self.settings, self.interaction_user, **kw)
+
+    async def render(self, interaction):
+        content, embed = self.step_body()
+        await interaction.response.edit_message(content=content, embed=embed, view=self)
+
+    # ── navigation ────────────────────────────────────────────────────────
+    def _add_nav(self, row, *, skip=False):
+        """The standard button row. `skip` only where it differs from Continue —
+        two buttons doing the same thing is worse than one."""
+        back = ui.Button(label=t("general.back", self.lang),
+                         style=discord.ButtonStyle.secondary, row=row)
+        back.callback = self.go_back
+        self.add_item(back)
+        if skip:
+            skip_btn = ui.Button(label=t("general.skip", self.lang),
+                                 style=discord.ButtonStyle.secondary, row=row)
+            skip_btn.callback = self._skip
+            self.add_item(skip_btn)
+        cont = ui.Button(label=t("wizard.continue", self.lang),
+                         style=discord.ButtonStyle.success, row=row)
+        cont.callback = self._continue
+        self.add_item(cont)
+
+    async def goto(self, interaction, next_view):
+        _wizard_push(self.interaction_user, self.rebuild)
+        await next_view.render(interaction)
+
+    async def go_back(self, interaction):
+        step = _wizard_pop(self.interaction_user)
+        if step is None:
+            await interaction.response.defer()
+            return
+        await step(interaction)
+
+    async def on_timeout(self):
+        """Replace the form with an explanation. The old behaviour only disabled
+        the buttons, leaving a dead form and no hint that everything was lost."""
+        _wizard_reset(self.interaction_user)
+        if self.message is None:
+            return
+        try:
+            await self.message.edit(content=t("wizard.timed_out", self.lang),
+                                    embed=None, view=None)
+        except Exception:
+            pass
+
+
+class WizardCapacityView(WizardStepView):
+    """The whole capacity in one step: pick a group, then a size, then a count.
+
+    Vehicle and heli squads are structurally the same as an infantry entry — n
+    squads of size s — so they get the same three controls. The old four separate
+    fields were an artifact of the 5-input modal this replaced, not a distinction
+    that means anything.
+
+    Every selection re-renders, so the seat total moves while you configure it
+    instead of only appearing at the confirmation.
     """
 
+    GROUPS = ("infantry", "vehicle", "heli", "caster")
+
     def __init__(self, guild_id, channel_id, event, user_assignments, settings,
-                 interaction_user, size=None):
-        super().__init__(timeout=300, title="Wizard Infantry")
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.event = event
-        self.user_assignments = user_assignments
-        self.settings = settings
-        self.interaction_user = interaction_user
-        self.composition = {int(s): int(n) for s, n in (event.get("infantry_squads") or [])}
-        self.size = size if size is not None else (
-            min(self.composition) if self.composition else 6)
-        lang = get_guild_language(guild_id)
+                 interaction_user, group="infantry", size=None):
+        super().__init__(guild_id, channel_id, event, user_assignments, settings, interaction_user)
+        groups = self._available_groups()
+        self.group = group if group in groups else groups[0]
+        self.size = size if size is not None else self._default_size()
 
-        size_select = ui.Select(
-            placeholder=t("edit.composition_pick_size", lang),
+        self.add_item(self._group_select(groups))
+        self.add_item(self._size_select())
+        self.add_item(self._count_select())
+        self._add_nav(3)
+
+    # ── group model ───────────────────────────────────────────────────────
+    def _available_groups(self):
+        # Casters exist only in rep mode; player mode forces max_caster_slots = 0.
+        return self.GROUPS if not is_player_mode(self.event) else self.GROUPS[:3]
+
+    def _sizes_and_counts(self, group):
+        """[(size, count), ...] for a group — casters have a count but no size."""
+        if group == "infantry":
+            return infantry_composition(self.event)
+        if group == "caster":
+            return [(None, self.event.get("max_caster_slots", 0))]
+        return [(self.event.get(f"{group}_squad_size", 2),
+                 self.event.get(f"max_{group}_squads", 0))]
+
+    def _default_size(self):
+        entries = self._sizes_and_counts(self.group)
+        return entries[0][0] if entries else 6
+
+    def _count_of(self, size):
+        return dict(self._sizes_and_counts(self.group)).get(size, 0)
+
+    def _count_presets(self):
+        return {"infantry": _COMPOSITION_COUNT_PRESETS,
+                "caster": _CASTER_COUNT_PRESETS}.get(self.group, _SQUAD_NUMBER_PRESETS)
+
+    def _apply_size(self, size):
+        # Infantry keeps several sizes, so picking one only chooses which entry to
+        # edit; the other groups hold exactly one size, so picking changes it.
+        if self.group in ("vehicle", "heli"):
+            self.event[f"{self.group}_squad_size"] = size
+
+    def _apply_count(self, count):
+        if self.group == "caster":
+            self.event["max_caster_slots"] = count
+        elif self.group == "infantry":
+            entries = dict(infantry_composition(self.event))
+            if count:
+                entries[self.size] = count
+            else:
+                entries.pop(self.size, None)
+            self.event["infantry_squads"] = [[s, n] for s, n in sorted(entries.items())]
+        else:
+            self.event[f"max_{self.group}_squads"] = count
+
+    # ── labels ────────────────────────────────────────────────────────────
+    def _group_name(self, group):
+        return t("embed.casters", self.lang) if group == "caster" else t(f"embed.type_{group}", self.lang)
+
+    def _group_summary(self, group):
+        entries = self._sizes_and_counts(group)
+        seats = sum((s or 0) * n for s, n in entries) if group != "caster" else entries[0][1]
+        if group == "caster":
+            return t("wizard.capacity_group_casters", self.lang, seats=seats)
+        squads = sum(n for _s, n in entries)
+        if not squads:
+            return t("wizard.capacity_group_empty", self.lang)
+        return t("wizard.capacity_group_squads", self.lang, squads=squads, seats=seats)
+
+    def _group_select(self, groups):
+        select = ui.Select(
+            placeholder=t("wizard.capacity_pick_group", self.lang),
             options=[discord.SelectOption(
-                label=t("edit.composition_size_option", lang,
-                        size=s, count=self.composition.get(s, 0)),
-                value=str(s), default=(s == self.size))
-                for s in range(1, MAX_SQUAD_PLAYERS + 1)],
+                label=f"{self._group_name(g)} — {self._group_summary(g)}"[:100],
+                value=g, default=(g == self.group)) for g in groups],
             min_values=1, max_values=1, row=0)
-        size_select.callback = self._on_size
-        self.add_item(size_select)
+        select.callback = self._on_group
+        return select
 
-        count_select = ui.Select(
-            placeholder=t("edit.composition_pick_count", lang, size=self.size),
-            options=[discord.SelectOption(
-                label=t("edit.composition_count_option", lang, count=c, size=self.size),
-                value=str(c), default=(c == self.composition.get(self.size, 0)))
-                for c in _COMPOSITION_COUNT_PRESETS],
-            min_values=1, max_values=1, row=1)
-        count_select.callback = self._on_count
-        self.add_item(count_select)
+    def _size_select(self):
+        if self.group == "caster":
+            # Casters have no squad size. Disabled rather than removed so the
+            # rows don't jump around when switching groups.
+            select = ui.Select(placeholder=t("wizard.capacity_no_size", self.lang),
+                               options=[discord.SelectOption(label="—", value="0")],
+                               min_values=1, max_values=1, row=1, disabled=True)
+            select.callback = self._on_size
+            return select
+        key = "wizard.capacity_size_slot" if self.group == "infantry" else "wizard.capacity_size_fixed"
+        options = []
+        for s in _SQUAD_SIZE_PRESETS:
+            if self.group == "infantry":
+                have = self._count_of(s)
+                label = (t("wizard.capacity_size_slot", self.lang, size=s, squads=have) if have
+                         else t("wizard.capacity_size_empty", self.lang, size=s))
+            else:
+                label = t(key, self.lang, size=s)
+            options.append(discord.SelectOption(label=label[:100], value=str(s),
+                                                default=(s == self.size)))
+        select = ui.Select(placeholder=t("wizard.capacity_pick_size", self.lang),
+                           options=options, min_values=1, max_values=1, row=1)
+        select.callback = self._on_size
+        return select
 
-        continue_btn = ui.Button(label=t("wizard.continue", lang),
-                                 style=discord.ButtonStyle.success, row=2)
-        continue_btn.callback = self._continue
-        self.add_item(continue_btn)
+    def _count_label(self, n):
+        if self.group == "caster":
+            if not n:
+                return t("wizard.capacity_count_no_casters", self.lang)
+            key = "wizard.capacity_count_one_caster" if n == 1 else "wizard.capacity_count_casters"
+            return t(key, self.lang, count=n)
+        if not n:
+            return t("wizard.capacity_count_none", self.lang, size=self.size)
+        seats = n * self.size
+        if n == 1:
+            # "1 Squad à 1 = 1 Platz" — the one place where seats is singular too.
+            key = "wizard.capacity_count_one_seat" if seats == 1 else "wizard.capacity_count_one"
+        else:
+            key = "wizard.capacity_count_many"
+        return t(key, self.lang, count=n, size=self.size, seats=seats)
 
-    def _pairs(self):
-        return [[s, n] for s, n in sorted(self.composition.items()) if n > 0]
+    def _count_select(self):
+        current = self._count_of(self.size) if self.group != "caster" else \
+            self.event.get("max_caster_slots", 0)
+        select = ui.Select(
+            placeholder=t("wizard.capacity_pick_count", self.lang),
+            options=[discord.SelectOption(label=self._count_label(n)[:100], value=str(n),
+                                          default=(n == current))
+                     for n in self._count_presets()],
+            min_values=1, max_values=1, row=2)
+        select.callback = self._on_count
+        return select
 
-    def _text(self, lang):
-        return _wizard_step_text(
-            "wizard.infantry_title", "wizard.infantry_desc", lang,
-            value=_format_composition(self._pairs(), lang),
-            seats=sum(s * n for s, n in self._pairs()))
+    # ── rendering ─────────────────────────────────────────────────────────
+    def step_body(self):
+        embed = discord.Embed(title=t("wizard.capacity_title", self.lang),
+                              description=_capacity_table(self.event, self.lang),
+                              color=discord.Color.blurple())
+        warning = capacity_warning(self.event, self.settings, self.lang)
+        if warning:
+            embed.add_field(name="\u200b", value=warning, inline=False)
+        embed.set_footer(text=t("wizard.capacity_hint", self.lang))
+        return None, embed
 
-    async def _rerender(self, interaction, size):
-        self.event["infantry_squads"] = self._pairs()
-        view = WizardInfantryView(self.guild_id, self.channel_id, self.event,
+    def rebuild(self):
+        return WizardCapacityView(self.guild_id, self.channel_id, self.event,
                                   self.user_assignments, self.settings,
-                                  self.interaction_user, size=size)
-        await interaction.response.edit_message(
-            content=view._text(get_guild_language(self.guild_id)), view=view)
+                                  self.interaction_user, group=self.group, size=self.size)
+
+    async def _rerender(self, interaction, *, group=None, size=None):
+        view = WizardCapacityView(self.guild_id, self.channel_id, self.event,
+                                  self.user_assignments, self.settings, self.interaction_user,
+                                  group=group or self.group,
+                                  size=size if size is not None else self.size)
+        await view.render(interaction)
+
+    # ── callbacks ─────────────────────────────────────────────────────────
+    async def _on_group(self, interaction):
+        group = interaction.data["values"][0]
+        entries = self._sizes_and_counts(group)
+        await self._rerender(interaction, group=group,
+                             size=entries[0][0] if entries else 6)
 
     async def _on_size(self, interaction):
-        await self._rerender(interaction, int(interaction.data["values"][0]))
+        size = int(interaction.data["values"][0])
+        self._apply_size(size)
+        await self._rerender(interaction, size=size)
 
     async def _on_count(self, interaction):
-        count = int(interaction.data["values"][0])
-        if count:
-            self.composition[self.size] = count
-        else:
-            self.composition.pop(self.size, None)
-        await self._rerender(interaction, self.size)
+        self._apply_count(int(interaction.data["values"][0]))
+        await self._rerender(interaction)
 
     async def _continue(self, interaction):
-        self.event["infantry_squads"] = self._pairs()
-        lang = get_guild_language(self.guild_id)
-        view = WizardVehicleHeliView(self.guild_id, self.channel_id, self.event,
-                                     self.user_assignments, self.settings,
-                                     self.interaction_user)
-        await interaction.response.edit_message(
-            content=_wizard_step_text("wizard.vehicles_title", "wizard.vehicles_desc", lang),
-            view=view)
+        await self.goto(interaction, WizardSquadRolesView(
+            self.guild_id, self.channel_id, self.event, self.user_assignments,
+            self.settings, self.interaction_user))
 
 
-class WizardVehicleHeliView(BaseView):
-    """Step 2: vehicle and heli squads — count and size for each."""
-
+class WizardSquadRolesView(WizardStepView):
+    """configure squad rep roles/users and early-access roles/users."""
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
-        super().__init__(timeout=300, title="Wizard Vehicles")
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.event = event
-        self.user_assignments = user_assignments
-        self.settings = settings
-        self.interaction_user = interaction_user
-        lang = get_guild_language(guild_id)
-        self._picked = {}
-
-        for row, (key, presets, placeholder_key) in enumerate((
-                ("max_vehicle_squads", _SQUAD_NUMBER_PRESETS, "wizard.pick_vehicle_count"),
-                ("vehicle_squad_size", _SQUAD_SIZE_PRESETS, "wizard.pick_vehicle_size"),
-                ("max_heli_squads", _SQUAD_NUMBER_PRESETS, "wizard.pick_heli_count"),
-                ("heli_squad_size", _SQUAD_SIZE_PRESETS, "wizard.pick_heli_size"))):
-            current = event.get(key)
-            select = ui.Select(
-                placeholder=t(placeholder_key, lang),
-                options=[discord.SelectOption(label=str(v), value=str(v), default=(v == current))
-                         for v in presets],
-                min_values=1, max_values=1, row=row)
-            select.callback = self._make_callback(key)
-            self.add_item(select)
-
-        skip_btn = ui.Button(label=t("general.skip", lang),
-                             style=discord.ButtonStyle.secondary, row=4)
-        skip_btn.callback = self._continue
-        self.add_item(skip_btn)
-        continue_btn = ui.Button(label=t("wizard.continue", lang),
-                                 style=discord.ButtonStyle.success, row=4)
-        continue_btn.callback = self._continue
-        self.add_item(continue_btn)
-
-    def _make_callback(self, key):
-        async def cb(interaction):
-            self._picked[key] = int(interaction.data["values"][0])
-            await interaction.response.defer()
-        return cb
-
-    async def _continue(self, interaction):
-        self.event.update(self._picked)
-        lang = get_guild_language(self.guild_id)
-        view = WizardSquadRolesView(self.guild_id, self.channel_id, self.event,
-                                    self.user_assignments, self.settings,
-                                    self.interaction_user)
-        await interaction.response.edit_message(
-            content=_wizard_step_text("wizard.squad_roles_title", "wizard.squad_roles_desc", lang),
-            view=view)
-
-
-class WizardSquadRolesView(BaseView):
-    """Step 1/2: configure squad rep roles/users and early-access roles/users."""
-    def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
-        super().__init__(timeout=300, title="Wizard Squad Roles")
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.event = event
-        self.user_assignments = user_assignments
-        self.settings = settings
-        self.interaction_user = interaction_user
+        super().__init__(guild_id, channel_id, event, user_assignments,
+                         settings, interaction_user)
         lang = get_guild_language(guild_id)
 
         self.squad_rep_select = ui.RoleSelect(
@@ -5744,29 +5927,27 @@ class WizardSquadRolesView(BaseView):
         # The "notify when registration opens" question only makes sense when
         # registration isn't already open at creation; otherwise there's no
         # open moment to announce, so we skip it (ping_on_open stays False).
-        self.ping_select = None
-        if not event.get("registration_open", False):
-            self.ping_select = ui.Select(
-                placeholder=t("wizard.ping_select_title", lang),
-                options=[
-                    discord.SelectOption(label=t("wizard.ping_no", lang), value="no", default=True),
-                    discord.SelectOption(label=t("wizard.ping_yes", lang), value="yes"),
-                ],
-                min_values=1, max_values=1, row=2)
-            self.ping_select.callback = self._ping_selected
-            self.add_item(self.ping_select)
+        # Asked here because this step is on every path. Deliberately not gated on
+        # registration_open: _confirm pings when `ping_on_open and registration_open`,
+        # so gating it made the ping unreachable for an immediately-open event.
+        self.ping_select = ui.Select(
+            placeholder=t("wizard.ping_select_title", lang),
+            options=[
+                discord.SelectOption(label=t("wizard.ping_no", lang), value="no", default=True),
+                discord.SelectOption(label=t("wizard.ping_yes", lang), value="yes"),
+            ],
+            min_values=1, max_values=1, row=2)
+        self.ping_select.callback = self._ping_selected
+        self.add_item(self.ping_select)
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=3)
-        skip_btn.callback = self._skip
-        self.add_item(skip_btn)
-
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=3)
-        continue_btn.callback = self._continue
-        self.add_item(continue_btn)
+        self._add_nav(3, skip=True)
 
         self._squad_rep_roles = []
         self._community_rep_roles = []
         self._ping_on_open = False
+
+    def step_body(self):
+        return _wizard_step_text("wizard.squad_roles_title", "wizard.squad_roles_desc", self.lang), None
 
     async def _squad_rep_selected(self, interaction):
         self._squad_rep_roles = [r.id for r in self.squad_rep_select.values]
@@ -5791,15 +5972,9 @@ class WizardSquadRolesView(BaseView):
         # When a role gate is configured, offer the optional per-type slot limits;
         # otherwise jump straight to the next wizard step.
         if _gate_configured(self.event):
-            lang = get_guild_language(self.guild_id)
-            next_view = WizardSlotLimitsView(self.guild_id, self.channel_id, self.event,
-                                             self.user_assignments, self.settings, self.interaction_user)
-            await interaction.response.edit_message(
-                content=f"**{t('wizard.slot_limits_title', lang)}**\n{t('wizard.slot_limits_desc', lang)}",
-                view=next_view)
+            await self.goto(interaction, self.make(WizardSlotLimitsView))
             return
-        await _advance_to_post_roles(interaction, self.guild_id, self.channel_id, self.event,
-                                     self.user_assignments, self.settings, self.interaction_user)
+        await _advance_to_post_roles(self, interaction)
 
     async def _continue(self, interaction):
         self._save_selections()
@@ -5814,40 +5989,24 @@ def _gate_configured(event) -> bool:
     return bool(event.get("squad_rep_role_ids") or event.get("community_rep_role_ids"))
 
 
-async def _advance_to_post_roles(interaction, guild_id, channel_id, event,
-                                 user_assignments, settings, interaction_user):
-    """Transition from the role/slot-limit steps to caster roles (rep) or timing (player)."""
-    lang = get_guild_language(guild_id)
-    if is_player_mode(event):
-        next_view = WizardTimingView(guild_id, channel_id, event, user_assignments,
-                                     settings, interaction_user)
-        await interaction.response.edit_message(
-            content=f"**{t('wizard.timing_title', lang)}**\n{t('wizard.timing_desc', lang)}",
-            view=next_view)
-        return
-    next_view = WizardCasterRolesView(guild_id, channel_id, event, user_assignments,
-                                      settings, interaction_user)
-    await interaction.response.edit_message(
-        content=f"**{t('wizard.caster_roles_title', lang)}**\n{t('wizard.caster_roles_desc', lang)}",
-        view=next_view)
+async def _advance_to_post_roles(current, interaction):
+    """From the role/slot-limit steps to caster roles (rep) or timing (player)."""
+    nxt = WizardTimingView if is_player_mode(current.event) else WizardCasterRolesView
+    await current.goto(interaction, current.make(nxt))
 
 
-class WizardSlotLimitsView(BaseView):
+class WizardSlotLimitsView(WizardStepView):
     """Optional per-register-type limits, shown only when a role gate is configured.
 
-    Rep mode shows four dropdowns (two seat-% caps + two squad caps); player mode
-    shows only the two % caps (squad limits don't apply; #12 forced to 1). Option
+    Rep mode shows three dropdowns (the seat-% cap plus two squad caps); player mode
+    shows only the seat-% cap (squad limits don't apply; the per-user limit is
+    forced to 1). Option
     labels carry their register-type prefix so a chosen value stays self-explanatory.
     """
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
-        super().__init__(timeout=300, title="Wizard Slot Limits")
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.event = event
-        self.user_assignments = user_assignments
-        self.settings = settings
-        self.interaction_user = interaction_user
+        super().__init__(guild_id, channel_id, event, user_assignments,
+                         settings, interaction_user)
         lang = get_guild_language(guild_id)
         rep_mode = not is_player_mode(event)
 
@@ -5882,16 +6041,14 @@ class WizardSlotLimitsView(BaseView):
             self.add_item(self.reg_squads_select)
             btn_row = 3
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=btn_row)
-        skip_btn.callback = self._skip
-        self.add_item(skip_btn)
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=btn_row)
-        continue_btn.callback = self._continue
-        self.add_item(continue_btn)
+        self._add_nav(btn_row, skip=True)
 
     @staticmethod
     def _value(raw):
         return None if raw == "none" else int(raw)
+
+    def step_body(self):
+        return _wizard_step_text("wizard.slot_limits_title", "wizard.slot_limits_desc", self.lang), None
 
     async def _early_pct_selected(self, interaction):
         self._early_pct = self._value(self.early_pct_select.values[0])
@@ -5913,12 +6070,10 @@ class WizardSlotLimitsView(BaseView):
 
     async def _continue(self, interaction):
         self._save_selections()
-        await _advance_to_post_roles(interaction, self.guild_id, self.channel_id, self.event,
-                                     self.user_assignments, self.settings, self.interaction_user)
+        await _advance_to_post_roles(self, interaction)
 
     async def _skip(self, interaction):
-        await _advance_to_post_roles(interaction, self.guild_id, self.channel_id, self.event,
-                                     self.user_assignments, self.settings, self.interaction_user)
+        await _advance_to_post_roles(self, interaction)
 
 
 def _capped_options(prefix_key, presets, value_fmt, lang, current):
@@ -5936,16 +6091,11 @@ def _capped_options(prefix_key, presets, value_fmt, lang, current):
     return opts
 
 
-class WizardCasterRolesView(BaseView):
-    """Step 2/2: configure caster roles/users and early-access roles/users."""
+class WizardCasterRolesView(WizardStepView):
+    """configure caster roles/users and early-access roles/users."""
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
-        super().__init__(timeout=300, title="Wizard Caster Roles")
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.event = event
-        self.user_assignments = user_assignments
-        self.settings = settings
-        self.interaction_user = interaction_user
+        super().__init__(guild_id, channel_id, event, user_assignments,
+                         settings, interaction_user)
         lang = get_guild_language(guild_id)
 
         self.caster_role_select = ui.MentionableSelect(
@@ -5960,48 +6110,16 @@ class WizardCasterRolesView(BaseView):
         self.caster_early_select.callback = self._caster_early_selected
         self.add_item(self.caster_early_select)
 
-        ping_default = event.get("ping_on_open", False)
-        self.ping_select = ui.Select(
-            placeholder=t("wizard.ping_select_title", lang),
-            options=[
-                discord.SelectOption(label=t("wizard.ping_no", lang), value="no", default=not ping_default),
-                discord.SelectOption(label=t("wizard.ping_yes", lang), value="yes", default=ping_default),
-            ],
-            min_values=1, max_values=1, row=2)
-        self.ping_select.callback = self._ping_selected
-        self.add_item(self.ping_select)
 
-        # Caster slot count lives here rather than in a separate step: it is the
-        # one capacity number that belongs with the caster configuration, and
-        # this view had a free action row.
-        current_casters = event.get("max_caster_slots", 2)
-        self.caster_slots_select = ui.Select(
-            placeholder=t("wizard.pick_caster_slots", lang),
-            options=[discord.SelectOption(label=str(v), value=str(v),
-                                          default=(v == current_casters))
-                     for v in _CASTER_COUNT_PRESETS],
-            min_values=1, max_values=1, row=3)
-        self.caster_slots_select.callback = self._caster_slots_selected
-        self.add_item(self.caster_slots_select)
-
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=4)
-        skip_btn.callback = self._skip
-        self.add_item(skip_btn)
-
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=4)
-        continue_btn.callback = self._continue
-        self.add_item(continue_btn)
+        self._add_nav(2, skip=True)
 
         self._caster_roles = []
         self._caster_users = []
         self._caster_early_roles = []
         self._caster_early_users = []
-        self._ping_on_open = ping_default
-        self._selected_caster_slots = None
 
-    async def _caster_slots_selected(self, interaction):
-        self._selected_caster_slots = int(self.caster_slots_select.values[0])
-        await interaction.response.defer()
+    def step_body(self):
+        return _wizard_step_text("wizard.caster_roles_title", "wizard.caster_roles_desc", self.lang), None
 
     async def _caster_role_selected(self, interaction):
         self._caster_roles = [v.id for v in self.caster_role_select.values if isinstance(v, discord.Role)]
@@ -6013,10 +6131,6 @@ class WizardCasterRolesView(BaseView):
         self._caster_early_users = [str(v.id) for v in self.caster_early_select.values if isinstance(v, (discord.Member, discord.User))]
         await interaction.response.defer()
 
-    async def _ping_selected(self, interaction):
-        self._ping_on_open = self.ping_select.values[0] == "yes"
-        await interaction.response.defer()
-
     def _save_selections(self):
         if self._caster_roles or self._caster_users:
             self.event["caster_role_ids"] = self._caster_roles
@@ -6024,41 +6138,22 @@ class WizardCasterRolesView(BaseView):
         if self._caster_early_roles or self._caster_early_users:
             self.event["caster_community_role_ids"] = self._caster_early_roles
             self.event["caster_community_user_ids"] = self._caster_early_users
-        self.event["ping_on_open"] = self._ping_on_open
-        if self._selected_caster_slots is not None:
-            self.event["max_caster_slots"] = self._selected_caster_slots
 
     async def _continue(self, interaction):
         self._save_selections()
-        lang = get_guild_language(self.guild_id)
-        next_view = WizardTimingView(self.guild_id, self.channel_id, self.event, self.user_assignments,
-                                     self.settings, self.interaction_user)
-        await interaction.response.edit_message(
-            content=f"**{t('wizard.timing_title', lang)}**\n{t('wizard.timing_desc', lang)}",
-            view=next_view)
+        await self.goto(interaction, self.make(WizardTimingView))
 
     async def _skip(self, interaction):
-        lang = get_guild_language(self.guild_id)
-        next_view = WizardTimingView(self.guild_id, self.channel_id, self.event, self.user_assignments,
-                                     self.settings, self.interaction_user)
-        await interaction.response.edit_message(
-            content=f"**{t('wizard.timing_title', lang)}**\n{t('wizard.timing_desc', lang)}",
-            view=next_view)
+        await self.goto(interaction, self.make(WizardTimingView))
 
 
-class WizardTimingView(BaseView):
-    """Step 3: configure event reminder and registration countdown."""
+class WizardTimingView(WizardStepView):
+    """Reminder before the event, and the countdown before registration opens."""
     REMINDER_OPTIONS = [0, 15, 30, 60, 120, 240, 480, 1440]
-    COUNTDOWN_OPTIONS = [0, 60, 300, 600, 900, 1800, 3600, 7200, 14400, 28800]  # seconds
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
-        super().__init__(timeout=300, title="Wizard Timing")
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.event = event
-        self.user_assignments = user_assignments
-        self.settings = settings
-        self.interaction_user = interaction_user
+        super().__init__(guild_id, channel_id, event, user_assignments,
+                         settings, interaction_user)
         self._has_countdown = event.get("registration_start_time") is not None
         lang = get_guild_language(guild_id)
 
@@ -6080,12 +6175,11 @@ class WizardTimingView(BaseView):
         btn_row = 1
         if self._has_countdown:
             countdown_options = []
-            for seconds in self.COUNTDOWN_OPTIONS:
-                if seconds == 0:
-                    label = t("wizard.countdown_none", lang)
-                else:
-                    label = t(f"wizard.countdown_{seconds}s", lang)
-                countdown_options.append(discord.SelectOption(label=label, value=str(seconds), default=(seconds == 0)))
+            effective = _effective_countdown(event, settings)
+            for seconds in _COUNTDOWN_PRESETS:
+                countdown_options.append(discord.SelectOption(
+                    label=_format_countdown(seconds, lang), value=str(seconds),
+                    default=(seconds == effective)))
 
             self.countdown_select = ui.Select(placeholder=t("wizard.countdown_placeholder", lang),
                                               options=countdown_options, min_values=1, max_values=1, row=1)
@@ -6093,16 +6187,13 @@ class WizardTimingView(BaseView):
             self.add_item(self.countdown_select)
             btn_row = 2
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=btn_row)
-        skip_btn.callback = self._skip
-        self.add_item(skip_btn)
-
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=btn_row)
-        continue_btn.callback = self._continue
-        self.add_item(continue_btn)
+        self._add_nav(btn_row, skip=True)
 
         self._selected_minutes = None
         self._selected_countdown = None
+
+    def step_body(self):
+        return _wizard_step_text("wizard.timing_title", "wizard.timing_desc", self.lang), None
 
     async def _reminder_selected(self, interaction):
         self._selected_minutes = int(self.reminder_select.values[0])
@@ -6124,22 +6215,9 @@ class WizardTimingView(BaseView):
             # Player mode: one user per registration, no squad-limit step — but
             # offer the in-squad-role toggle (player-mode analogue of playstyle).
             self.event["max_squads_per_user"] = 1
-            next_view = WizardPlayerRolesView(
-                self.guild_id, self.channel_id, self.event, self.user_assignments,
-                self.settings, self.interaction_user)
-            content = f"**{t('wizard.player_roles_step_title', lang)}**\n{t('wizard.player_roles_step_desc', lang)}"
-            await interaction.response.edit_message(content=content, embed=None, view=next_view)
+            await self.goto(interaction, self.make(WizardPlayerRolesView))
             return
-        default_limit = self.event.get("max_squads_per_user", 1)
-        next_view = WizardSquadLimitView(self.guild_id, self.channel_id, self.event, self.user_assignments,
-                                         self.settings, self.interaction_user)
-        if _gate_configured(self.event):
-            # The per-user squad limit was already set in the Slot Limits step;
-            # this step now only configures playstyle.
-            content = f"**{t('wizard.playstyle_step_title', lang)}**\n{t('wizard.playstyle_step_desc', lang)}"
-        else:
-            content = f"**{t('wizard.squad_limit_title', lang)}**\n{t('wizard.squad_limit_desc', lang, default=default_limit)}"
-        await interaction.response.edit_message(content=content, embed=None, view=next_view)
+        await self.goto(interaction, self.make(WizardSquadLimitView))
 
     async def _continue(self, interaction):
         self._save_selections()
@@ -6149,17 +6227,12 @@ class WizardTimingView(BaseView):
         await self._advance_after_timing(interaction)
 
 
-class WizardSquadLimitView(BaseView):
-    """Step 4: configure max squads per user and squad-registration options."""
+class WizardSquadLimitView(WizardStepView):
+    """configure max squads per user and squad-registration options."""
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
-        super().__init__(timeout=300, title="Wizard Squad Limit")
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.event = event
-        self.user_assignments = user_assignments
-        self.settings = settings
-        self.interaction_user = interaction_user
+        super().__init__(guild_id, channel_id, event, user_assignments,
+                         settings, interaction_user)
         lang = get_guild_language(guild_id)
 
         # When a role gate is configured, the per-user squad limit (#12) is set in
@@ -6168,10 +6241,9 @@ class WizardSquadLimitView(BaseView):
         play_row = 0
         if not _gate_configured(event):
             current_default = event.get("max_squads_per_user", 1)
-            options = []
-            for n in range(1, 21):
-                label = f"{n} Squad" if n == 1 else f"{n} Squads"
-                options.append(discord.SelectOption(label=label, value=str(n), default=(n == current_default)))
+            options = [discord.SelectOption(label=_format_squads_per_user(n, lang),
+                                            value=str(n), default=(n == current_default))
+                       for n in _REGULAR_SQUAD_PRESETS]
             self.limit_select = ui.Select(placeholder=t("wizard.squad_limit_placeholder", lang),
                                           options=options, min_values=1, max_values=1, row=0)
             self.limit_select.callback = self._limit_selected
@@ -6191,16 +6263,20 @@ class WizardSquadLimitView(BaseView):
         self.playstyle_select.callback = self._playstyle_selected
         self.add_item(self.playstyle_select)
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=2)
-        skip_btn.callback = self._skip
-        self.add_item(skip_btn)
-
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=2)
-        continue_btn.callback = self._continue
-        self.add_item(continue_btn)
+        self._add_nav(2, skip=True)
 
         self._selected_limit = None
         self._selected_playstyle_enabled = None
+
+    def step_body(self):
+        # With a role gate the per-user limit was already set in the Slot Limits
+        # step, so this step then only configures playstyle — and says so.
+        if _gate_configured(self.event):
+            return _wizard_step_text("wizard.playstyle_step_title",
+                                     "wizard.playstyle_step_desc", self.lang), None
+        return _wizard_step_text("wizard.squad_limit_title", "wizard.squad_limit_desc",
+                                 self.lang,
+                                 default=self.event.get("max_squads_per_user", 1)), None
 
     async def _limit_selected(self, interaction):
         self._selected_limit = int(self.limit_select.values[0])
@@ -6218,29 +6294,20 @@ class WizardSquadLimitView(BaseView):
 
     async def _continue(self, interaction):
         self._save_selections()
-        await _advance_to_confirmation(
-            interaction, self.guild_id, self.channel_id, self.event,
-            self.user_assignments, self.settings, self.interaction_user)
+        await _advance_to_confirmation(self, interaction)
 
     async def _skip(self, interaction):
-        await _advance_to_confirmation(
-            interaction, self.guild_id, self.channel_id, self.event,
-            self.user_assignments, self.settings, self.interaction_user)
+        await _advance_to_confirmation(self, interaction)
 
 
-class WizardPlayerRolesView(BaseView):
+class WizardPlayerRolesView(WizardStepView):
     """Player-mode step: enable or disable the in-squad role selection (Squad
     Leader, Medic, Pilot, …). Player-mode analogue of the rep-mode playstyle
     toggle. When disabled, players can't pick a role and roles aren't shown."""
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
-        super().__init__(timeout=300, title="Wizard Player Roles")
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.event = event
-        self.user_assignments = user_assignments
-        self.settings = settings
-        self.interaction_user = interaction_user
+        super().__init__(guild_id, channel_id, event, user_assignments,
+                         settings, interaction_user)
         lang = get_guild_language(guild_id)
 
         roles_default = bool(event.get("player_roles_enabled", True))
@@ -6256,15 +6323,12 @@ class WizardPlayerRolesView(BaseView):
         self.roles_select.callback = self._roles_selected
         self.add_item(self.roles_select)
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=1)
-        skip_btn.callback = self._skip
-        self.add_item(skip_btn)
-
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=1)
-        continue_btn.callback = self._continue
-        self.add_item(continue_btn)
+        self._add_nav(1, skip=True)
 
         self._selected_roles_enabled = None
+
+    def step_body(self):
+        return _wizard_step_text("wizard.player_roles_step_title", "wizard.player_roles_step_desc", self.lang), None
 
     async def _roles_selected(self, interaction):
         self._selected_roles_enabled = self.roles_select.values[0] == "yes"
@@ -6276,9 +6340,7 @@ class WizardPlayerRolesView(BaseView):
 
     async def _to_confirmation(self, interaction):
         self._save_selections()
-        await _advance_to_confirmation(
-            interaction, self.guild_id, self.channel_id, self.event,
-            self.user_assignments, self.settings, self.interaction_user)
+        await _advance_to_confirmation(self, interaction)
 
     async def _continue(self, interaction):
         await self._to_confirmation(interaction)
@@ -6291,16 +6353,12 @@ class WizardPlayerRolesView(BaseView):
 # WIZARD CONFIRMATION            #
 # ############################# #
 
-async def _advance_to_confirmation(interaction, guild_id, channel_id, event,
-                                   user_assignments, settings, interaction_user):
+async def _advance_to_confirmation(current, interaction):
     """Final wizard step: show the configuration summary for confirmation."""
-    embed = _build_confirmation_embed(event, guild_id, settings)
-    confirm_view = WizardConfirmationView(guild_id, channel_id, event, user_assignments,
-                                          settings, interaction_user)
-    await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
+    await current.goto(interaction, current.make(WizardConfirmationView))
 
 
-def _composition_summary(event: dict, lang: str) -> str:
+def _capacity_table(event: dict, lang: str) -> str:
     """The capacity table — every squad group with its seats, then the total.
 
     Rendered in a code block, so it uses the plain `squad.label_*` names rather
@@ -6327,8 +6385,13 @@ def _composition_summary(event: dict, lang: str) -> str:
     lines.append("─" * (label_w + expr_w + 6))
     lines.append(f"{t('wizard.summary_total', lang):<{label_w}}  {'':>{expr_w}}  {total:>4}")
     body = "\n".join(lines)
-    return (f"```\n{body}\n```"
-            f"**{t('settings.max_squads_per_user', lang)}:** {event.get('max_squads_per_user', '?')}")
+    return f"```\n{body}\n```"
+
+
+def _composition_summary(event: dict, lang: str) -> str:
+    """The capacity table plus the per-user squad limit, for the confirmation."""
+    return (_capacity_table(event, lang)
+            + f"\n**{t('settings.max_squads_per_user', lang)}:** {event.get('max_squads_per_user', '?')}")
 
 
 def _build_confirmation_embed(event: dict, guild_id: int, settings: dict = None) -> discord.Embed:
@@ -6389,14 +6452,9 @@ def _build_confirmation_embed(event: dict, guild_id: int, settings: dict = None)
         embed.add_field(name=t("wizard.summary_player_roles", lang), value=roles_val, inline=True)
 
     if event.get("registration_start_time") is not None:
-        cd_seconds = event.get("countdown_seconds")
-        if cd_seconds is not None and cd_seconds > 0:
-            countdown_val = t(f"wizard.countdown_{cd_seconds}s", lang)
-        elif cd_seconds == 0:
-            countdown_val = t("wizard.countdown_none", lang)
-        else:
-            countdown_val = t("wizard.countdown_none", lang)
-        embed.add_field(name=t("wizard.summary_countdown", lang), value=countdown_val, inline=True)
+        embed.add_field(name=t("wizard.summary_countdown", lang),
+                        value=_format_countdown(_effective_countdown(event, settings), lang),
+                        inline=True)
 
     # Recurrence / duration / (recreate-after, only for recurring events)
     embed.add_field(name=t("wizard.summary_recurrence", lang),
@@ -6417,9 +6475,19 @@ def _build_confirmation_embed(event: dict, guild_id: int, settings: dict = None)
 
     none_text = t("wizard.summary_none", lang)
 
-    def _fmt(role_ids, user_ids):
+    def _fmt(role_ids, user_ids, shown=8):
+        """Mention list, capped. Four of these share one embed field and each
+        select allows 25 picks — unclamped they blow past Discord's 1024-char
+        field limit and the finished wizard dies with an HTTP 400 on the very
+        last click. Clamp the list, never the joined string: cutting mid-mention
+        renders the raw `<@&123`."""
         parts = [f"<@&{rid}>" for rid in role_ids] + [f"<@{uid}>" for uid in user_ids]
-        return ", ".join(parts) if parts else none_text
+        if not parts:
+            return none_text
+        if len(parts) > shown:
+            return (", ".join(parts[:shown]) + " "
+                    + t("embed.declined_more", lang, count=len(parts) - shown))
+        return ", ".join(parts)
 
     roles_info = (
         f"**{t('wizard.summary_squad_roles', lang)}:** "
@@ -6449,31 +6517,41 @@ def _build_confirmation_embed(event: dict, guild_id: int, settings: dict = None)
     return embed
 
 
-class WizardConfirmationView(BaseView):
+class WizardConfirmationView(WizardStepView):
     """Final step: show event summary and Confirm/Cancel buttons."""
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
-        super().__init__(timeout=300, title="Event Confirmation")
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.event = event
-        self.user_assignments = user_assignments
-        self.settings = settings
-        self.interaction_user = interaction_user
+        super().__init__(guild_id, channel_id, event, user_assignments,
+                         settings, interaction_user)
         lang = get_guild_language(guild_id)
+
+        back_btn = ui.Button(label=t("general.back", lang), style=discord.ButtonStyle.secondary, row=0)
+        back_btn.callback = self.go_back
+        self.add_item(back_btn)
+
+        # Forward action rightmost, matching every preceding step.
+        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary, row=0)
+        cancel_btn.callback = self._cancel
+        self.add_item(cancel_btn)
 
         confirm_btn = ui.Button(label=t("general.confirm", lang), style=discord.ButtonStyle.success, row=0)
         confirm_btn.callback = self._confirm
         self.add_item(confirm_btn)
 
-        cancel_btn = ui.Button(label=t("general.cancel", lang), style=discord.ButtonStyle.secondary, row=0)
-        cancel_btn.callback = self._cancel
-        self.add_item(cancel_btn)
+    def step_body(self):
+        return None, _build_confirmation_embed(self.event, self.guild_id, self.settings)
 
     async def _confirm(self, interaction):
         if self.check_response(interaction):
             return
 
         lang = get_guild_language(self.guild_id)
+        if player_capacity(self.event) + self.event.get("max_caster_slots", 0) == 0:
+            # Nobody could ever register. Answer without tearing the view down so
+            # Back still works and the organizer can fix the composition.
+            self.has_responded = False
+            await interaction.response.send_message(t("wizard.no_capacity", lang), ephemeral=True)
+            return
+        _wizard_reset(self.interaction_user)
         await interaction.response.edit_message(content=t("wizard.creating", lang), embed=None, view=None)
 
         # Send announcement embed to channel first (no DB yet — avoids orphaned records)
@@ -6557,6 +6635,7 @@ class WizardConfirmationView(BaseView):
         if self.check_response(interaction):
             return
         lang = get_guild_language(self.guild_id)
+        _wizard_reset(self.interaction_user)
         await interaction.response.edit_message(content=t("wizard.event_cancelled", lang), embed=None, view=None)
 
 
@@ -6564,31 +6643,65 @@ class WizardConfirmationView(BaseView):
 # EVENT CREATION                #
 # ############################# #
 
+def _reg_start_text(event: dict) -> str:
+    """Round-trip the stored registration start back into something the modal can
+    show and `parse_registration_start` can read again."""
+    value = event.get("registration_start_time")
+    if isinstance(value, datetime):
+        return value.strftime("%d.%m.%Y %H:%M")
+    return "sofort" if event.get("registration_open") else ""
+
+
+def _reopen_basics(guild_id, channel_id, mode, event, user_assignments):
+    """Back target for the first wizard step: the opening modal, pre-filled.
+
+    A modal needs `send_modal` rather than `edit_message`, so it cannot be a
+    rebuildable view like the other steps — hence its own Back entry.
+    """
+    async def _step(interaction):
+        await interaction.response.send_modal(EventCreationModal(
+            guild_id, channel_id, mode, event=event, user_assignments=user_assignments))
+    return _step
+
+
 class EventCreationModal(ui.Modal):
-    def __init__(self, guild_id: int, channel_id: int, mode: str = "rep"):
+    """First creation step. Re-opened by the Back button of the first wizard
+    step, in which case `event` carries what was already entered: the fields are
+    pre-filled and submitting returns to that step instead of starting over."""
+
+    def __init__(self, guild_id: int, channel_id: int, mode: str = "rep",
+                 event: dict = None, user_assignments: dict = None):
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.mode = mode if mode in ("rep", "player") else "rep"
+        self.event = event
+        self.user_assignments = user_assignments if user_assignments is not None else {}
         lang = get_guild_language(guild_id)
         super().__init__(title=t("event.create_title", lang))
 
         defaults = resolve_event_defaults()
+        prefill = event or {}
 
-        self.event_name = ui.TextInput(label=t("event.name_label", lang), required=True, max_length=100)
+        self.event_name = ui.TextInput(label=t("event.name_label", lang), required=True, max_length=100,
+                                       default=prefill.get("name") or None)
         self.add_item(self.event_name)
         self.event_date = ui.TextInput(label=t("event.date_label", lang), placeholder="TT.MM.JJJJ",
-                                       default=defaults["date"] or None, required=True, max_length=10)
+                                       default=prefill.get("date") or defaults["date"] or None,
+                                       required=True, max_length=10)
         self.add_item(self.event_date)
         self.event_time = ui.TextInput(label=t("event.time_label", lang), placeholder="HH:MM",
-                                       default=defaults["time"] or None, required=True, max_length=5)
+                                       default=prefill.get("time") or defaults["time"] or None,
+                                       required=True, max_length=5)
         self.add_item(self.event_time)
-        self.event_desc = ui.TextInput(label=t("event.description_label", lang), style=discord.TextStyle.paragraph, required=False, max_length=1024)
+        self.event_desc = ui.TextInput(label=t("event.description_label", lang), style=discord.TextStyle.paragraph,
+                                       required=False, max_length=1024,
+                                       default=prefill.get("description") or None)
         self.add_item(self.event_desc)
 
-        settings = get_guild_settings(guild_id) or DEFAULT_GUILD_SETTINGS
         wizard_hint = t("wizard.reg_start_hint", lang)
         self.reg_start = ui.TextInput(label=t("wizard.reg_start", lang), placeholder=wizard_hint,
-                                      default=defaults["reg_start"] or None, required=False, max_length=25)
+                                      default=(_reg_start_text(event) if event else defaults["reg_start"]) or None,
+                                      required=False, max_length=25)
         self.add_item(self.reg_start)
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -6652,6 +6765,19 @@ class EventCreationModal(ui.Modal):
             "reg_start_time": reg_start_time,
             "mode": self.mode,
         }
+        if self.event is not None:
+            # Came back from the first wizard step: correct the basics, keep
+            # everything already configured, and go straight back to that step.
+            self.event.update(
+                name=parsed["name"], date=parsed["date"], time=parsed["time"],
+                description=parsed["description"],
+                registration_open=parsed["reg_open"],
+                registration_start_time=parsed["reg_start_time"])
+            view = WizardCapacityView(self.guild_id, self.channel_id, self.event,
+                                      self.user_assignments, settings, interaction.user)
+            await view.render(interaction)
+            return
+
         # Capacity is configured in dropdown steps from here on, so the event dict
         # starts from the guild defaults and each step mutates it in place — the
         # same shape every other wizard view already uses.
@@ -6664,9 +6790,14 @@ class EventCreationModal(ui.Modal):
             max_caster_slots=0 if self.mode == "player" else settings["max_caster_slots"],
             mode=self.mode,
         )
-        view = WizardInfantryView(self.guild_id, self.channel_id, event, {},
+        view = WizardCapacityView(self.guild_id, self.channel_id, event, {},
                                   settings, interaction.user)
-        await interaction.response.send_message(view._text(lang), view=view, ephemeral=True)
+        # Seed the Back stack so the first step can return to this modal.
+        _wizard_reset(interaction.user)
+        _wizard_push_step(interaction.user, _reopen_basics(
+            self.guild_id, self.channel_id, self.mode, event, {}))
+        _content, embed = view.step_body()
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 class EventModeSelectView(BaseView):

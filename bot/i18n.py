@@ -1421,56 +1421,56 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Casters",
     },
     "edit.property.name": {
-        "de": "1. Event-Name",
-        "en": "1. Event name",
+        "de": "Event-Name",
+        "en": "Event name",
     },
     "edit.property.date": {
-        "de": "2. Datum (TT.MM.JJJJ)",
-        "en": "2. Date (DD.MM.YYYY)",
+        "de": "Datum (TT.MM.JJJJ)",
+        "en": "Date (DD.MM.YYYY)",
     },
     "edit.property.time": {
-        "de": "3. Uhrzeit (HH:MM)",
-        "en": "3. Time (HH:MM)",
+        "de": "Uhrzeit (HH:MM)",
+        "en": "Time (HH:MM)",
     },
     "edit.property.description": {
-        "de": "4. Beschreibung",
-        "en": "4. Description",
+        "de": "Beschreibung",
+        "en": "Description",
     },
     "edit.property.max_casters": {
-        "de": "6. Max. Caster-Plätze",
-        "en": "6. Max caster slots",
+        "de": "Max. Caster-Plätze",
+        "en": "Max caster slots",
     },
     "edit.property.max_vehicles": {
-        "de": "7. Max. Fahrzeug-Squads (0 = deaktiviert)",
-        "en": "7. Max vehicle squads (0 = disabled)",
+        "de": "Max. Fahrzeug-Squads (0 = deaktiviert)",
+        "en": "Max vehicle squads (0 = disabled)",
     },
     "edit.property.max_helis": {
-        "de": "8. Max. Heli-Squads (0 = deaktiviert)",
-        "en": "8. Max heli squads (0 = disabled)",
+        "de": "Max. Heli-Squads (0 = deaktiviert)",
+        "en": "Max heli squads (0 = disabled)",
     },
     "edit.property.vehicle_size": {
-        "de": "10. Fahrzeug-Squadgröße",
-        "en": "10. Vehicle squad size",
+        "de": "Fahrzeug-Squadgröße",
+        "en": "Vehicle squad size",
     },
     "edit.property.heli_size": {
-        "de": "11. Heli-Squadgröße",
-        "en": "11. Heli squad size",
+        "de": "Heli-Squadgröße",
+        "en": "Heli squad size",
     },
     "edit.property.max_squads_user": {
-        "de": "12. Max. Squads pro Spieler",
-        "en": "12. Max squads per player",
+        "de": "Max. Squads pro Spieler",
+        "en": "Max squads per player",
     },
     "edit.property.reminder": {
-        "de": "13. Erinnerung (Min., 0=aus)",
-        "en": "13. Reminder (min, 0=off)",
+        "de": "Erinnerung (Min., 0=aus)",
+        "en": "Reminder (min, 0=off)",
     },
     "edit.property.reg_start": {
-        "de": "14. Registrierungsstart",
-        "en": "14. Registration start",
+        "de": "Registrierungsstart",
+        "en": "Registration start",
     },
     "edit.property.image": {
-        "de": "15. Event-Bild (URL)",
-        "en": "15. Event image (URL)",
+        "de": "Event-Bild (URL)",
+        "en": "Event image (URL)",
     },
     "edit.image_hint": {
         "de": "Sende eine HTTPS-URL oder lade ein Bild hoch. Sende 'leer' zum Entfernen.",
@@ -1541,8 +1541,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Registration & extras",
     },
     "edit.property.recurrence": {
-        "de": "16. Wiederholung",
-        "en": "16. Recurrence",
+        "de": "Wiederholung",
+        "en": "Recurrence",
     },
     "edit.recurrence.prompt": {
         "de": (
@@ -1677,20 +1677,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Days of month: {days}",
     },
     "edit.property.duration": {
-        "de": "17. Eventdauer",
-        "en": "17. Duration",
+        "de": "Eventdauer",
+        "en": "Duration",
     },
     "edit.property.spawn_offset": {
-        "de": "18. Folge-Event erstellen nach",
-        "en": "18. Recreate next event after",
+        "de": "Folge-Event erstellen nach",
+        "en": "Recreate next event after",
     },
     "edit.property.playstyle_enabled": {
-        "de": "19. Spielstil-Auswahl bei Anmeldung",
-        "en": "19. Playstyle selection at registration",
+        "de": "Spielstil-Auswahl bei Anmeldung",
+        "en": "Playstyle selection at registration",
     },
     "edit.property.player_roles_enabled": {
-        "de": "22. Rollenauswahl bei Anmeldung",
-        "en": "22. Role selection at registration",
+        "de": "Rollenauswahl bei Anmeldung",
+        "en": "Role selection at registration",
     },
     "edit.invalid_size_list": {
         "de": "Ungültige Eingabe. Verwende kommagetrennte Zahlen (z. B. 7, 8) — oder leer für alle Übergrößen.",
@@ -1909,18 +1909,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Slot Limits — Registration Quotas",
     },
     "wizard.slot_limits_desc": {
-        "de": ("Optional Anmeldegruppe Limitierung.\n"
-               "Caster zählen nie mit. Prozente beziehen sich nur auf die Spieler-Slots.\n"
-               "• Vorab-Zugang-Rollen — max. % der Slots (alle Vorab-Rollen teilen sich diesen Anteil)\n"
-               "• Vorab-Zugang-Rollen — max. Squads pro Rolle (Gesamtsumme je Rolle)\n"
-               "• Reguläre Rollen — max. Squads pro Nutzer (Limit je Person)\n"
-               "Lass einen Wert auf „Kein Limit“ oder überspringe für keine Begrenzung."),
-        "en": ("Optionally registration group cap.\n"
-               "Casters never count. Percentages are of the player slots only.\n"
-               "• Early-access roles — max % of slots (all early-access roles share this)\n"
-               "• Early-access roles — max squads per role (each role's total)\n"
-               "• Regular roles — max squads per user (limit per person)\n"
-               "Leave any on “No limit” or skip for no restriction."),
+        # No bullet list: it restated the three select placeholders verbatim and
+        # named three dropdowns, while player mode renders only one.
+        "de": ("Optionale Limits je Anmeldegruppe.\n"
+               "Caster zählen nie mit, Prozente beziehen sich nur auf die Spieler-Plätze.\n"
+               "Lass alles auf „Kein Limit“ oder überspringe den Schritt, wenn du nichts "
+               "begrenzen willst."),
+        "en": ("Optional caps per registration group.\n"
+               "Casters never count, and percentages are of the player seats only.\n"
+               "Leave everything on “No limit”, or skip the step if you don't want to cap "
+               "anything."),
     },
     "wizard.cap_early_pct_title": {
         "de": "Vorab-Zugang-Rollen — max. % der Slots",
@@ -1951,12 +1949,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Should players be able to optionally pick an in-squad role (e.g. Squad Leader, Medic, Pilot) when registering?",
     },
     "edit.property.early_pct_cap": {
-        "de": "20. Slot-Limit: Vorab-Zugang (%)",
-        "en": "20. Slot limit: early access (%)",
+        "de": "Slot-Limit: Vorab-Zugang (%)",
+        "en": "Slot limit: early access (%)",
     },
     "edit.property.early_squad_cap": {
-        "de": "21. Max. Squads pro Vorab-Zugang-Rolle",
-        "en": "21. Max squads per early-access role",
+        "de": "Max. Squads pro Vorab-Zugang-Rolle",
+        "en": "Max squads per early-access role",
     },
     "gate.seat_cap_reached": {
         "de": "Slot-Kontingent deiner Anmeldegruppe: {usage} — würde das Limit überschreiten.",
@@ -2258,7 +2256,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "No",
     },
     "wizard.squad_limit_title": {
-        "de": "Squad-Limit & Optionen (optional)",
+        "de": "Squad-Limit & Optionen",
         "en": "Squad Limit & Options (optional)",
     },
     "wizard.squad_limit_desc": {
@@ -2412,36 +2410,36 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Default setting changed: {user} set '{property}' to '{value}'.",
     },
     "config_defaults.prop.max_caster_slots": {
-        "de": "2. Max. Caster-Plätze",
-        "en": "2. Max caster slots",
+        "de": "Max. Caster-Plätze",
+        "en": "Max caster slots",
     },
     "config_defaults.prop.max_vehicle_squads": {
-        "de": "3. Max. Fahrzeug-Squads",
-        "en": "3. Max vehicle squads",
+        "de": "Max. Fahrzeug-Squads",
+        "en": "Max vehicle squads",
     },
     "config_defaults.prop.max_heli_squads": {
-        "de": "4. Max. Heli-Squads",
-        "en": "4. Max heli squads",
+        "de": "Max. Heli-Squads",
+        "en": "Max heli squads",
     },
     "config_defaults.prop.vehicle_squad_size": {
-        "de": "6. Fahrzeug-Squadgröße",
-        "en": "6. Vehicle squad size",
+        "de": "Fahrzeug-Squadgröße",
+        "en": "Vehicle squad size",
     },
     "config_defaults.prop.heli_squad_size": {
-        "de": "7. Heli-Squadgröße",
-        "en": "7. Heli squad size",
+        "de": "Heli-Squadgröße",
+        "en": "Heli squad size",
     },
     "config_defaults.prop.max_squads_per_user": {
-        "de": "8. Max. Squads pro Spieler",
-        "en": "8. Max squads per user",
+        "de": "Max. Squads pro Spieler",
+        "en": "Max squads per user",
     },
     "config_defaults.prop.caster_registration_enabled": {
-        "de": "9. Caster-Registrierung",
-        "en": "9. Caster registration",
+        "de": "Caster-Registrierung",
+        "en": "Caster registration",
     },
     "config_defaults.prop.registration_countdown_seconds": {
-        "de": "10. Countdown-Sekunden",
-        "en": "10. Countdown seconds",
+        "de": "Countdown-Sekunden",
+        "en": "Countdown seconds",
     },
 
     # ── Reminder ─────────────────────────────────────────────────────────
@@ -2621,47 +2619,93 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Wähle optional Rollen/Benutzer, die sich als Caster anmelden dürfen und Vorab-Zugang erhalten.\nÜberspringe diesen Schritt, wenn jeder sich als Caster anmelden darf.",
         "en": "Optionally select roles/users who can register as casters and get early access.\nSkip this step if anyone should be allowed to register as a caster.",
     },
-    "wizard.infantry_title": {
-        "de": "Infanterie-Zusammenstellung",
-        "en": "Infantry composition",
+    "wizard.capacity_title": {
+        "de": "Kapazität — wie viele Squads soll es geben?",
+        "en": "Capacity — how many squads should there be?",
     },
-    "wizard.infantry_desc": {
-        "de": "Wähle eine Squad-Größe und wie viele Squads es davon geben soll. "
-              "Du kannst mehrere Größen kombinieren — wähle dazu einfach nacheinander "
-              "verschiedene Größen aus.\nAktuell: **{value}** — ergibt **{seats}** Plätze.",
-        "en": "Pick a squad size and how many squads of it there should be. You can "
-              "combine several sizes — just pick each size in turn.\n"
-              "Currently: **{value}** — that is **{seats}** seats.",
+    "wizard.capacity_hint": {
+        "de": "Gruppe wählen, dann Größe und Anzahl. Die Gesamtzahl rechnet sich mit.",
+        "en": "Pick a group, then a size and a count. The total updates as you go.",
     },
-    "wizard.vehicles_title": {
-        "de": "Fahrzeug- und Heli-Squads",
-        "en": "Vehicle and heli squads",
+    "wizard.capacity_pick_group": {
+        "de": "Gruppe wählen…",
+        "en": "Pick a group…",
     },
-    "wizard.vehicles_desc": {
-        "de": "Anzahl und Größe der Fahrzeug- und Heli-Squads. Überspringen "
-              "übernimmt die Vorgaben deines Servers.",
-        "en": "How many vehicle and heli squads, and how big. Skip keeps your "
-              "server's defaults.",
+    "wizard.capacity_pick_size": {
+        "de": "Squad-Größe wählen…",
+        "en": "Pick a squad size…",
     },
-    "wizard.pick_vehicle_count": {
-        "de": "Anzahl Fahrzeug-Squads…",
-        "en": "Number of vehicle squads…",
+    "wizard.capacity_pick_count": {
+        "de": "Anzahl wählen…",
+        "en": "Pick a count…",
     },
-    "wizard.pick_vehicle_size": {
-        "de": "Größe der Fahrzeug-Squads…",
-        "en": "Vehicle squad size…",
+    "wizard.capacity_no_size": {
+        "de": "Caster haben keine Squad-Größe",
+        "en": "Casters have no squad size",
     },
-    "wizard.pick_heli_count": {
-        "de": "Anzahl Heli-Squads…",
-        "en": "Number of heli squads…",
+    "wizard.capacity_group_squads": {
+        "de": "{squads} Squads, {seats} Plätze",
+        "en": "{squads} squads, {seats} seats",
     },
-    "wizard.pick_heli_size": {
-        "de": "Größe der Heli-Squads…",
-        "en": "Heli squad size…",
+    "wizard.capacity_group_casters": {
+        "de": "{seats} Plätze",
+        "en": "{seats} seats",
     },
-    "wizard.pick_caster_slots": {
-        "de": "Anzahl Caster-Slots…",
-        "en": "Number of caster slots…",
+    "wizard.capacity_group_empty": {
+        "de": "noch keine",
+        "en": "none yet",
+    },
+    "wizard.capacity_size_slot": {
+        "de": "Größe {size} — aktuell {squads} Squads",
+        "en": "Size {size} — currently {squads} squads",
+    },
+    "wizard.capacity_size_empty": {
+        "de": "Größe {size} — noch keine",
+        "en": "Size {size} — none yet",
+    },
+    "wizard.capacity_size_fixed": {
+        "de": "Größe {size} — {size} Spieler pro Squad",
+        "en": "Size {size} — {size} players per squad",
+    },
+    "wizard.capacity_count_none": {
+        "de": "keine {size}er-Squads",
+        "en": "no squads of {size}",
+    },
+    "wizard.capacity_count_one": {
+        "de": "1 Squad à {size} = {seats} Plätze",
+        "en": "1 squad of {size} = {seats} seats",
+    },
+    "wizard.capacity_count_one_seat": {
+        "de": "1 Squad à 1 = 1 Platz",
+        "en": "1 squad of 1 = 1 seat",
+    },
+    "wizard.capacity_count_many": {
+        "de": "{count} Squads à {size} = {seats} Plätze",
+        "en": "{count} squads of {size} = {seats} seats",
+    },
+    "wizard.capacity_count_casters": {
+        "de": "{count} Caster-Plätze",
+        "en": "{count} caster slots",
+    },
+    "wizard.capacity_count_one_caster": {
+        "de": "1 Caster-Platz",
+        "en": "1 caster slot",
+    },
+    "wizard.capacity_count_no_casters": {
+        "de": "Keine Caster",
+        "en": "No casters",
+    },
+    "wizard.no_capacity": {
+        "de": "Dieses Event hat keinen einzigen Platz — geh mit **Zurück** zur Kapazität "
+              "und lege mindestens ein Squad oder einen Caster-Platz an.",
+        "en": "This event has no seats at all — use **Back** to return to the capacity "
+              "step and add at least one squad or caster slot.",
+    },
+    "wizard.timed_out": {
+        "de": "⏳ Der Event-Assistent wurde wegen Inaktivität beendet. Es wurde **nichts** "
+              "angelegt — starte ihn mit `/create_event` neu.",
+        "en": "⏳ The event wizard closed after a period of inactivity. **Nothing** was "
+              "created — start it again with `/create_event`.",
     },
     "wizard.continue": {
         "de": "Weiter →",

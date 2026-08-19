@@ -148,21 +148,20 @@ After you pick a mode, a multi-step wizard guides you through:
 - Event name, date, time, description
 - Registration start time (date/time or "now"/"sofort" for immediately)
 
-**Step 2 — Infantry composition:**
-- Pick a squad size, then how many squads of that size. Pick another size to add it — the step shows the running composition and seat total. See the composition section below.
+**Step 2 — Capacity:**
+- One step for everything that makes up the seat count: pick a **group** (Infantry, Vehicles, Helis, Casters), then a **size**, then **how many**. Infantry can hold several sizes at once — pick another size to add it; a count of `0` removes one.
+- The step shows the capacity table with the running total and updates it after **every** pick, so you configure against the number you are aiming for. If the total goes past the guild's capacity warning limit, the note appears right here rather than only at the confirmation.
+- Vehicles and helis hold exactly one size each, so picking a size changes it; casters have no squad size at all and only a slot count. Casters only appear in rep mode.
+- Dropdown options say what they mean (`4 Squads à 8 = 32 Plätze`, `6 squads, 12 seats`) — a bare number would be meaningless once it replaces the placeholder.
 
-**Step 3 — Vehicle and heli squads:**
-- Count and size for each, all dropdowns. Skip keeps your server defaults.
-- All pre-filled from server defaults (`/config_defaults`)
-
-**Step 4 — Registration Roles:**
+**Step 3 — Registration Roles:**
 - Roles allowed to register — roles whose members may register squads / join (role gate, enforced during registration)
 - Roles with early access — roles whose members may register **before** registration opens
 - Notify on open — whether to @-mention these roles when registration opens (only asked when registration isn't opening immediately)
 
 > These two are **roles only** — individual users can't be selected here (casters, in Step 5, still allow users).
 
-**Step 5 — Slot Limits (only shown when a registration role is configured):**
+**Step 4 — Slot Limits (only shown when a registration role is configured):**
 
 Optionally cap how much each registration group may take. Casters never count, and percentages are of the player slots only. Members who exceed their group's cap are rejected with a message.
 - Early-access roles — max **% of player slots** (all early-access roles share this quota)
@@ -173,20 +172,22 @@ The two early-access caps (% and squads per role) apply **only until registratio
 
 Player mode shows only the early-access % cap.
 
-**Step 6 — Caster Roles (rep mode only — skipped in player mode):**
+**Step 5 — Caster Roles (rep mode only — skipped in player mode):**
 - Caster roles/users — Who can register as caster (role gate)
 - Caster early-access roles/users — Who can register as caster **before** registration opens
 - Ping on open toggle
 
-**Step 7 — Timing:**
+**Step 6 — Timing:**
 - Event reminder — Notification X minutes before event start (0 = disabled)
 - Registration countdown — Message sent X seconds before registration opens (auto-deleted when registration starts)
 
-**Step 8 — Playstyle & Squad Limit (rep mode) / Role selection (player mode):**
+**Step 7 — Playstyle & Squad Limit (rep mode) / Role selection (player mode):**
 - *Rep mode:* Playstyle selection — whether squads pick a playstyle when registering. Plus max squads per user (1–20) — only asked here when **no** registration-role gate is set; when a gate is configured, this is set in Step 4 (Slot Limits) instead.
 - *Player mode:* Role selection — whether players may pick an in-squad role (Squad Leader, Medic, Pilot, …) when registering. **When disabled, there is no role dropdown and roles are not shown in the embed.** Default: enabled. Can also be changed later via the DM editor.
 
-**Step 9 — Confirmation:**
+Every step has a **Back** button, including the confirmation — from the first step it re-opens the basics (name, date, time, …) pre-filled. Nothing you already configured is lost on the way back. A step left untouched for 15 minutes closes the wizard with an explanation; nothing is created until you confirm.
+
+**Step 8 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel
 
 Each step can be skipped — if skipped, server defaults are used. Roles can also be configured later with `/set_event_roles`.

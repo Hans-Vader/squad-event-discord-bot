@@ -104,31 +104,30 @@ Event creation uses a multi-step wizard:
 - Event name, date, time, description
 - Registration start time (date/time or "sofort"/"now" for immediately)
 
-**Step 2 — Infantry composition:**
-- Pick a squad size, then how many squads of it. Repeat for as many sizes as you want (e.g. 10 × 6, 2 × 7, 4 × 8) — the running seat total is shown as you go
+**Step 2 — Capacity:**
+- One step for the whole seat count: pick a group (Infantry / Vehicles / Helis / Casters), then a size, then how many. Infantry holds several sizes at once
+- The capacity table with the running total is shown and updated after every pick; the capacity warning appears here, not only at the confirmation
 
-**Step 3 — Vehicle and heli squads:**
-- Count and size for each, all dropdowns
-- All pre-filled from server defaults (`/config_defaults`)
-
-**Step 4 — Squad Roles:**
+**Step 3 — Squad Roles:**
 - Squad-Rep roles/users — who can register squads (role gate)
 - Community-Rep roles/users — who can register before registration opens (early access)
 - Ping on open toggle
 
-**Step 5 — Caster Roles (rep mode only):**
+**Step 4 — Caster Roles (rep mode only):**
 - Caster roles/users — who can register as caster (role gate)
 - Caster early-access roles/users
 - Ping on open toggle
 
-**Step 6 — Timing:**
+**Step 5 — Timing:**
 - Event reminder (0–1440 minutes before event start)
 - Registration countdown (0–28800 seconds before registration opens)
 
-**Step 7 — Squad Limit:**
+**Step 6 — Squad Limit:**
 - Max squads per user (1–20)
 
-**Step 8 — Confirmation:**
+Every step has a Back button (the first one re-opens the basics modal pre-filled); a step idle for 15 minutes closes the wizard with an explanation.
+
+**Step 7 — Confirmation:**
 - Summary embed with the capacity table (`count × size` per squad group plus the derived total) — confirm or cancel. A total above the guild's capacity warning limit is flagged but never blocks.
 
 Each step can be skipped. Server defaults from `/config_defaults` are used as starting values.
