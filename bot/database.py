@@ -53,8 +53,10 @@ DEFAULT_GUILD_SETTINGS = {
     "organizer_role_id": 0,
     "log_channel_id": None,
     "language": "en",
-    "server_max_players": 100,
-    "infantry_squad_size": 6,
+    # The infantry composition IS the capacity: [[squad_size, how_many], ...].
+    # Stored as pairs rather than {size: count} because this round-trips through
+    # plain JSON, which would turn int dict keys into strings.
+    "infantry_squads": [[6, 14]],
     "vehicle_squad_size": 2,
     "heli_squad_size": 1,
     "max_vehicle_squads": 6,
@@ -63,6 +65,9 @@ DEFAULT_GUILD_SETTINGS = {
     "max_squads_per_user": 1,
     "caster_registration_enabled": True,
     "registration_countdown_seconds": 60,
+    # Squad servers currently cap at 100 players. Purely advisory: exceeding it
+    # produces a note, never a rejection. 0 disables the check.
+    "capacity_warning_limit": 100,
 }
 
 
@@ -106,6 +111,7 @@ def init_db():
             ON events(guild_id, channel_id, status);
     """)
     _migrate_drop_unique_constraint(conn)
+    _warn_about_pre_composition_events(conn)
     conn.commit()
     conn.close()
     logger.info(f"Database initialised: {DB_FILE}")
@@ -148,6 +154,24 @@ def _migrate_drop_unique_constraint(conn):
         PRAGMA foreign_keys=ON;
     """)
     logger.info("Migrated events table: dropped UNIQUE(guild_id, channel_id, status)")
+
+
+# ponytail: boot-time hint only — delete this and its call in init_db() once the
+#           pre-composition events are gone.
+def _warn_about_pre_composition_events(conn):
+    """Flag stored events written before `infantry_squads` existed.
+
+    There is deliberately no migration: the capacity model was inverted and the
+    old events are meant to be recreated. Such an event simply has no infantry
+    capacity, which is confusing without a hint — so say so once at boot rather
+    than silently serving a zero-slot event.
+    """
+    stale = sum(1 for (raw,) in conn.execute("SELECT event_data FROM events WHERE status = 'active'")
+                if '"infantry_squads"' not in (raw or ""))
+    if stale:
+        logger.warning(
+            f"{stale} active event(s) predate the squad-composition model and have no "
+            f"infantry capacity — recreate them or set the composition via /edit")
 
 
 # ---------------------------------------------------------------------------
@@ -374,20 +398,17 @@ def channel_has_active_event(guild_id: int, channel_id: int) -> bool:
 def build_default_event(settings: dict, name: str, date: str, time_str: str,
                         description: str = None, **overrides) -> dict:
     """Build a fresh event dict from guild settings + creation params."""
-    server_max = overrides.get("server_max_players", settings["server_max_players"])
     max_casters = overrides.get("max_caster_slots", settings["max_caster_slots"])
-    max_player_slots = server_max - max_casters
+    composition = overrides.get("infantry_squads", settings["infantry_squads"])
 
     return {
         "name": name,
         "date": date,
         "time": time_str,
         "description": description,
-        "server_max_players": server_max,
-        "infantry_squad_size": overrides.get("infantry_squad_size", settings["infantry_squad_size"]),
+        "infantry_squads": [[int(s), int(n)] for s, n in composition],
         "vehicle_squad_size": overrides.get("vehicle_squad_size", settings["vehicle_squad_size"]),
         "heli_squad_size": overrides.get("heli_squad_size", settings["heli_squad_size"]),
-        "max_player_slots": max_player_slots,
         "max_caster_slots": max_casters,
         "max_vehicle_squads": overrides.get("max_vehicle_squads", settings["max_vehicle_squads"]),
         "max_heli_squads": overrides.get("max_heli_squads", settings["max_heli_squads"]),
@@ -431,9 +452,6 @@ def build_default_event(settings: dict, name: str, date: str, time_str: str,
         "duration_minutes": overrides.get("duration_minutes", 120),
         "spawn_offset_minutes": overrides.get("spawn_offset_minutes", 5),
         "mode": overrides.get("mode", "rep"),
-        "dont_waste_slots": overrides.get("dont_waste_slots", False),
-        "dont_waste_allowed_sizes": overrides.get("dont_waste_allowed_sizes", None),
-        "dont_waste_max_squads": overrides.get("dont_waste_max_squads", None),
         "playstyle_enabled": overrides.get("playstyle_enabled", True),
         "player_roles_enabled": overrides.get("player_roles_enabled", True),
         "community_rep_cap_percent": overrides.get("community_rep_cap_percent", None),
@@ -447,9 +465,9 @@ def build_default_event(settings: dict, name: str, date: str, time_str: str,
 
 _CARRY_OVER_KEYS = (
     "name", "description",
-    "server_max_players", "max_caster_slots",
+    "max_caster_slots",
     "max_vehicle_squads", "max_heli_squads",
-    "infantry_squad_size", "vehicle_squad_size", "heli_squad_size",
+    "infantry_squads", "vehicle_squad_size", "heli_squad_size",
     "max_squads_per_user",
     "event_reminder_minutes", "embed_image_url",
     "countdown_seconds", "ping_on_open",
@@ -462,9 +480,6 @@ _CARRY_OVER_KEYS = (
     "recurrence",
     "duration_minutes", "spawn_offset_minutes",
     "mode",
-    "dont_waste_slots",
-    "dont_waste_allowed_sizes",
-    "dont_waste_max_squads",
     "playstyle_enabled",
     "player_roles_enabled",
     "community_rep_cap_percent",
@@ -492,12 +507,9 @@ def clone_event_for_recurrence(old_event: dict, new_start: datetime) -> dict:
         elif isinstance(value, dict):
             cloned[key] = dict(value)
 
-    max_player_slots = (cloned.get("server_max_players") or 0) - (cloned.get("max_caster_slots") or 0)
-
     cloned.update({
         "date": new_date,
         "time": new_time,
-        "max_player_slots": max_player_slots,
         "player_slots_used": 0,
         "caster_slots_used": 0,
         "squads": {},

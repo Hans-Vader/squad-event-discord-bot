@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bot"))
 
 import bot  # noqa: E402
+import utils  # noqa: E402
 from i18n import t, _STRINGS  # noqa: E402
 
 FUTURE_DATE = "31.12.2099"
@@ -26,7 +27,7 @@ FUTURE_DATE = "31.12.2099"
 def _event(**over):
     ev = {
         "name": "Test", "date": FUTURE_DATE, "time": "20:00",
-        "server_max_players": 100, "max_caster_slots": 2,
+        "infantry_squads": [[6, 14]], "max_caster_slots": 2,
         "max_vehicle_squads": 2, "max_heli_squads": 1,
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "recurrence": {"type": "never"}, "squads": {},
@@ -135,13 +136,16 @@ class TestApplyPropertyChange(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(ev["max_vehicle_squads"], 0)
 
-    def test_recalc_slots_side_effect(self):
+    def test_composition_sets_capacity(self):
+        """Capacity is derived from the composition — there is no cached seat
+        count left to keep in sync."""
         ev = _event()
         ok, err = bot._apply_property_change(
-            ev, "server_max_players", "int", "recalc_slots", 120, "en")
-        self.assertTrue(ok)
-        self.assertEqual(ev["server_max_players"], 120)
-        self.assertEqual(ev["max_player_slots"], 120 - ev["max_caster_slots"])
+            ev, "infantry_squads", "composition", None, [[6, 10], [8, 4]], "en")
+        self.assertTrue(ok, err)
+        self.assertEqual(ev["infantry_squads"], [[6, 10], [8, 4]])
+        self.assertEqual(utils.player_capacity(ev), 60 + 32)
+        self.assertNotIn("max_player_slots", ev)
 
     def test_recurrence_too_frequent_rejected(self):
         ev = _event()  # 120-min event, 5-min spawn offset

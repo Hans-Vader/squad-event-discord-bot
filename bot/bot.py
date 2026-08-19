@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 import logging
 import sys
+import copy
 import csv
 import io
 import re
@@ -43,14 +44,15 @@ from utils import (
     export_log_file, clear_log_file, logger,
     resolve_event_defaults, role_label, role_emoji, set_application_emojis,
     _player_register, _player_unregister, _player_remove_from_waitlist,
+    _resize_player_squads, _max_squads_for_type,
     _player_waitlist_type, _player_self_unregister,
     _add_tentative, _remove_tentative, _player_tentative_entry, _player_tentative_type,
     _add_declined, _remove_declined, _player_declined_entry,
     _player_current_assignment, _select_tentative,
     consolidate_all_player_squads,
     build_event_ics, _ics_slug,
-    infantry_unused_pool, infantry_size_options,
-    dont_waste_slots_active, dont_waste_slots_possible, MAX_SQUAD_PLAYERS,
+    infantry_size_options, infantry_composition, infantry_capacities,
+    player_capacity, _default_infantry_size, MAX_SQUAD_PLAYERS,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
 
@@ -117,28 +119,48 @@ _EDIT_PROPERTIES = [
     (2,  "date",                   "edit.property.date",            "date",            None),
     (3,  "time",                   "edit.property.time",            "time",            None),
     (4,  "description",            "edit.property.description",     "string_nullable", None),
-    (5,  "server_max_players",     "edit.property.server_max",      "int",             "recalc_slots"),
-    (6,  "max_caster_slots",       "edit.property.max_casters",     "int_zero",        "recalc_slots"),
-    (7,  "max_vehicle_squads",     "edit.property.max_vehicles",    "int_zero",        None),
-    (8,  "max_heli_squads",        "edit.property.max_helis",       "int_zero",        None),
-    (9,  "infantry_squad_size",    "edit.property.infantry_size",   "int",             None),
-    (10, "vehicle_squad_size",     "edit.property.vehicle_size",    "int",             None),
-    (11, "heli_squad_size",        "edit.property.heli_size",       "int",             None),
-    (12, "max_squads_per_user",    "edit.property.max_squads_user", "int",             None),
-    (13, "event_reminder_minutes", "edit.property.reminder",        "int_nullable",    None),
-    (14, "registration_start_time","edit.property.reg_start",       "reg_start",       None),
-    (15, "embed_image_url",        "edit.property.image",           "image",           None),
-    (16, "recurrence",             "edit.property.recurrence",      "recurrence",      None),
-    (17, "duration_minutes",       "edit.property.duration",        "duration",        None),
-    (18, "spawn_offset_minutes",   "edit.property.spawn_offset",    "spawn_offset",    None),
-    (19, "playstyle_enabled",      "edit.property.playstyle_enabled","bool",           None),
-    (20, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
-    (21, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
-    (22, "player_roles_enabled",   "edit.property.player_roles_enabled","bool",         None),
-    (23, "dont_waste_slots",       "edit.property.dont_waste_slots",    "bool",         None),
-    (24, "dont_waste_allowed_sizes", "edit.property.dont_waste_sizes",  "size_list",    None),
-    (25, "dont_waste_max_squads",  "edit.property.dont_waste_max",      "int_nullable", None),
+    (5,  "infantry_squads",        "edit.property.infantry_squads", "composition",     None),
+    (6,  "max_caster_slots",       "edit.property.max_casters",     "caster_count",    None),
+    (7,  "max_vehicle_squads",     "edit.property.max_vehicles",    "squad_number",    None),
+    (8,  "max_heli_squads",        "edit.property.max_helis",       "squad_number",    None),
+    (9,  "vehicle_squad_size",     "edit.property.vehicle_size",    "squad_size",      None),
+    (10, "heli_squad_size",        "edit.property.heli_size",       "squad_size",      None),
+    (11, "max_squads_per_user",    "edit.property.max_squads_user", "user_squad_count", None),
+    (12, "event_reminder_minutes", "edit.property.reminder",        "reminder",        None),
+    (13, "registration_start_time","edit.property.reg_start",       "reg_start",       None),
+    (14, "embed_image_url",        "edit.property.image",           "image",           None),
+    (15, "recurrence",             "edit.property.recurrence",      "recurrence",      None),
+    (16, "duration_minutes",       "edit.property.duration",        "duration",        None),
+    (17, "spawn_offset_minutes",   "edit.property.spawn_offset",    "spawn_offset",    None),
+    (18, "playstyle_enabled",      "edit.property.playstyle_enabled","bool",           None),
+    (19, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
+    (20, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
+    (21, "player_roles_enabled",   "edit.property.player_roles_enabled","bool",         None),
 ]
+
+
+# Edited property -> squad types whose capacity it can change. Editing any of
+# these must re-fit existing player-mode squads and re-run their waitlist, since
+# a squad's `size` is frozen at creation time. Each type is independent now that
+# the composition is stored rather than derived from a shared seat budget.
+_CAPACITY_KEYS = {
+    "infantry_squads":    ("infantry",),
+    "vehicle_squad_size": ("vehicle",),
+    "heli_squad_size":    ("heli",),
+    "max_vehicle_squads": ("vehicle",),
+    "max_heli_squads":    ("heli",),
+}
+
+
+_background_tasks = set()
+
+
+def _fire_and_forget(coro):
+    """Run a best-effort side task off the caller's path, holding a strong
+    reference so it isn't garbage-collected mid-flight."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 def _get_guild_lock(guild_id: int) -> asyncio.Lock:
@@ -152,16 +174,16 @@ def _get_guild_lock(guild_id: int) -> asyncio.Lock:
 # ---------------------------------------------------------------------------
 # (num, key, label_key, vtype, special)  — special always None for guild defaults
 _GUILD_EDIT_PROPERTIES = [
-    (1,  "server_max_players",             "config_defaults.prop.server_max_players",           "int",      None),
-    (2,  "max_caster_slots",               "config_defaults.prop.max_caster_slots",              "int_zero", None),
-    (3,  "max_vehicle_squads",             "config_defaults.prop.max_vehicle_squads",            "int_zero", None),
-    (4,  "max_heli_squads",                "config_defaults.prop.max_heli_squads",               "int_zero", None),
-    (5,  "infantry_squad_size",            "config_defaults.prop.infantry_squad_size",           "int",      None),
-    (6,  "vehicle_squad_size",             "config_defaults.prop.vehicle_squad_size",            "int",      None),
-    (7,  "heli_squad_size",                "config_defaults.prop.heli_squad_size",               "int",      None),
-    (8,  "max_squads_per_user",            "config_defaults.prop.max_squads_per_user",           "int",      None),
-    (9,  "caster_registration_enabled",    "config_defaults.prop.caster_registration_enabled",  "bool",     None),
-    (10, "registration_countdown_seconds", "config_defaults.prop.registration_countdown_seconds","int_zero", None),
+    (1,  "infantry_squads",               "config_defaults.prop.infantry_squads",              "composition",      None),
+    (2,  "max_caster_slots",              "config_defaults.prop.max_caster_slots",             "caster_count",     None),
+    (3,  "max_vehicle_squads",            "config_defaults.prop.max_vehicle_squads",           "squad_number",     None),
+    (4,  "max_heli_squads",               "config_defaults.prop.max_heli_squads",              "squad_number",     None),
+    (5,  "vehicle_squad_size",            "config_defaults.prop.vehicle_squad_size",           "squad_size",       None),
+    (6,  "heli_squad_size",               "config_defaults.prop.heli_squad_size",              "squad_size",       None),
+    (7,  "max_squads_per_user",           "config_defaults.prop.max_squads_per_user",          "user_squad_count", None),
+    (8,  "capacity_warning_limit",        "config_defaults.prop.capacity_warning_limit",       "capacity_limit",   None),
+    (9,  "caster_registration_enabled",   "config_defaults.prop.caster_registration_enabled",  "bool",             None),
+    (10, "registration_countdown_seconds","config_defaults.prop.registration_countdown_seconds","countdown",       None),
 ]
 
 
@@ -183,8 +205,12 @@ class EditTarget:
     def overview_embed(self, obj, lang, updated_note=None):
         raise NotImplementedError
 
-    async def persist(self, guild_id, channel_id, db_id, prop, new_value, lang, editor_name):
-        """Persist one edit. Returns ("ok", payload) | ("gone", None) | ("error", text)."""
+    async def persist(self, guild_id, channel_id, db_id, prop, new_value, lang, editor_name,
+                      confirmed=False):
+        """Persist one edit. Returns ("ok", payload) | ("gone", None) | ("error", text)
+        | ("confirm", shed) — the last meaning the edit was computed but NOT saved
+        because it would cost seated players their spot; `shed` lists them.
+        Re-call with confirmed=True to go through with it."""
         raise NotImplementedError
 
     def finish_text(self, guild_id, channel_id, db_id, lang):
@@ -206,8 +232,10 @@ class EventEditTarget(EditTarget):
     def overview_embed(self, obj, lang, updated_note=None):
         return _build_edit_main_embed(obj, lang, updated_note=updated_note)
 
-    async def persist(self, guild_id, channel_id, db_id, prop, new_value, lang, editor_name):
-        return await _persist_event_edit(guild_id, channel_id, db_id, prop, new_value, lang, editor_name)
+    async def persist(self, guild_id, channel_id, db_id, prop, new_value, lang, editor_name,
+                      confirmed=False):
+        return await _persist_event_edit(guild_id, channel_id, db_id, prop, new_value, lang,
+                                         editor_name, confirmed=confirmed)
 
     def finish_text(self, guild_id, channel_id, db_id, lang):
         text = t("edit.finished", lang)
@@ -231,7 +259,9 @@ class GuildEditTarget(EditTarget):
     def overview_embed(self, obj, lang, updated_note=None):
         return _build_guild_main_embed(obj, lang, updated_note=updated_note)
 
-    async def persist(self, guild_id, channel_id, db_id, prop, new_value, lang, editor_name):
+    async def persist(self, guild_id, channel_id, db_id, prop, new_value, lang, editor_name,
+                      confirmed=False):
+        # `confirmed` is meaningless here: guild defaults hold no roster to evict.
         return await _persist_guild_edit(guild_id, prop, new_value, lang, editor_name)
 
     def finish_text(self, guild_id, channel_id, db_id, lang):
@@ -438,7 +468,7 @@ def _ensure_event_keys(event: dict):
         "squads": {}, "casters": {}, "waitlist": [],
         "infantry_waitlist": [], "vehicle_waitlist": [], "heli_waitlist": [],
         "caster_waitlist": [], "tentative": [], "declined": [],
-        "max_player_slots": 98, "player_slots_used": 0,
+        "infantry_squads": [], "player_slots_used": 0,
         "max_caster_slots": 2, "caster_slots_used": 0,
         "registration_open": False, "is_closed": False,
         "event_message_id": None, "ping_role_ids": [],
@@ -454,8 +484,6 @@ def _ensure_event_keys(event: dict):
         "recurrence": {"type": "never"},
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "mode": "rep",
-        "dont_waste_slots": False,
-        "dont_waste_allowed_sizes": None,
         "playstyle_enabled": True,
         "player_roles_enabled": True,
         "community_rep_cap_percent": None,
@@ -749,7 +777,7 @@ def _seat_cap_slots(event, group):
     pct = event.get("community_rep_cap_percent")
     if pct is None:
         return None
-    return int(pct) * int(event.get("max_player_slots", 0)) // 100
+    return int(pct) * player_capacity(event) // 100
 
 
 def _squad_rep_map(user_assignments):
@@ -815,7 +843,7 @@ def _seat_cap_usage(event, user_assignments, guild, member):
     pct = event.get("community_rep_cap_percent")
     if pct is None:
         return None
-    max_slots = int(event.get("max_player_slots", 0)) or 0
+    max_slots = player_capacity(event)
     used = _group_seats_used(event, user_assignments, guild, group)
     used_pct = round(used / max_slots * 100) if max_slots else 0
     return f"{used_pct}%/{int(pct)}%"
@@ -905,27 +933,13 @@ def _resolve_reg_message(msg_key: str, lang: str) -> str:
 # Helper: squad type config
 # ---------------------------------------------------------------------------
 def _get_squad_sizes(event: dict) -> dict:
+    """Default size per type. Infantry has no single size any more — this is the
+    first configured composition entry, used to pre-select a registration."""
     return {
-        "infantry": event.get("infantry_squad_size", 6),
+        "infantry": _default_infantry_size(event),
         "vehicle": event.get("vehicle_squad_size", 2),
         "heli": event.get("heli_squad_size", 1),
     }
-
-
-def _get_max_infantry_squads(event: dict) -> int:
-    server_cap = event.get("server_max_players", 100)
-    max_casters = event.get("max_caster_slots", 2)
-    max_vehicles = event.get("max_vehicle_squads", 6)
-    max_helis = event.get("max_heli_squads", 2)
-    veh_size = event.get("vehicle_squad_size", 2)
-    heli_size = event.get("heli_squad_size", 1)
-    inf_size = event.get("infantry_squad_size", 6)
-    remaining = server_cap - max_casters - (max_vehicles * veh_size) - (max_helis * heli_size)
-    count = remaining // inf_size if inf_size > 0 else 0
-    # The infantry cap is always even so both teams get the same squad count.
-    if count >= 2:
-        count -= count % 2
-    return count
 
 
 def _count_registered_squads_of_type(event: dict, squad_type: str) -> int:
@@ -939,24 +953,69 @@ def _get_max_squads_for_type(event: dict, squad_type: str) -> int:
         return event.get("max_vehicle_squads", 6)
     elif squad_type == "heli":
         return event.get("max_heli_squads", 2)
-    return _get_max_infantry_squads(event)
+    return sum(count for _size, count in infantry_composition(event))
 
 
-def _is_squad_type_full(event: dict, squad_type: str) -> bool:
-    """Check if a squad type has reached its registration limit."""
-    return _count_registered_squads_of_type(event, squad_type) >= _get_max_squads_for_type(event, squad_type)
+def _infantry_size_demand(event: dict) -> dict:
+    """{size: how many infantry squads already registered or waiting for it}.
+
+    The floor any new composition has to clear — dropping below it would leave a
+    registered squad over quota, or a waitlist entry that can never be promoted.
+
+    Rep mode only: a player-mode waitlist entry carries a placeholder 1 in the
+    size slot, not a squad size, so counting those would be meaningless.
+    """
+    demand: dict = {}
+    for squad in event.get("squads", {}).values():
+        if squad.get("type") == "infantry":
+            size = squad.get("size")
+            demand[size] = demand.get(size, 0) + 1
+    for entry in event.get("infantry_waitlist", []):
+        if isinstance(entry, (tuple, list)) and len(entry) > 3:
+            demand[entry[3]] = demand.get(entry[3], 0) + 1
+    return demand
 
 
-def _squad_slot_reserved(event: dict, squad_type: str, size: int) -> bool:
-    """True when a base-size infantry registration would take the squad slot
-    reserved for an incomplete oversized pair's mirror (don't-waste mode).
-    Sizes other than the current base (e.g. stale waitlist entries after a
-    squad-size edit) are never blocked by the reservation."""
-    if squad_type != "infantry" or not event.get("dont_waste_slots"):
-        return False
-    if size != _get_squad_sizes(event)["infantry"]:
-        return False
-    return dict(infantry_size_options(event)).get(size, 0) <= 0
+def capacity_warning(event: dict, settings: dict, lang: str):
+    """Advisory note when the configured capacity exceeds the guild's limit.
+
+    Squad servers cap at 100 players today, but that is the organizer's business
+    and the limit is guild-configurable — so this only ever returns text to show,
+    never a rejection. `0`/unset disables the check.
+    """
+    limit = (settings or {}).get("capacity_warning_limit") or 0
+    if limit <= 0:
+        return None
+    total = player_capacity(event) + event.get("max_caster_slots", 0)
+    if total <= limit:
+        return None
+    return t("edit.capacity_over_limit", lang, total=total, limit=limit)
+
+
+def _infantry_size_configured(event: dict, size: int) -> bool:
+    """Whether `size` exists in the composition at all.
+
+    Distinct from "exhausted": a size with no entry can never free up, so a
+    waitlist spot for it could never be promoted — that has to be refused
+    outright, while an exhausted size is a perfectly good thing to wait for.
+    """
+    return any(s == size for s, _count in infantry_composition(event))
+
+
+def _is_squad_type_full(event: dict, squad_type: str, size: int = None) -> bool:
+    """Check if a squad type has reached its registration limit.
+
+    Infantry is per-size: each configured size carries its own quota, so the
+    type is only full when nothing is left in the requested size (or, without a
+    size, in any size at all).
+    """
+    if squad_type != "infantry":
+        return (_count_registered_squads_of_type(event, squad_type)
+                >= _get_max_squads_for_type(event, squad_type))
+    options = dict(infantry_size_options(event))
+    if size is None:
+        return not any(remaining > 0 for remaining in options.values())
+    return options.get(size, 0) <= 0
 
 
 SQUAD_TYPES = ("infantry", "vehicle", "heli")
@@ -1193,24 +1252,18 @@ async def register_squad(interaction, guild_id, channel_id, db_id, squad_name, s
         sizes = _get_squad_sizes(event)
         size = sizes.get(squad_type, sizes["infantry"])
         squad_id = generate_squad_id(squad_name, len(event.get("squads", {})))
-        available = event["max_player_slots"] - event["player_slots_used"]
+        available = player_capacity(event) - event["player_slots_used"]
         rep_name = interaction.user.display_name
 
-        type_full = _is_squad_type_full(event, squad_type)
-        mirror_reserved = False
-        if squad_type == "infantry" and requested_size is not None and requested_size != size:
-            # Oversized pick: never waitlist or silently resize — the slot
-            # either still exists (infantry_size_options self-gates on the
-            # toggle, so a mid-dialog config change also lands here) or the
-            # user has to pick again.
-            if (dict(infantry_size_options(event)).get(requested_size, 0) <= 0
-                    or requested_size > available):
+        if squad_type == "infantry" and requested_size is not None:
+            # The offered sizes are stable admin config now, so an exhausted one
+            # is worth waiting for. Only a size that is not configured at all is
+            # refused: a waitlist spot for it could never be promoted.
+            if not _infantry_size_configured(event, requested_size):
                 await send_feedback(interaction, t("squad.size_unavailable", lang), ephemeral=True)
                 return False
             size = requested_size
-        elif not type_full and _squad_slot_reserved(event, squad_type, size):
-            type_full = True
-            mirror_reserved = True
+        type_full = _is_squad_type_full(event, squad_type, size)
 
         ok_lim, lim_key, lim_usage = _check_registration_limits(
             event, user_assignments, interaction.guild, interaction.user, size, "rep")
@@ -1268,12 +1321,7 @@ async def register_squad(interaction, guild_id, channel_id, db_id, squad_name, s
             t("log.squad_registered", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=playstyle),
             guild=interaction.guild)
     elif result == "type_full_waitlisted":
-        if mirror_reserved:
-            # Not actually full — the last slot is held for an oversized pair's
-            # mirror, so don't claim "all slots taken".
-            msg_key = "squad.waitlisted_mirror"
-        else:
-            msg_key = "squad.type_full" if playstyle_enabled else "squad.type_full_no_playstyle"
+        msg_key = "squad.type_full" if playstyle_enabled else "squad.type_full_no_playstyle"
         await send_feedback(interaction,
             t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
             ephemeral=True)
@@ -1547,6 +1595,43 @@ async def _notify_promoted_players(guild, guild_id, channel_id, lang, promoted, 
             guild=guild)
 
 
+async def _notify_demoted_players(guild, guild_id, channel_id, lang, displaced, event):
+    """DM each player that lost their seat to a capacity change and log it.
+
+    Mirror of `_notify_promoted_players`; DM failures are best-effort, as everywhere else.
+    """
+    if not displaced:
+        return
+    link = _build_event_message_link(event, channel_id, guild_id)
+    for uid, name, squad_name in displaced:
+        dm_msg = t("player.moved_to_waitlist", lang, squad=squad_name)
+        if link:
+            dm_msg += f"\n[→ Event]({link})"
+        try:
+            target = await bot.fetch_user(int(uid))
+            if target is not None:
+                await target.send(dm_msg)
+        except Exception as e:
+            logger.warning(f"Could not DM displaced player {uid}: {e}")
+        await send_to_log_channel(
+            t("log.player_demoted", lang, name=name, squad=squad_name),
+            guild=guild)
+
+
+async def _notify_capacity_change(guild, guild_id, channel_id, lang,
+                                  promoted, displaced, event):
+    """Tell everyone whose seat changed after a capacity edit.
+
+    Someone displaced and immediately re-seated never lost their spot — no DM.
+    """
+    seated = {uid for uid, _, _ in promoted}
+    shed = {uid for uid, _, _ in displaced}
+    await _notify_promoted_players(guild, guild_id, channel_id, lang,
+                                   [p for p in promoted if p[0] not in shed], event)
+    await _notify_demoted_players(guild, guild_id, channel_id, lang,
+                                  [d for d in displaced if d[0] not in seated], event)
+
+
 # ---------------------------------------------------------------------------
 # Core: squad unregistration
 # ---------------------------------------------------------------------------
@@ -1621,26 +1706,26 @@ async def _process_squad_waitlist(event, user_assignments, db_id, guild_id, chan
         ordered_types.insert(0, freed_type)
 
     moved = []
-    remaining = free_slots
 
     for st in ordered_types:
         wl_key = _waitlist_key(st)
         wl = event.get(wl_key, [])
         to_remove = []
         for i, entry in enumerate(wl):
-            if remaining <= 0:
-                break
             squad_name, squad_type, playstyle, size, squad_id, *_rest = entry
             rep_name = _rest[0] if _rest else None
-            type_full = (_is_squad_type_full(event, squad_type)
-                         or _squad_slot_reserved(event, squad_type, size))
-            if size <= remaining and not type_full:
+            # Deliberately NOT gated on `free_slots`: what frees up is one slot
+            # of one specific size, not N fungible seats. Checking the seat
+            # budget here would strand a waiting size-7 squad behind an
+            # unrelated size-6 unregistration even though its own quota is free.
+            # The quota gate re-tightens after each insertion below, so this
+            # single pass over a finite list is its own termination condition.
+            if not _is_squad_type_full(event, squad_type, size):
                 squad_data = {"name": squad_name, "type": squad_type, "playstyle": playstyle, "size": size}
                 if rep_name:
                     squad_data["rep_name"] = rep_name
                 event["squads"][squad_id] = squad_data
                 event["player_slots_used"] += size
-                remaining -= size
                 to_remove.append(i)
                 moved.append((squad_name, squad_id, size))
         for i in sorted(to_remove, reverse=True):
@@ -3496,20 +3581,18 @@ class _AdminSquadNameModal(ui.Modal):
             sizes = _get_squad_sizes(event)
             size = sizes.get(self.squad_type, sizes["infantry"])
             squad_id = generate_squad_id(squad_name, len(event.get("squads", {})))
-            available = event["max_player_slots"] - event["player_slots_used"]
+            available = player_capacity(event) - event["player_slots_used"]
 
             rep_name = self.rep_user.display_name
             rep_uid = str(self.rep_user.id)
 
-            type_full = _is_squad_type_full(event, self.squad_type)
-            if self.squad_type == "infantry" and self.requested_size is not None and self.requested_size != size:
-                if (dict(infantry_size_options(event)).get(self.requested_size, 0) <= 0
-                        or self.requested_size > available):
+            # Same gate as register_squad — see the comment there.
+            if self.squad_type == "infantry" and self.requested_size is not None:
+                if not _infantry_size_configured(event, self.requested_size):
                     await interaction.followup.send(t("squad.size_unavailable", lang), ephemeral=True)
                     return
                 size = self.requested_size
-            elif not type_full and _squad_slot_reserved(event, self.squad_type, size):
-                type_full = True
+            type_full = _is_squad_type_full(event, self.squad_type, size)
 
             wl_key = _waitlist_key(self.squad_type)
             if type_full:
@@ -3785,6 +3868,35 @@ _COUNT_PRESETS = [None, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 1
 # Regular per-user squad limit (#12): required value 1–20, no "no limit".
 _REGULAR_SQUAD_PRESETS = list(range(1, 21))
 
+# Capacity dropdowns — a picker instead of a typed number, so the values that
+# would need validating simply cannot be entered. All well under Discord's
+# 25-option cap.
+_CASTER_COUNT_PRESETS = list(range(0, 11))
+_SQUAD_NUMBER_PRESETS = list(range(0, 21))
+_SQUAD_SIZE_PRESETS = list(range(1, MAX_SQUAD_PLAYERS + 1))
+_USER_SQUAD_PRESETS = list(range(1, 11))
+_REMINDER_PRESETS = [None, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440]
+_CAPACITY_LIMIT_PRESETS = [None, 40, 50, 60, 80, 90, 100, 120, 150, 200]
+_COUNTDOWN_PRESETS = [0, 10, 30, 60, 120, 300, 600]
+# How many squads of one size. Even, because both teams get half of each size —
+# offering only even values is why that rule needs no error message. 1 stays
+# available for tiny events, mirroring the old cap-below-2 exemption.
+_COMPOSITION_COUNT_PRESETS = [0, 1] + list(range(2, 25, 2))
+
+_NUMERIC_PRESETS = {
+    "duration": _DURATION_PRESETS,
+    "spawn_offset": _SPAWN_PRESETS,
+    "percent": _PERCENT_PRESETS,
+    "squad_count": _COUNT_PRESETS,
+    "caster_count": _CASTER_COUNT_PRESETS,
+    "squad_number": _SQUAD_NUMBER_PRESETS,
+    "squad_size": _SQUAD_SIZE_PRESETS,
+    "user_squad_count": _USER_SQUAD_PRESETS,
+    "reminder": _REMINDER_PRESETS,
+    "capacity_limit": _CAPACITY_LIMIT_PRESETS,
+    "countdown": _COUNTDOWN_PRESETS,
+}
+
 
 def _format_percent_value(percent, lang):
     """Render a percentage cap; None → 'No limit'."""
@@ -3848,8 +3960,8 @@ def _format_property_value(event, key, vtype, lang):
     """Format a property value for display in the edit list."""
     not_set = t("edit.not_set", lang)
     val = event.get(key)
-    if key == "dont_waste_max_squads" and not val:
-        return t("edit.max_unlimited", lang)
+    if vtype == "composition":
+        return _format_composition(val, lang)
     if vtype == "bool":
         return t("edit.bool.enabled", lang) if val else t("edit.bool.disabled", lang)
     if vtype in ("string", "string_nullable"):
@@ -3882,9 +3994,22 @@ def _format_property_value(event, key, vtype, lang):
         return _format_percent_value(val, lang)
     if vtype == "squad_count":
         return _format_count_value(val, lang)
-    if vtype == "size_list":
-        return ", ".join(str(v) for v in val) if val else t("edit.sizes_all", lang)
+    if vtype in ("caster_count", "squad_number", "squad_size", "user_squad_count"):
+        return str(val) if val is not None else "0"
+    if vtype in ("reminder", "capacity_limit"):
+        return _preset_label(val, vtype, lang) if val else not_set
+    if vtype == "countdown":
+        return _preset_label(val, vtype, lang)
     return str(val) if val is not None else not_set
+
+
+def _format_composition(value, lang) -> str:
+    """Render a squad composition as "10 × 6, 2 × 7" — the same shape the editor
+    and the wizard summary show, so the number in the list is the number you set."""
+    pairs = [(int(s), int(n)) for s, n in (value or []) if int(n) > 0]
+    if not pairs:
+        return t("edit.not_set", lang)
+    return ", ".join(f"{n} × {s}" for s, n in pairs)
 
 
 def _validate_edit_value(message, key, vtype, lang):
@@ -3989,6 +4114,15 @@ def _parse_int_list(text):
         return [int(p) for p in re.split(r"[,\s]+", text.strip()) if p]
     except ValueError:
         return None
+
+
+# Which properties land in which overview group. Membership by key so adding or
+# removing a property cannot shift the group boundaries underneath.
+_GENERAL_KEYS = frozenset({"name", "date", "time", "description"})
+_SQUAD_CONFIG_KEYS = frozenset({
+    "infantry_squads", "max_caster_slots", "max_vehicle_squads", "max_heli_squads",
+    "vehicle_squad_size", "heli_squad_size", "max_squads_per_user",
+})
 
 
 def _visible_edit_properties(event):
@@ -4099,9 +4233,12 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
 
     When ok is False the caller must NOT save — error_text is a ready-to-send,
     localized message. Carries over every invariant from the old edit loop
-    (vehicle/heli disable guard, registration-start special cases, slot
-    recalculation, recurrence-fits check) and fixes the crash where the old
-    code referenced an undefined `dm_channel`.
+    (vehicle/heli disable guard, registration-start special cases,
+    recurrence-fits check) and fixes the crash where the old code referenced an
+    undefined `dm_channel`.
+
+    Capacity WARNINGS never belong here — this contract is "False ⇒ the caller
+    must not save", the opposite of an advisory note. See `capacity_warning`.
     """
     if key in ("max_vehicle_squads", "max_heli_squads") and new_value == 0:
         type_key = "vehicle" if key == "max_vehicle_squads" else "heli"
@@ -4111,31 +4248,31 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
             return False, t("edit.cannot_disable_type_with_entries", lang,
                             type=t(f"embed.type_{type_key}", lang))
 
-    if (key in ("infantry_squad_size", "vehicle_squad_size", "heli_squad_size")
+    if (key in ("vehicle_squad_size", "heli_squad_size")
             and new_value > MAX_SQUAD_PLAYERS):
         return False, t("edit.squad_size_max", lang, max=MAX_SQUAD_PLAYERS)
 
-    if key == "dont_waste_allowed_sizes" and new_value:
-        _base = event.get("infantry_squad_size", 6)
-        if any(k <= _base or k > MAX_SQUAD_PLAYERS for k in new_value):
-            return False, t("edit.dont_waste_sizes_invalid", lang,
-                            base=_base, max=MAX_SQUAD_PLAYERS)
-
-    if key == "dont_waste_max_squads" and new_value:
-        # Oversized squads always come in pairs, so the cap must be even.
-        if new_value < 2 or new_value % 2:
-            return False, t("edit.dont_waste_max_invalid", lang)
-
-    if key == "dont_waste_slots" and new_value:
-        if event.get("infantry_squad_size", 6) >= MAX_SQUAD_PLAYERS:
-            return False, t("edit.dont_waste_max_size", lang,
-                            max=MAX_SQUAD_PLAYERS,
-                            size=event.get("infantry_squad_size", 6))
-        unused = infantry_unused_pool(event)
-        if unused == 1:
-            return False, t("edit.dont_waste_single_unused", lang)
-        if unused < 2:
-            return False, t("edit.dont_waste_no_unused", lang)
+    if key == "infantry_squads":
+        quotas = {int(s): int(n) for s, n in (new_value or [])}
+        if any(s < 1 or s > MAX_SQUAD_PLAYERS for s in quotas):
+            return False, t("edit.squad_size_max", lang, max=MAX_SQUAD_PLAYERS)
+        has_entries = (any(s.get("type") == "infantry" for s in event.get("squads", {}).values())
+                       or event.get("infantry_waitlist"))
+        if has_entries and not quotas:
+            return False, t("edit.cannot_disable_type_with_entries", lang,
+                            type=t("embed.type_infantry", lang))
+        # Rep mode only. There a squad keeps the size its rep signed up with and
+        # nothing ever re-fits it, so cutting a size's quota below what already
+        # holds or waits for it would strand those entries: a waitlist spot for a
+        # size with no quota left can never be promoted. Player mode is the
+        # opposite — _resize_player_squads re-fits every squad to the new
+        # composition and asks before anyone loses a seat, which is the entire
+        # point of editing the sizes there.
+        if event.get("mode") != "player":
+            for size, needed in _infantry_size_demand(event).items():
+                if quotas.get(size, 0) < needed:
+                    return False, t("edit.composition_below_registered", lang,
+                                    size=size, count=needed)
 
     if key == "registration_start_time":
         if new_value == "__immediate__":
@@ -4174,9 +4311,6 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
                     # the localized strings live under the "edit." namespace.
                     return False, t(f"edit.{reason_key}", lang)
         event[key] = new_value
-
-    if special == "recalc_slots":
-        event["max_player_slots"] = event["server_max_players"] - event["max_caster_slots"]
 
     return True, None
 
@@ -4306,10 +4440,13 @@ async def _notify_event_gone(interaction, user_id, lang, via_modal=False):
 def _build_edit_main_embed(event, lang, updated_note=None):
     """Property overview embed shown at the top of the editor."""
     visible = _visible_edit_properties(event)
+    # Grouped by key, not by slice offset — the boundaries used to be hard-coded
+    # indices that silently reshuffle when a property is added or removed.
     groups = [
-        ("edit.group.general", visible[0:4]),
-        ("edit.group.squad_config", visible[4:12]),
-        ("edit.group.extras", visible[12:]),
+        ("edit.group.general", [p for p in visible if p[1] in _GENERAL_KEYS]),
+        ("edit.group.squad_config", [p for p in visible if p[1] in _SQUAD_CONFIG_KEYS]),
+        ("edit.group.extras", [p for p in visible
+                               if p[1] not in _GENERAL_KEYS and p[1] not in _SQUAD_CONFIG_KEYS]),
     ]
     embed = discord.Embed(
         title=t("edit.title", lang),
@@ -4359,12 +4496,13 @@ async def _persist_guild_edit(guild_id, prop, new_value, lang, editor_name):
     lock = _get_guild_lock(guild_id)
     async with lock:
         settings = get_guild_settings(guild_id) or dict(DEFAULT_GUILD_SETTINGS)
-        # Min-value validation (mirrors set_defaults_cmd logic)
-        if vtype == "int" and isinstance(new_value, int) and new_value < 1:
-            return "error", t("set.value_too_low", lang, min=1)
-        if vtype == "int_zero" and isinstance(new_value, int) and new_value < 0:
-            return "error", t("set.value_too_low", lang, min=0)
-        if (key in ("infantry_squad_size", "vehicle_squad_size", "heli_squad_size")
+        # The dropdowns can only offer sane values, but this is the one entry
+        # point that takes a raw number, so keep the floor.
+        if isinstance(new_value, int) and not isinstance(new_value, bool):
+            minimum = 1 if vtype in ("squad_size", "user_squad_count") else 0
+            if new_value < minimum:
+                return "error", t("set.value_too_low", lang, min=minimum)
+        if (key in ("vehicle_squad_size", "heli_squad_size")
                 and isinstance(new_value, int) and new_value > MAX_SQUAD_PLAYERS):
             return "error", t("edit.squad_size_max", lang, max=MAX_SQUAD_PLAYERS)
         settings[key] = new_value
@@ -4390,6 +4528,15 @@ async def _refresh_main_view(interaction, user_id, guild_id, channel_id, db_id, 
         return
     embed = target.overview_embed(obj, lang, updated_note=updated_note)
     view = EditMainView(user_id, guild_id, channel_id, db_id, lang)
+    await _render_session_dialog(interaction, user_id, embed, view, via_modal=via_modal)
+
+
+async def _render_session_dialog(interaction, user_id, embed, view, via_modal=False):
+    """Put `embed`/`view` on the session's DM message and make it the live dialog.
+
+    A modal submit can't edit the message it was opened from, so that path defers
+    and edits the stored DM message instead.
+    """
     _set_active_view(user_id, view)
     if via_modal:
         try:
@@ -4428,16 +4575,20 @@ async def _reshow_overview_dm(user_id, guild_id, channel_id, db_id, lang, note=N
 
 # ── Persist + apply ────────────────────────────────────────────────────────
 
-async def _persist_event_edit(guild_id, channel_id, db_id, prop, new_value, lang, editor_name):
+async def _persist_event_edit(guild_id, channel_id, db_id, prop, new_value, lang, editor_name,
+                              confirmed=False):
     """Validate + save one property edit under the guild lock.
 
-    Returns ("ok", recalc_slots_or_None) | ("gone", None) | ("error", text).
+    Returns ("ok", capacity_warning_or_None) | ("gone", None) | ("error", text)
+    | ("confirm", shed). The last one means the edit would evict seated players:
+    it is computed but deliberately not saved, and `shed` is the authoritative
+    list of who loses their spot. Re-call with confirmed=True to apply it.
     On success also refreshes the public event display and writes a log line.
     """
     num, key, label_key, vtype, special = prop
     lock = _get_guild_lock(guild_id)
-    recalc_value = None
     event_name = None
+    promoted, displaced, warning = [], [], None
     async with lock:
         event, user_assignments, _ = _get_event_by_dbid(guild_id, db_id)
         if not event:
@@ -4445,10 +4596,24 @@ async def _persist_event_edit(guild_id, channel_id, db_id, prop, new_value, lang
         ok, err_text = _apply_property_change(event, key, vtype, special, new_value, lang)
         if not ok:
             return "error", err_text
+        # A squad's `size` is frozen at creation, so a capacity edit has to re-fit
+        # existing squads and re-run the waitlist explicitly.
+        if is_player_mode(event) and key in _CAPACITY_KEYS:
+            for st in _CAPACITY_KEYS[key]:
+                p, d = _resize_player_squads(event, user_assignments, st)
+                promoted.extend(p)
+                displaced.extend(d)
+            # Displaced but immediately re-seated = never actually lost a spot.
+            seated = {uid for uid, _, _ in promoted}
+            shed = [d for d in displaced if d[0] not in seated]
+            if shed and not confirmed:
+                # Ask first — evicting someone from a squad they hold has no undo.
+                # `event`/`user_assignments` are this read's private copy, so
+                # returning without save_event discards the whole dry run.
+                return "confirm", shed
         save_event(db_id, event, user_assignments)
-        if special == "recalc_slots":
-            recalc_value = event.get("max_player_slots")
         event_name = event.get("name")
+        warning = capacity_warning(event, get_guild_settings(guild_id), lang)
     await update_event_displays(guild_id, db_id)
     guild = bot.get_guild(guild_id)
     if guild:
@@ -4456,25 +4621,62 @@ async def _persist_event_edit(guild_id, channel_id, db_id, prop, new_value, lang
             t("log.event_edited", lang, user=editor_name,
               property=t(label_key, lang), name=event_name),
             guild=guild)
-    return "ok", recalc_value
+    if promoted or displaced:
+        # Off the interaction path: this is 3 HTTP round-trips per affected player
+        # and the caller still has to acknowledge the interaction within 3s.
+        _fire_and_forget(_notify_capacity_change(
+            guild, guild_id, channel_id, lang, promoted, displaced, event))
+    return "ok", warning
 
 
-def _edit_success_note(prop, lang, recalc_value):
-    num, key, label_key, vtype, special = prop
+def _edit_success_note(prop, lang, warning=None):
+    _num, _key, label_key, _vtype, _special = prop
     note = t("edit.updated_inline", lang, prop=_prop_short_label(label_key, lang))
-    if special == "recalc_slots" and recalc_value is not None:
-        note = f"{note} · {t('edit.recalculated', lang, slots=recalc_value)}"
-    return note
+    # Advisory only — the edit is already saved by the time this is rendered.
+    return f"{note}\n{warning}" if warning else note
+
+
+_SHRINK_PREVIEW_NAMES = 15  # names listed in full before the "+N more" tail
+
+
+def _build_shrink_confirm_embed(prop, new_value, shed, lang):
+    _num, key, label_key, vtype, _special = prop
+    listed = ", ".join(f"**{name}**" for _uid, name, _squad in shed[:_SHRINK_PREVIEW_NAMES])
+    rest = len(shed) - _SHRINK_PREVIEW_NAMES
+    if rest > 0:
+        listed += " " + t("edit.confirm_shrink_more", lang, count=rest)
+    embed = discord.Embed(
+        title=t("edit.confirm_shrink_title", lang),
+        description=t("edit.confirm_shrink_body", lang,
+                      prop=_prop_short_label(label_key, lang),
+                      value=_format_property_value({key: new_value}, key, vtype, lang),
+                      count=len(shed)),
+        color=discord.Color.orange(),
+    )
+    embed.add_field(name=t("edit.confirm_shrink_affected", lang), value=listed, inline=False)
+    return embed
 
 
 async def _apply_edit(interaction, user_id, guild_id, channel_id, db_id, lang,
-                      prop, new_value, via_modal=False):
-    """Persist an edit from a live interaction, then refresh or surface an error."""
+                      prop, new_value, via_modal=False, confirmed=False):
+    """Persist an edit from a live interaction, then refresh or surface an error.
+
+    A capacity edit that would evict seated players comes back as "confirm"
+    instead of being saved; `confirmed=True` is that dialog calling back in.
+    """
     target = _session_target(user_id)
     status, payload = await target.persist(
-        guild_id, channel_id, db_id, prop, new_value, lang, interaction.user.name)
+        guild_id, channel_id, db_id, prop, new_value, lang, interaction.user.name,
+        confirmed=confirmed)
     if status == "gone":
         await _notify_event_gone(interaction, user_id, lang, via_modal=via_modal)
+        return
+    if status == "confirm":
+        await _render_session_dialog(
+            interaction, user_id,
+            _build_shrink_confirm_embed(prop, new_value, payload, lang),
+            _ConfirmShrinkView(user_id, guild_id, channel_id, db_id, lang, prop, new_value),
+            via_modal=via_modal)
         return
     if status == "error":
         try:
@@ -4496,6 +4698,11 @@ async def _apply_edit_dm(user_id, guild_id, channel_id, db_id, lang, prop,
     target = _session_target(user_id)
     status, payload = await target.persist(
         guild_id, channel_id, db_id, prop, new_value, lang, editor_name)
+    if status == "confirm":
+        # Unreachable today (this path only carries `embed_image_url`), but a
+        # capacity property must never apply here unasked if one ever moves in.
+        logger.error(f"Capacity edit {prop[1]} reached the DM path, which cannot confirm")
+        status, payload = "error", t("edit.confirm_shrink_needs_buttons", lang)
     if status == "gone":
         session = _active_edit_sessions.get(user_id)
         dm_msg = session.get("dm_message") if session else None
@@ -4550,7 +4757,15 @@ def _preset_label(value, vtype, lang):
         return _format_percent_value(value, lang)
     if vtype == "squad_count":
         return _format_count_value(value, lang)
-    return _format_spawn_offset_value(value, lang)
+    if vtype == "spawn_offset":
+        return _format_spawn_offset_value(value, lang)
+    if value is None:
+        return t("edit.not_set", lang)
+    if vtype == "reminder":
+        return _format_duration_value(value, lang)
+    if vtype == "countdown":
+        return t("edit.seconds", lang, count=value) if value else t("edit.not_set", lang)
+    return str(value)
 
 
 async def _show_property_editor(interaction, user_id, guild_id, channel_id, db_id, lang, prop):
@@ -4573,11 +4788,13 @@ async def _show_property_editor(interaction, user_id, guild_id, channel_id, db_i
     if vtype == "bool":
         view = EditBoolView(user_id, guild_id, channel_id, db_id, lang, prop, bool(obj.get(key)))
         embed = _editor_embed()
-    elif vtype in ("duration", "spawn_offset", "percent", "squad_count"):
-        presets = {"duration": _DURATION_PRESETS, "spawn_offset": _SPAWN_PRESETS,
-                   "percent": _PERCENT_PRESETS, "squad_count": _COUNT_PRESETS}[vtype]
-        view = EditPresetView(user_id, guild_id, channel_id, db_id, lang, prop, presets)
+    elif vtype in _NUMERIC_PRESETS:
+        view = EditPresetView(user_id, guild_id, channel_id, db_id, lang, prop,
+                              _NUMERIC_PRESETS[vtype])
         embed = _editor_embed()
+    elif vtype == "composition":
+        view = EditCompositionView(user_id, guild_id, channel_id, db_id, lang, prop, obj)
+        embed = _editor_embed(t("edit.composition_hint", lang))
     elif vtype == "recurrence":
         view = EditRecurrenceView(user_id, guild_id, channel_id, db_id, lang, prop, obj)
         embed = _editor_embed()
@@ -4677,6 +4894,35 @@ class _EditDialogView(ui.View):
         await _handle_edit_timeout(self, self.user_id)
 
 
+class _ConfirmShrinkView(_EditDialogView):
+    """Confirm/Cancel before a capacity edit takes seats away from players.
+
+    Property edits otherwise apply immediately; this one can't, because it evicts
+    people from a squad they already hold and there is no undo.
+    """
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, new_value):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        self.new_value = new_value
+        confirm = ui.Button(label=t("general.confirm", lang),
+                            style=discord.ButtonStyle.danger, emoji="⚠️")
+        confirm.callback = self._on_confirm
+        self.add_item(confirm)
+        self._add_cancel()
+
+    async def _on_confirm(self, interaction):
+        # Applying takes the guild lock, re-fits the squads and rebuilds the public
+        # display — well past Discord's 3s initial-response budget. Ack first, then
+        # let the refresh go via the stored DM message (the via_modal branch).
+        try:
+            await interaction.response.defer()
+        except discord.InteractionResponded:
+            pass
+        await _apply_edit(interaction, self.user_id, self.guild_id, self.channel_id,
+                          self.db_id, self.lang, self.prop, self.new_value,
+                          via_modal=True, confirmed=True)
+
+
 class EditScalarView(_EditDialogView):
     """Opens a modal for text/number properties (string/date/time/int/reg_start)."""
 
@@ -4768,6 +5014,73 @@ class EditPresetView(_EditDialogView):
     async def _on_select(self, interaction):
         raw = interaction.data["values"][0]
         await self._apply(interaction, None if raw == "none" else int(raw))
+
+
+class EditCompositionView(_EditDialogView):
+    """Two-step picker for a squad composition: choose a size, then how many.
+
+    Deliberately not one select per size: Discord allows 5 action rows and a
+    composition can hold up to MAX_SQUAD_PLAYERS sizes, so a row-per-size layout
+    would overflow. Two selects scale to any number of sizes.
+    """
+
+    def __init__(self, user_id, guild_id, channel_id, db_id, lang, prop, obj, size=None):
+        super().__init__(user_id, guild_id, channel_id, db_id, lang, prop)
+        self.composition = {int(s): int(n) for s, n in (obj.get(prop[1]) or [])}
+        self.size = size
+
+        size_select = ui.Select(
+            placeholder=t("edit.composition_pick_size", lang),
+            options=[discord.SelectOption(
+                label=t("edit.composition_size_option", lang,
+                        size=s, count=self.composition.get(s, 0)),
+                value=str(s), default=(s == size))
+                for s in range(1, MAX_SQUAD_PLAYERS + 1)],
+            min_values=1, max_values=1, row=0)
+        size_select.callback = self._on_size
+        self.add_item(size_select)
+
+        if size is not None:
+            count_select = ui.Select(
+                placeholder=t("edit.composition_pick_count", lang, size=size),
+                options=[discord.SelectOption(
+                    label=t("edit.composition_count_option", lang, count=c, size=size),
+                    value=str(c), default=(c == self.composition.get(size, 0)))
+                    for c in _COMPOSITION_COUNT_PRESETS],
+                min_values=1, max_values=1, row=1)
+            count_select.callback = self._on_count
+            self.add_item(count_select)
+        self._add_cancel()
+
+    def _embed(self):
+        pairs = [[s, n] for s, n in sorted(self.composition.items()) if n > 0]
+        total = sum(s * n for s, n in pairs)
+        return discord.Embed(
+            title=_prop_short_label(self.prop[2], self.lang),
+            description=t("edit.composition_current", self.lang,
+                          value=_format_composition(pairs, self.lang), total=total),
+            color=discord.Color.blurple())
+
+    async def _reopen(self, interaction, size):
+        """Re-render with `size` selected so the count select appears."""
+        view = EditCompositionView(self.user_id, self.guild_id, self.channel_id,
+                                   self.db_id, self.lang, self.prop,
+                                   {self.prop[1]: [[s, n] for s, n in self.composition.items()]},
+                                   size=size)
+        _set_active_view(self.user_id, view)
+        await interaction.response.edit_message(embed=view._embed(), view=view)
+
+    async def _on_size(self, interaction):
+        await self._reopen(interaction, int(interaction.data["values"][0]))
+
+    async def _on_count(self, interaction):
+        count = int(interaction.data["values"][0])
+        if count:
+            self.composition[self.size] = count
+        else:
+            self.composition.pop(self.size, None)
+        await self._apply(interaction,
+                          [[s, n] for s, n in sorted(self.composition.items()) if n > 0])
 
 
 class EditImageView(_EditDialogView):
@@ -5259,6 +5572,151 @@ class ConsolidateConfirmationView(BaseConfirmationView):
 # POST-CREATION ROLE WIZARD     #
 # ############################# #
 
+def _wizard_step_text(title_key, desc_key, lang, **kw):
+    return f"**{t(title_key, lang)}**\n{t(desc_key, lang, **kw)}"
+
+
+class WizardInfantryView(BaseView):
+    """Step 1: build the infantry composition — pick a size, pick how many.
+
+    Same two-select shape as the editor's `EditCompositionView`, and for the same
+    reason: Discord allows 5 action rows but a composition can hold up to
+    MAX_SQUAD_PLAYERS sizes, so one select per size would overflow.
+    """
+
+    def __init__(self, guild_id, channel_id, event, user_assignments, settings,
+                 interaction_user, size=None):
+        super().__init__(timeout=300, title="Wizard Infantry")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.event = event
+        self.user_assignments = user_assignments
+        self.settings = settings
+        self.interaction_user = interaction_user
+        self.composition = {int(s): int(n) for s, n in (event.get("infantry_squads") or [])}
+        self.size = size if size is not None else (
+            min(self.composition) if self.composition else 6)
+        lang = get_guild_language(guild_id)
+
+        size_select = ui.Select(
+            placeholder=t("edit.composition_pick_size", lang),
+            options=[discord.SelectOption(
+                label=t("edit.composition_size_option", lang,
+                        size=s, count=self.composition.get(s, 0)),
+                value=str(s), default=(s == self.size))
+                for s in range(1, MAX_SQUAD_PLAYERS + 1)],
+            min_values=1, max_values=1, row=0)
+        size_select.callback = self._on_size
+        self.add_item(size_select)
+
+        count_select = ui.Select(
+            placeholder=t("edit.composition_pick_count", lang, size=self.size),
+            options=[discord.SelectOption(
+                label=t("edit.composition_count_option", lang, count=c, size=self.size),
+                value=str(c), default=(c == self.composition.get(self.size, 0)))
+                for c in _COMPOSITION_COUNT_PRESETS],
+            min_values=1, max_values=1, row=1)
+        count_select.callback = self._on_count
+        self.add_item(count_select)
+
+        continue_btn = ui.Button(label=t("wizard.continue", lang),
+                                 style=discord.ButtonStyle.success, row=2)
+        continue_btn.callback = self._continue
+        self.add_item(continue_btn)
+
+    def _pairs(self):
+        return [[s, n] for s, n in sorted(self.composition.items()) if n > 0]
+
+    def _text(self, lang):
+        return _wizard_step_text(
+            "wizard.infantry_title", "wizard.infantry_desc", lang,
+            value=_format_composition(self._pairs(), lang),
+            seats=sum(s * n for s, n in self._pairs()))
+
+    async def _rerender(self, interaction, size):
+        self.event["infantry_squads"] = self._pairs()
+        view = WizardInfantryView(self.guild_id, self.channel_id, self.event,
+                                  self.user_assignments, self.settings,
+                                  self.interaction_user, size=size)
+        await interaction.response.edit_message(
+            content=view._text(get_guild_language(self.guild_id)), view=view)
+
+    async def _on_size(self, interaction):
+        await self._rerender(interaction, int(interaction.data["values"][0]))
+
+    async def _on_count(self, interaction):
+        count = int(interaction.data["values"][0])
+        if count:
+            self.composition[self.size] = count
+        else:
+            self.composition.pop(self.size, None)
+        await self._rerender(interaction, self.size)
+
+    async def _continue(self, interaction):
+        self.event["infantry_squads"] = self._pairs()
+        lang = get_guild_language(self.guild_id)
+        view = WizardVehicleHeliView(self.guild_id, self.channel_id, self.event,
+                                     self.user_assignments, self.settings,
+                                     self.interaction_user)
+        await interaction.response.edit_message(
+            content=_wizard_step_text("wizard.vehicles_title", "wizard.vehicles_desc", lang),
+            view=view)
+
+
+class WizardVehicleHeliView(BaseView):
+    """Step 2: vehicle and heli squads — count and size for each."""
+
+    def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
+        super().__init__(timeout=300, title="Wizard Vehicles")
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.event = event
+        self.user_assignments = user_assignments
+        self.settings = settings
+        self.interaction_user = interaction_user
+        lang = get_guild_language(guild_id)
+        self._picked = {}
+
+        for row, (key, presets, placeholder_key) in enumerate((
+                ("max_vehicle_squads", _SQUAD_NUMBER_PRESETS, "wizard.pick_vehicle_count"),
+                ("vehicle_squad_size", _SQUAD_SIZE_PRESETS, "wizard.pick_vehicle_size"),
+                ("max_heli_squads", _SQUAD_NUMBER_PRESETS, "wizard.pick_heli_count"),
+                ("heli_squad_size", _SQUAD_SIZE_PRESETS, "wizard.pick_heli_size"))):
+            current = event.get(key)
+            select = ui.Select(
+                placeholder=t(placeholder_key, lang),
+                options=[discord.SelectOption(label=str(v), value=str(v), default=(v == current))
+                         for v in presets],
+                min_values=1, max_values=1, row=row)
+            select.callback = self._make_callback(key)
+            self.add_item(select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang),
+                             style=discord.ButtonStyle.secondary, row=4)
+        skip_btn.callback = self._continue
+        self.add_item(skip_btn)
+        continue_btn = ui.Button(label=t("wizard.continue", lang),
+                                 style=discord.ButtonStyle.success, row=4)
+        continue_btn.callback = self._continue
+        self.add_item(continue_btn)
+
+    def _make_callback(self, key):
+        async def cb(interaction):
+            self._picked[key] = int(interaction.data["values"][0])
+            await interaction.response.defer()
+        return cb
+
+    async def _continue(self, interaction):
+        self.event.update(self._picked)
+        lang = get_guild_language(self.guild_id)
+        view = WizardSquadRolesView(self.guild_id, self.channel_id, self.event,
+                                    self.user_assignments, self.settings,
+                                    self.interaction_user)
+        await interaction.response.edit_message(
+            content=_wizard_step_text("wizard.squad_roles_title", "wizard.squad_roles_desc", lang),
+            view=view)
+
+
 class WizardSquadRolesView(BaseView):
     """Step 1/2: configure squad rep roles/users and early-access roles/users."""
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
@@ -5513,11 +5971,24 @@ class WizardCasterRolesView(BaseView):
         self.ping_select.callback = self._ping_selected
         self.add_item(self.ping_select)
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=3)
+        # Caster slot count lives here rather than in a separate step: it is the
+        # one capacity number that belongs with the caster configuration, and
+        # this view had a free action row.
+        current_casters = event.get("max_caster_slots", 2)
+        self.caster_slots_select = ui.Select(
+            placeholder=t("wizard.pick_caster_slots", lang),
+            options=[discord.SelectOption(label=str(v), value=str(v),
+                                          default=(v == current_casters))
+                     for v in _CASTER_COUNT_PRESETS],
+            min_values=1, max_values=1, row=3)
+        self.caster_slots_select.callback = self._caster_slots_selected
+        self.add_item(self.caster_slots_select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=4)
         skip_btn.callback = self._skip
         self.add_item(skip_btn)
 
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=3)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=4)
         continue_btn.callback = self._continue
         self.add_item(continue_btn)
 
@@ -5526,6 +5997,11 @@ class WizardCasterRolesView(BaseView):
         self._caster_early_roles = []
         self._caster_early_users = []
         self._ping_on_open = ping_default
+        self._selected_caster_slots = None
+
+    async def _caster_slots_selected(self, interaction):
+        self._selected_caster_slots = int(self.caster_slots_select.values[0])
+        await interaction.response.defer()
 
     async def _caster_role_selected(self, interaction):
         self._caster_roles = [v.id for v in self.caster_role_select.values if isinstance(v, discord.Role)]
@@ -5549,6 +6025,8 @@ class WizardCasterRolesView(BaseView):
             self.event["caster_community_role_ids"] = self._caster_early_roles
             self.event["caster_community_user_ids"] = self._caster_early_users
         self.event["ping_on_open"] = self._ping_on_open
+        if self._selected_caster_slots is not None:
+            self.event["max_caster_slots"] = self._selected_caster_slots
 
     async def _continue(self, interaction):
         self._save_selections()
@@ -5740,12 +6218,12 @@ class WizardSquadLimitView(BaseView):
 
     async def _continue(self, interaction):
         self._save_selections()
-        await _advance_to_dont_waste_or_confirmation(
+        await _advance_to_confirmation(
             interaction, self.guild_id, self.channel_id, self.event,
             self.user_assignments, self.settings, self.interaction_user)
 
     async def _skip(self, interaction):
-        await _advance_to_dont_waste_or_confirmation(
+        await _advance_to_confirmation(
             interaction, self.guild_id, self.channel_id, self.event,
             self.user_assignments, self.settings, self.interaction_user)
 
@@ -5798,141 +6276,9 @@ class WizardPlayerRolesView(BaseView):
 
     async def _to_confirmation(self, interaction):
         self._save_selections()
-        await _advance_to_dont_waste_or_confirmation(
+        await _advance_to_confirmation(
             interaction, self.guild_id, self.channel_id, self.event,
             self.user_assignments, self.settings, self.interaction_user)
-
-    async def _continue(self, interaction):
-        await self._to_confirmation(interaction)
-
-    async def _skip(self, interaction):
-        await self._to_confirmation(interaction)
-
-
-async def _advance_to_dont_waste_or_confirmation(interaction, guild_id, channel_id, event,
-                                                 user_assignments, settings, interaction_user):
-    """Show the don't-waste-slots step, or go straight to confirmation when the
-    unused pool can't fit an oversized pair anyway."""
-    if dont_waste_slots_possible(event):
-        unused = infantry_unused_pool(event)
-        lang = get_guild_language(guild_id)
-        content = (f"**{t('wizard.dont_waste_step_title', lang)}**\n"
-                   f"{t('wizard.dont_waste_step_desc', lang, unused=unused)}")
-        view = WizardDontWasteSlotsView(guild_id, channel_id, event, user_assignments,
-                                        settings, interaction_user)
-        await interaction.response.edit_message(content=content, embed=None, view=view)
-        return
-    embed = _build_confirmation_embed(event, guild_id)
-    confirm_view = WizardConfirmationView(guild_id, channel_id, event, user_assignments,
-                                          settings, interaction_user)
-    await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
-
-
-class WizardDontWasteSlotsView(BaseView):
-    """Step: enable or disable the "don't waste slots" mode, which offers the
-    unused infantry seats as oversized squads in mirrored pairs."""
-
-    def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
-        super().__init__(timeout=300, title="Wizard Dont Waste Slots")
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.event = event
-        self.user_assignments = user_assignments
-        self.settings = settings
-        self.interaction_user = interaction_user
-        lang = get_guild_language(guild_id)
-
-        enabled_default = bool(event.get("dont_waste_slots", False))
-        self.mode_select = ui.Select(
-            placeholder=t("wizard.dont_waste_select_placeholder", lang),
-            options=[
-                discord.SelectOption(label=t("wizard.dont_waste_enabled", lang),
-                                     value="yes", default=enabled_default),
-                discord.SelectOption(label=t("wizard.dont_waste_disabled", lang),
-                                     value="no", default=not enabled_default),
-            ],
-            min_values=1, max_values=1, row=0)
-        self.mode_select.callback = self._mode_selected
-        self.add_item(self.mode_select)
-
-        # Which oversized sizes the organizer allows (default: all candidates).
-        base = event.get("infantry_squad_size", 6)
-        pool = infantry_unused_pool(event)
-        self._candidates = list(range(base + 1, min(base + pool // 2, MAX_SQUAD_PLAYERS) + 1))
-        self.sizes_select = None
-        if len(self._candidates) > 1:
-            current = event.get("dont_waste_allowed_sizes") or self._candidates
-            self.sizes_select = ui.Select(
-                placeholder=t("wizard.dont_waste_sizes_placeholder", lang),
-                options=[discord.SelectOption(
-                    label=t("wizard.dont_waste_size_option", lang, size=k),
-                    value=str(k), default=k in current) for k in self._candidates],
-                min_values=1, max_values=len(self._candidates), row=1)
-            self.sizes_select.callback = self._sizes_selected
-            self.add_item(self.sizes_select)
-
-        # Cap on the total number of oversized squads (always even — they come
-        # in pairs). Only offered when more than one pair fits at all.
-        max_total = min(2 * (pool // 2), _get_max_infantry_squads(event))
-        self.max_select = None
-        if max_total >= 4:
-            current_max = event.get("dont_waste_max_squads") or 0
-            self.max_select = ui.Select(
-                placeholder=t("wizard.dont_waste_max_placeholder", lang),
-                options=[discord.SelectOption(
-                    label=t("wizard.dont_waste_max_unlimited", lang),
-                    value="0", default=current_max == 0)] + [
-                    discord.SelectOption(
-                        label=t("wizard.dont_waste_max_option", lang,
-                                n=n, per_team=n // 2),
-                        value=str(n), default=n == current_max)
-                    for n in range(2, max_total + 1, 2)],
-                min_values=1, max_values=1, row=2)
-            self.max_select.callback = self._max_selected
-            self.add_item(self.max_select)
-
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=3)
-        skip_btn.callback = self._skip
-        self.add_item(skip_btn)
-
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=3)
-        continue_btn.callback = self._continue
-        self.add_item(continue_btn)
-
-        self._selected_enabled = None
-        self._selected_sizes = None
-        self._selected_max = None
-
-    async def _mode_selected(self, interaction):
-        self._selected_enabled = self.mode_select.values[0] == "yes"
-        await interaction.response.defer()
-
-    async def _sizes_selected(self, interaction):
-        self._selected_sizes = sorted(int(v) for v in self.sizes_select.values)
-        await interaction.response.defer()
-
-    async def _max_selected(self, interaction):
-        self._selected_max = int(self.max_select.values[0])
-        await interaction.response.defer()
-
-    def _save_selections(self):
-        if self._selected_enabled is not None:
-            self.event["dont_waste_slots"] = self._selected_enabled
-        if self._selected_sizes is not None:
-            # All candidates picked == no restriction.
-            self.event["dont_waste_allowed_sizes"] = (
-                None if set(self._selected_sizes) == set(self._candidates)
-                else self._selected_sizes)
-        if self._selected_max is not None:
-            self.event["dont_waste_max_squads"] = self._selected_max or None
-
-    async def _to_confirmation(self, interaction):
-        self._save_selections()
-        embed = _build_confirmation_embed(self.event, self.guild_id)
-        confirm_view = WizardConfirmationView(
-            self.guild_id, self.channel_id, self.event, self.user_assignments,
-            self.settings, self.interaction_user)
-        await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
 
     async def _continue(self, interaction):
         await self._to_confirmation(interaction)
@@ -5945,7 +6291,47 @@ class WizardDontWasteSlotsView(BaseView):
 # WIZARD CONFIRMATION            #
 # ############################# #
 
-def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
+async def _advance_to_confirmation(interaction, guild_id, channel_id, event,
+                                   user_assignments, settings, interaction_user):
+    """Final wizard step: show the configuration summary for confirmation."""
+    embed = _build_confirmation_embed(event, guild_id, settings)
+    confirm_view = WizardConfirmationView(guild_id, channel_id, event, user_assignments,
+                                          settings, interaction_user)
+    await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
+
+
+def _composition_summary(event: dict, lang: str) -> str:
+    """The capacity table — every squad group with its seats, then the total.
+
+    Rendered in a code block, so it uses the plain `squad.label_*` names rather
+    than the emoji-prefixed `embed.type_*` ones: emoji have no fixed width in a
+    monospace block and would knock the columns out of line.
+    """
+    rows = []   # (label, "n × size", seats)
+    for i, (size, count) in enumerate(infantry_composition(event)):
+        label = t("squad.label_infantry", lang) if i == 0 else ""
+        rows.append((label, f"{count} × {size}", count * size))
+    for count_key, size_key, type_key in (("max_vehicle_squads", "vehicle_squad_size", "vehicle"),
+                                          ("max_heli_squads", "heli_squad_size", "heli")):
+        count, size = event.get(count_key, 0), event.get(size_key, 0)
+        if count:
+            rows.append((t(f"squad.label_{type_key}", lang), f"{count} × {size}", count * size))
+    casters = event.get("max_caster_slots", 0)
+    if casters:
+        rows.append((t("embed.casters", lang), "", casters))
+
+    total = player_capacity(event) + casters
+    label_w = max([len(r[0]) for r in rows] + [len(t("wizard.summary_total", lang))])
+    expr_w = max([len(r[1]) for r in rows] + [0])
+    lines = [f"{label:<{label_w}}  {expr:>{expr_w}}  {seats:>4}" for label, expr, seats in rows]
+    lines.append("─" * (label_w + expr_w + 6))
+    lines.append(f"{t('wizard.summary_total', lang):<{label_w}}  {'':>{expr_w}}  {total:>4}")
+    body = "\n".join(lines)
+    return (f"```\n{body}\n```"
+            f"**{t('settings.max_squads_per_user', lang)}:** {event.get('max_squads_per_user', '?')}")
+
+
+def _build_confirmation_embed(event: dict, guild_id: int, settings: dict = None) -> discord.Embed:
     """Build a pre-creation summary embed for the confirmation step."""
     lang = get_guild_language(guild_id)
     embed = discord.Embed(
@@ -6002,18 +6388,6 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
                      else t("wizard.summary_player_roles_no", lang))
         embed.add_field(name=t("wizard.summary_player_roles", lang), value=roles_val, inline=True)
 
-    if dont_waste_slots_possible(event):
-        dw_val = (t("wizard.summary_dont_waste_yes", lang)
-                  if event.get("dont_waste_slots", False)
-                  else t("wizard.summary_dont_waste_no", lang))
-        allowed_sizes = event.get("dont_waste_allowed_sizes")
-        if event.get("dont_waste_slots", False) and allowed_sizes:
-            dw_val += " (" + ", ".join(str(s) for s in allowed_sizes) + ")"
-        max_squads = event.get("dont_waste_max_squads")
-        if event.get("dont_waste_slots", False) and max_squads:
-            dw_val += f" · max. {max_squads}"
-        embed.add_field(name=t("wizard.summary_dont_waste", lang), value=dw_val, inline=True)
-
     if event.get("registration_start_time") is not None:
         cd_seconds = event.get("countdown_seconds")
         if cd_seconds is not None and cd_seconds > 0:
@@ -6033,36 +6407,12 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
         embed.add_field(name=t("wizard.summary_spawn_offset", lang),
                         value=_format_spawn_offset_value(event.get("spawn_offset_minutes"), lang), inline=True)
 
-    # Calculate unused slots for confirmation summary
-    _cap = event.get("server_max_players", 100)
-    _max_casters = event.get("max_caster_slots", 2)
-    _inf_size = event.get("infantry_squad_size", 6)
-    _veh_size = event.get("vehicle_squad_size", 2)
-    _heli_size = event.get("heli_squad_size", 1)
-    _max_veh = event.get("max_vehicle_squads", 6)
-    _max_heli = event.get("max_heli_squads", 2)
-    _veh_slots = _max_veh * _veh_size
-    _heli_slots = _max_heli * _heli_size
-    _inf_pool = _cap - _max_casters - _veh_slots - _heli_slots
-    _max_inf = _inf_pool // _inf_size if _inf_size > 0 else 0
-    # The infantry cap is always even so both teams get the same squad count.
-    if _max_inf >= 2:
-        _max_inf -= _max_inf % 2
-    _unused = _cap - _max_casters - (_max_inf * _inf_size) - _veh_slots - _heli_slots
-    _unused_label = "Ungenutzt" if lang == "de" else "Unused"
-
-    server_info = (
-        f"**{t('settings.server_max_players', lang)}:** {_cap}\n"
-        f"**{t('settings.infantry_squad_size', lang)}:** {_inf_size}\n"
-        f"**{t('settings.vehicle_squad_size', lang)}:** {_veh_size}\n"
-        f"**{t('settings.heli_squad_size', lang)}:** {_heli_size}\n"
-        f"**{t('settings.max_vehicle_squads', lang)}:** {_max_veh}\n"
-        f"**{t('settings.max_heli_squads', lang)}:** {_max_heli}\n"
-        f"**{t('settings.max_caster_slots', lang)}:** {_max_casters}\n"
-        f"**{t('settings.max_squads_per_user', lang)}:** {event.get('max_squads_per_user', '?')}"
-    )
-    if _unused > 0 and not dont_waste_slots_active(event):
-        server_info += f"\n**{_unused_label}:** {_unused}"
+    server_info = _composition_summary(event, lang)
+    # Settings come from the caller — this builder stays free of DB access so it
+    # can be rendered from a half-built wizard event.
+    warning = capacity_warning(event, settings or DEFAULT_GUILD_SETTINGS, lang)
+    if warning:
+        server_info += f"\n{warning}"
     embed.add_field(name=t("wizard.summary_server", lang), value=server_info, inline=False)
 
     none_text = t("wizard.summary_none", lang)
@@ -6190,7 +6540,7 @@ class WizardConfirmationView(BaseView):
 
         # Also post the full approved settings (the embed the creator confirmed)
         # to the log channel for traceability. Best-effort: never break creation.
-        settings_embed = _build_confirmation_embed(self.event, self.guild_id)
+        settings_embed = _build_confirmation_embed(self.event, self.guild_id, self.settings)
         settings_embed.title = t("log.event_created_settings_title", lang, name=self.event["name"])
         settings_embed.color = discord.Color.blue()
         log_ch = get_log_channel(self.guild_id)
@@ -6213,141 +6563,6 @@ class WizardConfirmationView(BaseView):
 # ############################# #
 # EVENT CREATION                #
 # ############################# #
-
-class _EventConfigBridgeView(ui.View):
-    """Bridge between first modal and server config modal — single Continue button."""
-    def __init__(self, guild_id, channel_id, settings, parsed, author):
-        super().__init__(timeout=300)
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.settings = settings
-        self.parsed = parsed
-        self.author = author
-        lang = get_guild_language(guild_id)
-        btn = ui.Button(label=t("event.config_continue", lang), style=discord.ButtonStyle.success)
-        btn.callback = self._open_config
-        self.add_item(btn)
-
-    async def _open_config(self, interaction: discord.Interaction):
-        if hasattr(self, "_responded") and self._responded:
-            return
-        self._responded = True
-        modal = EventServerConfigModal(
-            self.guild_id, self.channel_id, self.settings, self.parsed, self.author)
-        await interaction.response.send_modal(modal)
-
-
-class EventServerConfigModal(ui.Modal):
-    """Second modal: server/squad configuration, pre-filled from guild settings."""
-    def __init__(self, guild_id, channel_id, settings, parsed, author):
-        lang = get_guild_language(guild_id)
-        super().__init__(title=t("event.config_title", lang))
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.settings = settings
-        self.parsed = parsed
-        self.author = author
-
-        mode = parsed.get("mode", "rep")
-        seat_label_key = "event.seats_label" if mode == "player" else "event.server_max_label"
-        self.server_max = ui.TextInput(
-            label=t(seat_label_key, lang),
-            default=str(settings.get("server_max_players", 100)),
-            required=True, max_length=5)
-        self.add_item(self.server_max)
-
-        # Caster slot field only in rep mode — player mode has no casters.
-        if mode != "player":
-            self.max_casters = ui.TextInput(
-                label=t("event.max_casters_label", lang),
-                default=str(settings.get("max_caster_slots", 2)),
-                required=True, max_length=3)
-            self.add_item(self.max_casters)
-        else:
-            self.max_casters = None
-
-        inf = settings.get("infantry_squad_size", 6)
-        veh = settings.get("vehicle_squad_size", 2)
-        heli = settings.get("heli_squad_size", 1)
-        self.squad_sizes = ui.TextInput(
-            label=t("event.squad_sizes_label", lang),
-            default=f"{inf} / {veh} / {heli}",
-            placeholder="6 / 2 / 1",
-            required=True, max_length=20)
-        self.add_item(self.squad_sizes)
-
-        self.max_vehicles = ui.TextInput(
-            label=t("event.max_vehicles_label", lang),
-            default=str(settings.get("max_vehicle_squads", 6)),
-            required=True, max_length=3)
-        self.add_item(self.max_vehicles)
-
-        self.max_helis = ui.TextInput(
-            label=t("event.max_helis_label", lang),
-            default=str(settings.get("max_heli_squads", 2)),
-            required=True, max_length=3)
-        self.add_item(self.max_helis)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        lang = get_guild_language(self.guild_id)
-
-        # Parse and validate all fields
-        mode = self.parsed.get("mode", "rep")
-        try:
-            server_max = int(self.server_max.value.strip())
-            max_casters = 0 if mode == "player" else int(self.max_casters.value.strip())
-            max_veh = int(self.max_vehicles.value.strip())
-            max_heli = int(self.max_helis.value.strip())
-        except ValueError:
-            await interaction.response.send_message(t("event.invalid_time", lang), ephemeral=True)
-            return
-
-        if max_veh < 0 or max_heli < 0:
-            await interaction.response.send_message(t("event.invalid_time", lang), ephemeral=True)
-            return
-
-        # Parse combined squad sizes
-        parts = self.squad_sizes.value.split("/")
-        if len(parts) != 3:
-            await interaction.response.send_message(t("event.invalid_squad_sizes", lang), ephemeral=True)
-            return
-        try:
-            inf_size = int(parts[0].strip())
-            veh_size = int(parts[1].strip())
-            heli_size = int(parts[2].strip())
-        except ValueError:
-            await interaction.response.send_message(t("event.invalid_squad_sizes", lang), ephemeral=True)
-            return
-        if not all(1 <= s <= MAX_SQUAD_PLAYERS for s in (inf_size, veh_size, heli_size)):
-            await interaction.response.send_message(t("event.invalid_squad_sizes", lang), ephemeral=True)
-            return
-
-        # Build event with overrides from this modal
-        event = build_default_event(
-            self.settings,
-            name=self.parsed["name"],
-            date=self.parsed["date"],
-            time_str=self.parsed["time"],
-            description=self.parsed["description"],
-            registration_open=self.parsed["reg_open"],
-            registration_start_time=self.parsed["reg_start_time"],
-            server_max_players=server_max,
-            max_caster_slots=max_casters,
-            infantry_squad_size=inf_size,
-            vehicle_squad_size=veh_size,
-            heli_squad_size=heli_size,
-            max_vehicle_squads=max_veh,
-            max_heli_squads=max_heli,
-            mode=mode,
-        )
-
-        # Launch wizard step 1
-        wizard_view = WizardSquadRolesView(
-            self.guild_id, self.channel_id, event, {},
-            self.settings, self.author)
-        wizard_msg = f"**{t('wizard.squad_roles_title', lang)}**\n{t('wizard.squad_roles_desc', lang)}"
-        await interaction.response.send_message(wizard_msg, view=wizard_view, ephemeral=True)
-
 
 class EventCreationModal(ui.Modal):
     def __init__(self, guild_id: int, channel_id: int, mode: str = "rep"):
@@ -6437,9 +6652,21 @@ class EventCreationModal(ui.Modal):
             "reg_start_time": reg_start_time,
             "mode": self.mode,
         }
-        bridge = _EventConfigBridgeView(self.guild_id, self.channel_id, settings, parsed, interaction.user)
-        await interaction.response.send_message(
-            t("event.config_prompt", lang), view=bridge, ephemeral=True)
+        # Capacity is configured in dropdown steps from here on, so the event dict
+        # starts from the guild defaults and each step mutates it in place — the
+        # same shape every other wizard view already uses.
+        event = build_default_event(
+            settings,
+            name=parsed["name"], date=parsed["date"], time_str=parsed["time"],
+            description=parsed["description"],
+            registration_open=parsed["reg_open"],
+            registration_start_time=parsed["reg_start_time"],
+            max_caster_slots=0 if self.mode == "player" else settings["max_caster_slots"],
+            mode=self.mode,
+        )
+        view = WizardInfantryView(self.guild_id, self.channel_id, event, {},
+                                  settings, interaction.user)
+        await interaction.response.send_message(view._text(lang), view=view, ephemeral=True)
 
 
 class EventModeSelectView(BaseView):
@@ -7288,7 +7515,7 @@ async def admin_edit_squad_cmd(interaction: discord.Interaction, squad_name: str
                 old_size = event["squads"][found_id]["size"]
                 delta = new_size - old_size
                 event["squads"][found_id]["size"] = new_size
-                event["player_slots_used"] = max(0, min(event["player_slots_used"] + delta, event["max_player_slots"]))
+                event["player_slots_used"] = max(0, min(event["player_slots_used"] + delta, player_capacity(event)))
                 save_event(db_id, event, user_assignments)
                 if delta < 0:
                     freed_type = event["squads"][found_id].get("type")

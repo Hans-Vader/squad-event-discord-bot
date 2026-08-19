@@ -202,46 +202,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Spieler-Modus",
         "en": "Player mode",
     },
-    "event.config_title": {
-        "de": "Server-Konfiguration",
-        "en": "Server Configuration",
-    },
-    "event.server_max_label": {
-        "de": "Server Max Spieler",
-        "en": "Server Max Players",
-    },
-    "event.seats_label": {
-        "de": "Plätze gesamt",
-        "en": "Total seats",
-    },
-    "event.max_casters_label": {
-        "de": "Max Caster (0 = deaktiviert)",
-        "en": "Max Casters (0 = disabled)",
-    },
-    "event.squad_sizes_label": {
-        "de": "Squad-Größen (Inf / Fahr / Heli)",
-        "en": "Squad Sizes (Inf / Veh / Heli)",
-    },
-    "event.max_vehicles_label": {
-        "de": "Max Fahrzeug-Squads (0 = deaktiviert)",
-        "en": "Max Vehicle Squads (0 = disabled)",
-    },
-    "event.max_helis_label": {
-        "de": "Max Heli-Squads (0 = deaktiviert)",
-        "en": "Max Heli Squads (0 = disabled)",
-    },
-    "event.config_prompt": {
-        "de": "Passe die Server-Konfiguration an:",
-        "en": "Customize server configuration:",
-    },
-    "event.config_continue": {
-        "de": "Weiter",
-        "en": "Continue",
-    },
-    "event.invalid_squad_sizes": {
-        "de": "Ungültiges Format. Verwende: Zahl / Zahl / Zahl (z.B. 6 / 2 / 1), jeweils 1–9 — Squads können maximal 9 Spieler beherbergen.",
-        "en": "Invalid format. Use: Number / Number / Number (e.g. 6 / 2 / 1), each 1–9 — squads can hold at most 9 players.",
-    },
     "event.name_label": {
         "de": "Event-Name",
         "en": "Event name",
@@ -488,10 +448,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "⚔️ Infanterie ({size} Spieler) · {count}x",
         "en": "⚔️ Infantry ({size} players) · {count}x",
     },
-    "squad.waitlisted_mirror": {
-        "de": "Der letzte Squad-Slot ist für das Gegenstück eines übergroßen Squads reserviert. Squad **{name}** ({type}, {size} Spieler) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
-        "en": "The last squad slot is reserved for an oversized squad's mirror. Squad **{name}** ({type}, {size} players) has been waitlisted (position {pos}). {info}",
-    },
     "squad.size_unavailable": {
         "de": "Diese Squad-Größe ist nicht mehr verfügbar. Bitte öffne die Anmeldung erneut und wähle eine aktuelle Option.",
         "en": "This squad size is no longer available. Please reopen the registration dialog and pick a current option.",
@@ -704,10 +660,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "📋 Plätze",
         "en": "📋 Seats",
     },
-    "embed.server_overview_value": {
-        "de": "{cap} Plätze ({free} frei)\nUngenutzt: {unused}",
-        "en": "{cap} slots ({free} free)\nUnused: {unused}",
-    },
     "embed.server_overview_value_no_unused": {
         "de": "{cap} Plätze ({free} frei)",
         "en": "{cap} slots ({free} free)",
@@ -828,6 +780,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "🎉 Du bist von der Warteliste in **{squad}** nachgerückt!",
         "en": "🎉 You have been moved from the waitlist into **{squad}**!",
     },
+    "player.moved_to_waitlist": {
+        "de": "⚠️ Die Event-Kapazität wurde geändert — du hast deinen Platz in "
+              "**{squad}** verloren und stehst jetzt ganz oben auf der Warteliste. "
+              "Sobald ein Platz frei wird, rückst du nach.",
+        "en": "⚠️ The event capacity changed — you lost your spot in **{squad}** "
+              "and are now at the top of the waitlist. You will be moved back in as soon "
+              "as a slot frees up.",
+    },
     "player.unregister_confirm_title": {
         "de": "Abmeldung bestätigen",
         "en": "Confirm unregister",
@@ -863,6 +823,36 @@ _STRINGS: dict[str, dict[str, str]] = {
     "log.player_moved": {
         "de": "Spieler nachgerückt: {name} → {squad}",
         "en": "Player promoted from waitlist: {name} → {squad}",
+    },
+    "log.player_demoted": {
+        "de": "Spieler auf Warteliste verschoben: {name} ← {squad}",
+        "en": "Player moved to waitlist: {name} ← {squad}",
+    },
+    "edit.confirm_shrink_title": {
+        "de": "⚠️ Spieler verlieren ihren Platz",
+        "en": "⚠️ Players will lose their spot",
+    },
+    "edit.confirm_shrink_body": {
+        "de": "**{prop}** auf `{value}` zu setzen nimmt **{count}** Spielern ihren Platz. "
+              "Sie rutschen ganz oben auf die Warteliste und werden per DM informiert. "
+              "Das lässt sich nicht rückgängig machen.",
+        "en": "Setting **{prop}** to `{value}` takes the spot away from **{count}** players. "
+              "They move to the top of the waitlist and are notified by DM. "
+              "This cannot be undone.",
+    },
+    "edit.confirm_shrink_affected": {
+        "de": "Betroffen",
+        "en": "Affected",
+    },
+    "edit.confirm_shrink_more": {
+        "de": "und {count} weitere",
+        "en": "and {count} more",
+    },
+    "edit.confirm_shrink_needs_buttons": {
+        "de": "Diese Änderung nimmt Spielern ihren Platz und muss bestätigt werden — "
+              "bitte über den Editor-Dialog ändern.",
+        "en": "This change takes players' spots and needs confirmation — "
+              "please make it from the editor dialog.",
     },
     "log.player_waitlist_removed": {
         "de": "Spieler von der {type}-Warteliste entfernt: {user}",
@@ -1372,6 +1362,64 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Du hast bereits eine aktive Bearbeitungssitzung in deinen DMs.",
         "en": "You already have an active editing session in your DMs.",
     },
+    "edit.property.infantry_squads": {
+        "de": "Infanterie-Zusammenstellung",
+        "en": "Infantry composition",
+    },
+    "edit.composition_hint": {
+        "de": "Größe wählen, dann die Anzahl. Anzahl 0 entfernt die Größe.",
+        "en": "Pick a size, then how many. A count of 0 removes the size.",
+    },
+    "edit.composition_current": {
+        "de": "Aktuell: **{value}** — ergibt **{total}** Plätze.",
+        "en": "Currently: **{value}** — that is **{total}** seats.",
+    },
+    "edit.composition_pick_size": {
+        "de": "Squad-Größe wählen…",
+        "en": "Pick a squad size…",
+    },
+    "edit.composition_size_option": {
+        "de": "Größe {size} — aktuell {count}",
+        "en": "Size {size} — currently {count}",
+    },
+    "edit.composition_pick_count": {
+        "de": "Wie viele {size}er-Squads?",
+        "en": "How many squads of {size}?",
+    },
+    "edit.composition_count_option": {
+        "de": "{count} × Größe {size}",
+        "en": "{count} × size {size}",
+    },
+    "edit.composition_below_registered": {
+        "de": "Für Größe {size} sind bereits {count} Squads registriert oder auf der "
+              "Warteliste — die Anzahl darf nicht darunter liegen.",
+        "en": "Size {size} already has {count} squads registered or waiting — the count "
+              "cannot go below that.",
+    },
+    "edit.capacity_over_limit": {
+        "de": "⚠️ {total} Plätze konfiguriert, Warngrenze liegt bei {limit}.",
+        "en": "⚠️ {total} seats configured, the warning limit is {limit}.",
+    },
+    "edit.seconds": {
+        "de": "{count} s",
+        "en": "{count} s",
+    },
+    "config_defaults.prop.infantry_squads": {
+        "de": "Infanterie-Zusammenstellung",
+        "en": "Infantry composition",
+    },
+    "config_defaults.prop.capacity_warning_limit": {
+        "de": "Warngrenze Serverplätze",
+        "en": "Server capacity warning limit",
+    },
+    "wizard.summary_total": {
+        "de": "Gesamt",
+        "en": "Total",
+    },
+    "embed.casters": {
+        "de": "Caster",
+        "en": "Casters",
+    },
     "edit.property.name": {
         "de": "1. Event-Name",
         "en": "1. Event name",
@@ -1388,10 +1436,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "4. Beschreibung",
         "en": "4. Description",
     },
-    "edit.property.server_max": {
-        "de": "5. Server max. Spieler",
-        "en": "5. Server max players",
-    },
     "edit.property.max_casters": {
         "de": "6. Max. Caster-Plätze",
         "en": "6. Max caster slots",
@@ -1403,10 +1447,6 @@ _STRINGS: dict[str, dict[str, str]] = {
     "edit.property.max_helis": {
         "de": "8. Max. Heli-Squads (0 = deaktiviert)",
         "en": "8. Max heli squads (0 = disabled)",
-    },
-    "edit.property.infantry_size": {
-        "de": "9. Infanterie-Squadgröße",
-        "en": "9. Infantry squad size",
     },
     "edit.property.vehicle_size": {
         "de": "10. Fahrzeug-Squadgröße",
@@ -1455,10 +1495,6 @@ _STRINGS: dict[str, dict[str, str]] = {
     "edit.cannot_disable_type_with_entries": {
         "de": "Du kannst {type} nicht auf 0 setzen, solange Squads oder Wartelisten-Einträge dieses Typs existieren. Bitte entferne sie zuerst.",
         "en": "Cannot set {type} to 0 while squads or waitlist entries of this type still exist. Remove them first.",
-    },
-    "edit.recalculated": {
-        "de": "Spieler-Slots neu berechnet: {slots}",
-        "en": "Player slots recalculated: {slots}",
     },
     "edit.timeout": {
         "de": "Ich bin mir nicht sicher, wohin du gegangen bist. Wir können es später erneut versuchen.",
@@ -1656,18 +1692,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "22. Rollenauswahl bei Anmeldung",
         "en": "22. Role selection at registration",
     },
-    "edit.property.dont_waste_slots": {
-        "de": "23. Slots nicht verschwenden (größere Squads)",
-        "en": "23. Don't waste slots (bigger squads)",
-    },
-    "edit.property.dont_waste_sizes": {
-        "de": "24. Erlaubte Übergrößen (leer = alle)",
-        "en": "24. Allowed oversized sizes (empty = all)",
-    },
-    "edit.sizes_all": {
-        "de": "Alle",
-        "en": "All",
-    },
     "edit.invalid_size_list": {
         "de": "Ungültige Eingabe. Verwende kommagetrennte Zahlen (z. B. 7, 8) — oder leer für alle Übergrößen.",
         "en": "Invalid input. Use comma-separated numbers (e.g. 7, 8) — or empty for all oversized sizes.",
@@ -1676,37 +1700,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Kommagetrennte Größen, z. B. „7, 8“. Leer = alle Übergrößen erlaubt.",
         "en": "Comma-separated sizes, e.g. \"7, 8\". Empty = all oversized sizes allowed.",
     },
-    "edit.dont_waste_sizes_invalid": {
-        "de": "Ungültige Größen: erlaubt sind nur Werte über der Basisgröße ({base}) bis maximal {max}.",
-        "en": "Invalid sizes: only values above the base size ({base}) up to {max} are allowed.",
-    },
     "edit.squad_size_max": {
         "de": "Ungültiger Wert: Squads können maximal {max} Spieler beherbergen.",
         "en": "Invalid value: squads can hold at most {max} players.",
-    },
-    "edit.dont_waste_max_size": {
-        "de": "Diese Option kann nicht aktiviert werden: Squads können maximal {max} Spieler beherbergen — bei Squad-Größe {size} sind keine größeren Squads möglich.",
-        "en": "This option cannot be enabled: squads can hold at most {max} players — with squad size {size} no bigger squads are possible.",
-    },
-    "edit.dont_waste_no_unused": {
-        "de": "Diese Option kann nicht aktiviert werden: Bei der aktuellen Konfiguration gibt es keine ungenutzten Slots.",
-        "en": "This option cannot be enabled: with the current configuration there are no unused slots.",
-    },
-    "edit.property.dont_waste_max": {
-        "de": "25. Max. übergroße Squads (leer/0 = unbegrenzt)",
-        "en": "25. Max. oversized squads (empty/0 = unlimited)",
-    },
-    "edit.max_unlimited": {
-        "de": "Unbegrenzt",
-        "en": "Unlimited",
-    },
-    "edit.dont_waste_max_invalid": {
-        "de": "Ungültiger Wert: Übergroße Squads entstehen paarweise (eins pro Team) — die Obergrenze muss eine gerade Zahl ab 2 sein, oder 0 für unbegrenzt.",
-        "en": "Invalid value: oversized squads come in pairs (one per team) — the cap must be an even number of at least 2, or 0 for unlimited.",
-    },
-    "edit.dont_waste_single_unused": {
-        "de": "Diese Option kann nicht aktiviert werden: Es ist nur 1 Slot ungenutzt — übergroße Squads müssen immer in gleicher Anzahl (paarweise, eins pro Team) gebildet werden.",
-        "en": "This option cannot be enabled: only 1 slot is unused — oversized squads must always come in equal numbers (in pairs, one per team).",
     },
     "edit.bool.enabled": {
         "de": "Aktiviert",
@@ -2321,67 +2317,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Deaktiviert",
         "en": "Disabled",
     },
-    "wizard.dont_waste_step_title": {
-        "de": "Slots nicht verschwenden",
-        "en": "Don't waste slots",
-    },
-    "wizard.dont_waste_step_desc": {
-        "de": ("Die Anzahl der Infanterie-Squads ist immer gerade (gleich viele pro Team), "
-               "dadurch bleiben **{unused}** Plätze ungenutzt. Wenn aktiviert, können diese "
-               "Plätze durch größere Squads genutzt werden — immer in gleicher Anzahl pro "
-               "Größe, damit beide Teams gespiegelt werden können. Angeboten werden die "
-               "Größen, die die freien Plätze mit möglichst wenigen übergroßen Squads "
-               "ausnutzen."),
-        "en": ("The infantry squad count is always even (same number per team), which "
-               "leaves **{unused}** seats unused. When enabled, those seats can be used by "
-               "bigger squads — always in equal numbers per size so both teams can be "
-               "mirrored. Offered are the sizes that use the free seats with as few "
-               "oversized squads as possible."),
-    },
-    "wizard.dont_waste_select_placeholder": {
-        "de": "Ungenutzte Plätze verwenden...",
-        "en": "Use leftover slots...",
-    },
-    "wizard.dont_waste_sizes_placeholder": {
-        "de": "Erlaubte Übergrößen wählen (Standard: alle)...",
-        "en": "Pick allowed oversized sizes (default: all)...",
-    },
-    "wizard.dont_waste_size_option": {
-        "de": "{size} Spieler",
-        "en": "{size} players",
-    },
-    "wizard.dont_waste_max_placeholder": {
-        "de": "Max. Anzahl übergroßer Squads (Standard: unbegrenzt)...",
-        "en": "Max. number of oversized squads (default: unlimited)...",
-    },
-    "wizard.dont_waste_max_unlimited": {
-        "de": "Unbegrenzt",
-        "en": "Unlimited",
-    },
-    "wizard.dont_waste_max_option": {
-        "de": "{n} übergroße Squads ({per_team} pro Team)",
-        "en": "{n} oversized squads ({per_team} per team)",
-    },
-    "wizard.dont_waste_enabled": {
-        "de": "Slots nicht verschwenden aktivieren",
-        "en": "Enable don't waste slots",
-    },
-    "wizard.dont_waste_disabled": {
-        "de": "Slots nicht verschwenden deaktivieren",
-        "en": "Disable don't waste slots",
-    },
-    "wizard.summary_dont_waste": {
-        "de": "Slots nicht verschwenden",
-        "en": "Don't waste slots",
-    },
-    "wizard.summary_dont_waste_yes": {
-        "de": "Aktiviert",
-        "en": "Enabled",
-    },
-    "wizard.summary_dont_waste_no": {
-        "de": "Deaktiviert",
-        "en": "Disabled",
-    },
     "ping.reg_closed": {
         "de": "**Die Registrierung für {name} ist geschlossen.**",
         "en": "**Registration for {name} is closed.**",
@@ -2426,14 +2361,6 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
 
     # ── Settings field labels (used in wizard summary + other views) ─────
-    "settings.server_max_players": {
-        "de": "Server-Kapazität",
-        "en": "Server capacity",
-    },
-    "settings.infantry_squad_size": {
-        "de": "Infanterie-Squadgröße",
-        "en": "Infantry squad size",
-    },
     "settings.vehicle_squad_size": {
         "de": "Fahrzeug-Squadgröße",
         "en": "Vehicle squad size",
@@ -2484,10 +2411,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Standard-Einstellung geändert: {user} hat '{property}' auf '{value}' gesetzt.",
         "en": "Default setting changed: {user} set '{property}' to '{value}'.",
     },
-    "config_defaults.prop.server_max_players": {
-        "de": "1. Server-Kapazität (Spieler)",
-        "en": "1. Server capacity (players)",
-    },
     "config_defaults.prop.max_caster_slots": {
         "de": "2. Max. Caster-Plätze",
         "en": "2. Max caster slots",
@@ -2499,10 +2422,6 @@ _STRINGS: dict[str, dict[str, str]] = {
     "config_defaults.prop.max_heli_squads": {
         "de": "4. Max. Heli-Squads",
         "en": "4. Max heli squads",
-    },
-    "config_defaults.prop.infantry_squad_size": {
-        "de": "5. Infanterie-Squadgröße",
-        "en": "5. Infantry squad size",
     },
     "config_defaults.prop.vehicle_squad_size": {
         "de": "6. Fahrzeug-Squadgröße",
@@ -2701,6 +2620,48 @@ _STRINGS: dict[str, dict[str, str]] = {
     "wizard.caster_roles_desc": {
         "de": "Wähle optional Rollen/Benutzer, die sich als Caster anmelden dürfen und Vorab-Zugang erhalten.\nÜberspringe diesen Schritt, wenn jeder sich als Caster anmelden darf.",
         "en": "Optionally select roles/users who can register as casters and get early access.\nSkip this step if anyone should be allowed to register as a caster.",
+    },
+    "wizard.infantry_title": {
+        "de": "Infanterie-Zusammenstellung",
+        "en": "Infantry composition",
+    },
+    "wizard.infantry_desc": {
+        "de": "Wähle eine Squad-Größe und wie viele Squads es davon geben soll. "
+              "Du kannst mehrere Größen kombinieren — wähle dazu einfach nacheinander "
+              "verschiedene Größen aus.\nAktuell: **{value}** — ergibt **{seats}** Plätze.",
+        "en": "Pick a squad size and how many squads of it there should be. You can "
+              "combine several sizes — just pick each size in turn.\n"
+              "Currently: **{value}** — that is **{seats}** seats.",
+    },
+    "wizard.vehicles_title": {
+        "de": "Fahrzeug- und Heli-Squads",
+        "en": "Vehicle and heli squads",
+    },
+    "wizard.vehicles_desc": {
+        "de": "Anzahl und Größe der Fahrzeug- und Heli-Squads. Überspringen "
+              "übernimmt die Vorgaben deines Servers.",
+        "en": "How many vehicle and heli squads, and how big. Skip keeps your "
+              "server's defaults.",
+    },
+    "wizard.pick_vehicle_count": {
+        "de": "Anzahl Fahrzeug-Squads…",
+        "en": "Number of vehicle squads…",
+    },
+    "wizard.pick_vehicle_size": {
+        "de": "Größe der Fahrzeug-Squads…",
+        "en": "Vehicle squad size…",
+    },
+    "wizard.pick_heli_count": {
+        "de": "Anzahl Heli-Squads…",
+        "en": "Number of heli squads…",
+    },
+    "wizard.pick_heli_size": {
+        "de": "Größe der Heli-Squads…",
+        "en": "Heli squad size…",
+    },
+    "wizard.pick_caster_slots": {
+        "de": "Anzahl Caster-Slots…",
+        "en": "Number of caster slots…",
     },
     "wizard.continue": {
         "de": "Weiter →",

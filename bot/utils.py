@@ -233,258 +233,80 @@ def _waitlist_key(squad_type: str) -> str:
     return f"{squad_type}_waitlist"
 
 
+MAX_SQUAD_PLAYERS = 9  # hard in-game limit — no squad can hold more players
+
+
+def infantry_composition(event: dict) -> list:
+    """The event's infantry squads as [(size, count), ...] in configuration order.
+
+    int values guaranteed: the stored form is [[size, count], ...] because a
+    {size: count} dict would come back from JSON with string keys.
+    """
+    return [(int(size), int(count)) for size, count in (event.get("infantry_squads") or [])]
+
+
+def infantry_capacities(event: dict) -> list:
+    """One capacity per infantry squad, in fill order — squads are created and
+    filled in the order the organizer configured them."""
+    return [size for size, count in infantry_composition(event) for _ in range(count)]
+
+
+def player_capacity(event: dict) -> int:
+    """Total player seats. Derived from the squad composition, never stored —
+    a cached copy of a pure function of the same blob only ever drifts."""
+    return (sum(size * count for size, count in infantry_composition(event))
+            + event.get("max_vehicle_squads", 0) * event.get("vehicle_squad_size", 0)
+            + event.get("max_heli_squads", 0) * event.get("heli_squad_size", 0))
+
+
+def _default_infantry_size(event: dict) -> int:
+    """Size offered by default for a new infantry squad: the first configured
+    entry. There is no separate "base size" any more — the composition is it."""
+    composition = infantry_composition(event)
+    return composition[0][0] if composition else 6
+
+
 def _squad_size_for_type(event: dict, squad_type: str) -> int:
-    return {
-        "infantry": event.get("infantry_squad_size", 6),
-        "vehicle": event.get("vehicle_squad_size", 2),
-        "heli":     event.get("heli_squad_size", 1),
-    }.get(squad_type, 1)
+    if squad_type == "infantry":
+        return _default_infantry_size(event)
+    return {"vehicle": event.get("vehicle_squad_size", 2),
+            "heli": event.get("heli_squad_size", 1)}.get(squad_type, 1)
 
 
 def _max_squads_for_type(event: dict, squad_type: str) -> int:
-    """Cap on how many squads of a given type can exist.
-
-    Vehicle and heli are stored directly. Infantry is derived from the seat
-    budget after vehicle/heli allocations.
-    """
+    """How many squads of a given type can exist — all three are now stored."""
     if squad_type == "vehicle":
         return event.get("max_vehicle_squads", 0)
     if squad_type == "heli":
         return event.get("max_heli_squads", 0)
-    seats = event.get("max_player_slots", 0)
-    veh_slots = event.get("max_vehicle_squads", 0) * event.get("vehicle_squad_size", 0)
-    heli_slots = event.get("max_heli_squads", 0) * event.get("heli_squad_size", 0)
-    inf_size = max(1, event.get("infantry_squad_size", 6))
-    # The infantry cap is always even so both teams get the same squad count.
-    return _even_infantry_max(max(0, (seats - veh_slots - heli_slots) // inf_size))
-
-
-def _even_infantry_max(raw_max: int) -> int:
-    """Round an infantry squad cap down to an even count so both teams get the
-    same number of squads. Caps below 2 are left alone so tiny configs stay
-    usable."""
-    return raw_max if raw_max < 2 else raw_max - raw_max % 2
-
-
-def infantry_unused_pool(event: dict) -> int:
-    """Seats the don't-waste mode can hand out as oversized squads: the seat
-    remainder plus — when the base squad count would be odd — one whole base
-    squad, because the infantry squad count must stay even (two equal teams)."""
-    inf_size = event.get("infantry_squad_size", 6)
-    if inf_size <= 0:
-        return 0
-    veh_slots = event.get("max_vehicle_squads", 0) * event.get("vehicle_squad_size", 0)
-    heli_slots = event.get("max_heli_squads", 0) * event.get("heli_squad_size", 0)
-    inf_slots = max(0, event.get("max_player_slots", 0) - veh_slots - heli_slots)
-    return inf_slots - _even_infantry_max(inf_slots // inf_size) * inf_size
-
-
-MAX_SQUAD_PLAYERS = 9  # hard in-game limit — no squad can hold more players
-
-
-def dont_waste_slots_possible(event: dict) -> bool:
-    """True when the don't-waste-slots mode could do anything at all: a base
-    size below the in-game squad limit and a pool that fits at least one
-    oversized pair. Applies to both modes — reps pick oversized sizes
-    themselves, player mode pre-plans squad capacities."""
-    return (event.get("infantry_squad_size", 6) < MAX_SQUAD_PLAYERS
-            and infantry_unused_pool(event) >= 2)
-
-
-def dont_waste_slots_active(event: dict) -> bool:
-    """True when the mode is enabled and can actually do anything."""
-    return bool(event.get("dont_waste_slots")) and dont_waste_slots_possible(event)
-
-
-def _allowed_extras(event: dict, free_pool: int) -> list:
-    """Extra-seat values of the oversized sizes the organizer allows and whose
-    pair still fits `free_pool`."""
-    base = event.get("infantry_squad_size", 6)
-    allowed = event.get("dont_waste_allowed_sizes")
-    return [k - base
-            for k in range(base + 1, min(base + free_pool // 2, MAX_SQUAD_PLAYERS) + 1)
-            if not (allowed and k not in allowed)]
-
-
-def _max_pairs(event: dict, counts: dict | None = None):
-    """Remaining pair budget from the organizer's oversized-squad cap
-    (`dont_waste_max_squads`), or None when unlimited. With `counts`
-    (registered oversized squads per size, rep mode) an incomplete pair counts
-    as 2 — its mirror is reserved and completing it must never be blocked."""
-    cap = event.get("dont_waste_max_squads")
-    if not cap:
-        return None
-    used = sum(c + (c % 2) for c in (counts or {}).values())
-    return max(0, cap // 2 - used // 2)
-
-
-def _pair_plan(free_pool: int, extras: list, max_pairs: int | None = None) -> dict:
-    """Canonical plan for absorbing the remaining pool with oversized pairs:
-    least wasted seats first, then the fewest oversized squads, preferring
-    bigger squads on ties, using at most `max_pairs` pairs (None = unlimited).
-    Returns {extra_seats_per_squad: number_of_pairs}."""
-    coins = sorted({2 * e for e in extras if e > 0}, reverse=True)
-    if free_pool < 2 or not coins or max_pairs == 0:
-        return {}
-    reach = {0: {}}  # exactly-absorbed seats -> pair multiset {coin: n}
-    for total in range(2, free_pool + 1):
-        best = None
-        for coin in coins:
-            prev = reach.get(total - coin)
-            if prev is None:
-                continue
-            if best is None or sum(prev.values()) + 1 < sum(best.values()):
-                best = dict(prev)
-                best[coin] = best.get(coin, 0) + 1
-        # The DP minimizes pairs per total, so a total whose minimum exceeds
-        # the cap is unreachable within it (any larger total needs even more).
-        if best is not None and (max_pairs is None or sum(best.values()) <= max_pairs):
-            reach[total] = best
-    return {coin // 2: n for coin, n in reach[max(reach)].items()}
-
-
-def _pair_cover(target: int, extras: list, max_pairs: int | None = None) -> dict:
-    """Minimal set of oversized pairs whose extra seats cover AT LEAST
-    `target`: fewest pairs first, then least excess capacity, bigger squads
-    preferred, using at most `max_pairs` pairs. Returns {extra: n_pairs}
-    ({} when target <= 0, nothing fits, or the cap prevents covering)."""
-    coins = sorted({2 * e for e in extras if e > 0}, reverse=True)
-    if target <= 0 or not coins or max_pairs == 0:
-        return {}
-    reach = {0: {}}
-    for total in range(2, target + max(coins) + 1):
-        cand = None
-        for coin in coins:
-            prev = reach.get(total - coin)
-            if prev is None:
-                continue
-            if cand is None or sum(prev.values()) + 1 < sum(cand.values()):
-                cand = dict(prev)
-                cand[coin] = cand.get(coin, 0) + 1
-        if cand is not None and (max_pairs is None or sum(cand.values()) <= max_pairs):
-            reach[total] = cand
-    best = None
-    for total, combo in reach.items():
-        if total < target:
-            continue
-        key = (sum(combo.values()), total)
-        if best is None or key < best[0]:
-            best = (key, combo)
-    return {coin // 2: n for coin, n in best[1].items()} if best else {}
-
-
-def planned_infantry_capacities(event: dict) -> list:
-    """Deterministic capacity layout for player-mode infantry squads: base
-    squads first, the minimal-plan oversized pairs last (biggest at the end),
-    so regular squads fill up before any oversized capacity is used."""
-    base = event.get("infantry_squad_size", 6)
-    cap = _max_squads_for_type(event, "infantry")
-    if not dont_waste_slots_active(event):
-        return [base] * cap
-    pool = infantry_unused_pool(event)
-    plan = _pair_plan(pool, _allowed_extras(event, pool), _max_pairs(event))
-    oversized = sorted(base + extra
-                       for extra, pairs in plan.items()
-                       for _ in range(2 * pairs))
-    if len(oversized) > cap:
-        # Tiny caps (exempt from the even rule) can't hold a full pair.
-        return [base] * cap
-    return [base] * (cap - len(oversized)) + oversized
+    return sum(count for _size, count in infantry_composition(event))
 
 
 def infantry_size_options(event: dict) -> list:
-    """Infantry squad sizes currently offerable, as [(size, remaining), ...]
-    ascending with the base size always first.
+    """Infantry sizes currently registerable, as [(size, remaining), ...] ascending.
 
-    With "don't waste slots" mode off (or in player mode) only the base size is
-    returned. When on, the unused pool may be absorbed by oversized squads that
-    must always come in equal numbers per size (mirrored across two manually
-    split teams): the first oversized registration locks its size until all
-    oversized squads are gone, an incomplete pair keeps its size offered and
-    reserves one squad slot for the mirror, and a pool remainder that cannot
-    form a pair stays unused.
+    Each size has its own independent quota, so `remaining` is simply the
+    configured count minus the squads of that size already registered.
+
+    Two invariants the callers depend on:
+      - the default size stays in the list even at 0 remaining — the embed reads
+        its counter from here and would otherwise show a stale number forever;
+      - iteration goes over the CONFIGURED sizes, never the registered ones, and
+        clamps at 0: /admin_edit_squad can set a size that has no quota at all,
+        which must not surface as a phantom option or a negative count.
     """
-    base = event.get("infantry_squad_size", 6)
-    base_max = _max_squads_for_type(event, "infantry")
-    inf_squads = [d for d in event.get("squads", {}).values()
-                  if d.get("type") == "infantry"]
-    free_slots = max(0, base_max - len(inf_squads))
-
-    pool = infantry_unused_pool(event)
-    active = event.get("mode", "rep") != "player" and bool(event.get("dont_waste_slots"))
-    if not active:
-        return [(base, free_slots)]
-
-    counts: dict[int, int] = {}
-    for d in inf_squads:
-        size = d.get("size", base)
-        if size > base:
-            counts[size] = counts.get(size, 0) + 1
-
-    if not counts and pool < 2:
-        return [(base, free_slots)]
-
-    pending = sum(1 for c in counts.values() if c % 2)
-    consumed = sum((size - base) * c for size, c in counts.items())
-    reserved = sum(size - base for size, c in counts.items() if c % 2)
-    free_pool = max(0, pool - consumed - reserved)
-    options = [(base, max(0, free_slots - pending))]
-
-    # Offered are the pairs of the canonical plan (least waste, then fewest
-    # oversized squads — so as many regular squads as possible), plus mirrors
-    # of incomplete pairs. The organizer may additionally whitelist sizes.
-    plan = _pair_plan(free_pool, _allowed_extras(event, free_pool),
-                      _max_pairs(event, counts))
-    candidates = set(counts) | {base + e for e in plan}
-    for size in sorted(candidates):
-        c = counts.get(size, 0)
-        extra = size - base
-        others_pending = pending - (1 if c % 2 else 0)
-        avail = max(0, free_slots - others_pending)
-        if c % 2:
-            # Incomplete pair: the mirror stays registerable (even if a config
-            # edit shrank the pool or excluded the size — equal counts win);
-            # anything beyond it only per plan.
-            if avail < 1:
-                remaining = 0
-            else:
-                remaining = 1 + 2 * min(plan.get(extra, 0), (avail - 1) // 2)
-        else:
-            remaining = 2 * min(plan.get(extra, 0), avail // 2)
-        if remaining > 0:
-            options.append((size, remaining))
-    return options
+    quotas = dict(infantry_composition(event))
+    used: dict = {}
+    for squad in event.get("squads", {}).values():
+        if squad.get("type") == "infantry":
+            size = squad.get("size")
+            used[size] = used.get(size, 0) + 1
+    default_size = _default_infantry_size(event)
+    return [(size, max(0, quotas[size] - used.get(size, 0)))
+            for size in sorted(quotas)
+            if size == default_size or quotas[size] - used.get(size, 0) > 0]
 
 
-def infantry_wasted_seats(event: dict) -> int:
-    """Pool seats that can no longer be absorbed by oversized squads: the
-    leftover once no oversized size is offerable anymore (0 while any option —
-    including a pending mirror — is still open). In player mode the bot plans
-    capacities itself, so the waste is simply the plan's static residual."""
-    base = event.get("infantry_squad_size", 6)
-    pool = infantry_unused_pool(event)
-    if event.get("mode", "rep") == "player":
-        # Player mode plans the whole layout, so the plan absorption is the
-        # full picture — the residual (incl. any cap-stranded seats) is waste.
-        plan = _pair_plan(pool, _allowed_extras(event, pool), _max_pairs(event))
-        return max(0, pool - sum(2 * extra * n for extra, n in plan.items()))
-    counts: dict[int, int] = {}
-    for d in event.get("squads", {}).values():
-        size = d.get("size", base)
-        if d.get("type") == "infantry" and size > base:
-            counts[size] = counts.get(size, 0) + 1
-    consumed = sum((size - base) * c for size, c in counts.items())
-    if any(size != base for size, _ in infantry_size_options(event)):
-        # Optimistic while options are open: only seats no further pair can
-        # absorb (cap/whitelist-stranded, given what's already registered) are
-        # wasted. Reserved mirror seats of incomplete pairs will be filled, so
-        # they leave the free pool and don't count as waste.
-        reserved = sum(size - base for size, c in counts.items() if c % 2)
-        free_pool = max(0, pool - consumed - reserved)
-        plan = _pair_plan(free_pool, _allowed_extras(event, free_pool),
-                          _max_pairs(event, counts))
-        return max(0, free_pool - sum(2 * extra * n for extra, n in plan.items()))
-    return max(0, pool - consumed)
 
 
 def _next_auto_squad_name(event: dict, squad_type: str) -> str:
@@ -538,7 +360,7 @@ def _try_place_player(event: dict, user_assignments: dict, uid: str,
         if squad_type == "infantry":
             # Don't-waste mode: the Nth squad's capacity comes from the
             # pre-planned layout (base squads first, oversized pairs last).
-            layout = planned_infantry_capacities(event)
+            layout = infantry_capacities(event)
             if existing_count < len(layout):
                 size = layout[existing_count]
         new_name = _next_auto_squad_name(event, squad_type)
@@ -596,37 +418,7 @@ def _squad_number_key(name: str):
     return (0, int(tail)) if tail.isdigit() else (1, 0)
 
 
-def _replan_player_capacities(event: dict, squads: dict, type_names: list) -> list:
-    """Re-derive the infantry capacity layout from the ACTUAL player count:
-    as many base squads as possible plus the minimal oversized pairs for the
-    overflow. Returns members shed from squads whose capacity shrank — the
-    caller re-seats them after compaction (total capacity covers everyone)."""
-    base = event.get("infantry_squad_size", 6)
-    players = sum(len(squads[n].get("members", [])) for n in type_names)
-    n_exist = len(type_names)
-    overflow = max(0, players - n_exist * base)
-    cover = _pair_cover(overflow, _allowed_extras(event, infantry_unused_pool(event)),
-                        _max_pairs(event))
-    oversized = sorted(base + extra
-                       for extra, pairs in cover.items()
-                       for _ in range(2 * pairs))
-    if len(oversized) > n_exist:
-        return []
-    assigned = [base] * (n_exist - len(oversized)) + oversized
-    if sum(assigned) < players:
-        return []  # degenerate (whitelist/config drift): keep current capacities
-    displaced = []
-    for name, size in zip(type_names, assigned):
-        squad = squads[name]
-        squad["size"] = size
-        members = squad.setdefault("members", [])
-        while len(members) > size:
-            displaced.append(members.pop())
-    return displaced
-
-
-def _compact_player_squads(event: dict, user_assignments: dict, squad_type: str,
-                           replan: bool = False):
+def _compact_player_squads(event: dict, user_assignments: dict, squad_type: str):
     """Pull last-registered members from later squads into earlier partial
     squads of the same type. Drop trailing empty squads.
 
@@ -634,19 +426,13 @@ def _compact_player_squads(event: dict, user_assignments: dict, squad_type: str,
     dict-insertion order, so consolidation deterministically keeps the
     lowest-numbered squads regardless of how the dict was built.
 
-    `replan` re-derives don't-waste capacities from the actual player count —
-    only the real consolidation (event start / admin button) does that; the
-    per-unregister compaction must NOT shrink capacities, or later
-    registrations could no longer grow back into the planned layout.
+    Squad capacities are the organizer's configured composition and are never
+    re-derived here — packing moves players, not seats.
     """
     squads = event.get("squads", {})
     type_names = sorted(
         (n for n, s in squads.items() if s.get("type") == squad_type),
         key=_squad_number_key)
-
-    displaced = []
-    if replan and squad_type == "infantry" and dont_waste_slots_active(event):
-        displaced = _replan_player_capacities(event, squads, type_names)
 
     for i, name in enumerate(type_names):
         squad = squads[name]
@@ -665,17 +451,6 @@ def _compact_player_squads(event: dict, user_assignments: dict, squad_type: str,
             uid = member.get("user_id")
             if uid:
                 user_assignments[uid] = [name]
-
-    # Members shed by a capacity replan get the remaining gaps.
-    for member in displaced:
-        for name in type_names:
-            squad = squads[name]
-            if len(squad.setdefault("members", [])) < squad.get("size", 0):
-                squad["members"].append(member)
-                uid = member.get("user_id")
-                if uid:
-                    user_assignments[uid] = [name]
-                break
 
     for name in reversed(type_names):
         squad = squads.get(name)
@@ -698,7 +473,7 @@ def consolidate_all_player_squads(event: dict, user_assignments: dict) -> int:
     squads = event.get("squads", {})
     before = len(squads)
     for squad_type in _SQUAD_TYPES:
-        _compact_player_squads(event, user_assignments, squad_type, replan=True)
+        _compact_player_squads(event, user_assignments, squad_type)
     return before - len(event.get("squads", {}))
 
 
@@ -736,6 +511,76 @@ def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: st
         waitlist.pop(0)
         promoted.append((uid, name, placed))
     return promoted
+
+
+def _target_capacities(event: dict, squad_type: str) -> list:
+    """Capacity layout the given squad type should currently have, one entry per
+    allowed squad. Mirrors exactly what `_try_place_player` would hand a freshly
+    created squad, so a resize can't drift from normal registration."""
+    if squad_type == "infantry":
+        return infantry_capacities(event)
+    return [_squad_size_for_type(event, squad_type)] * _max_squads_for_type(event, squad_type)
+
+
+def _resize_player_squads(event: dict, user_assignments: dict, squad_type: str) -> tuple:
+    """Bring existing player-mode squads of `squad_type` in line with the event's
+    CURRENT capacity, then re-run the waitlist.
+
+    Needed because a squad's `size` is frozen when it is created, so editing an
+    event's squad size / seat budget afterwards would otherwise leave the roster
+    untouched. Growing capacity pulls waiting players in; shrinking it sheds the
+    last-joined members of each squad back onto the waitlist.
+
+    Returns (promoted, displaced), both [(uid, name, squad_name), ...]. `promoted`
+    comes from `_promote_player_waitlist`; `displaced` names the squad each player
+    was shed from — they are re-queued at the FRONT of the waitlist, because they
+    were there before anyone currently waiting and lost the seat only to an admin
+    edit. A displaced player who is immediately re-seated appears in both lists.
+
+    ponytail: member order is the only "joined at" this project has (no
+    timestamps anywhere) — exact within a squad, approximate across squads.
+    Same approximation `_compact_player_squads` already relies on.
+    """
+    squads = event.get("squads", {})
+    type_names = sorted(
+        (n for n, s in squads.items() if s.get("type") == squad_type),
+        key=_squad_number_key)
+    caps = _target_capacities(event, squad_type)
+
+    shed: list = []      # (member_dict, squad_name) in squad order
+    for i, name in enumerate(type_names):
+        squad = squads[name]
+        members = squad.setdefault("members", [])
+        if i >= len(caps):
+            # The squad cap itself shrank — this squad no longer exists. It has
+            # to go, not just empty out, or _try_place_player would refill it
+            # and blow past the cap.
+            shed.extend((m, name) for m in members)
+            del squads[name]
+            continue
+        squad["size"] = caps[i]
+        shed.extend((m, name) for m in members[caps[i]:])
+        del members[caps[i]:]
+
+    for member, _name in shed:
+        user_assignments.pop(str(member.get("user_id")), None)
+        event["player_slots_used"] = max(0, event.get("player_slots_used", 0) - 1)
+
+    if shed:
+        wl = event.setdefault(_waitlist_key(squad_type), [])
+        # _get_member_roles, not m["roles"] — members may still carry the legacy
+        # `role` string, and dropping it would silently strip a Squad Leader.
+        wl[:0] = [(m.get("name"), squad_type, None, 1,
+                   str(m.get("user_id")), m.get("name"), list(_get_member_roles(m)))
+                  for m, _ in shed]
+    displaced = [(str(m.get("user_id")), m.get("name"), n) for m, n in shed]
+
+    # No compaction here on purpose: growing a squad opens seats without leaving
+    # a gap, and shuffling seated players between squads for that would be
+    # gratuitous churn. _promote_player_waitlist fills the new room instead.
+    promoted = _promote_player_waitlist(event, user_assignments, squad_type)
+    _rebalance_squad_leaders(event, user_assignments)
+    return promoted, displaced
 
 
 def _player_remove_from_waitlist(event: dict, user_id) -> Optional[str]:
@@ -1351,7 +1196,7 @@ def build_event_summary_embed(event: dict, lang: str = "de") -> Embed:
     )
 
     used = event.get("player_slots_used", 0)
-    max_slots = event.get("max_player_slots", 0)
+    max_slots = player_capacity(event)
     embed.add_field(
         name=t("event.summary_players", lang),
         value=t("event.summary_slots_used", lang, used=used, max=max_slots),
@@ -1442,9 +1287,9 @@ def format_event_details(event: dict, lang: str = "de",
             embed.add_field(name=t("embed.reminder", lang),
                             value=t("embed.reminder_value", lang, minutes=reminder_minutes), inline=True)
 
-    # Slot overview
-    server_cap = event.get("server_max_players", 100)
-    inf_size = event.get("infantry_squad_size", 6)
+    # Slot overview — the configured composition is the capacity
+    server_cap = player_capacity(event) + event.get("max_caster_slots", 2)
+    inf_size = _default_infantry_size(event)
     veh_size = event.get("vehicle_squad_size", 2)
     heli_size = event.get("heli_squad_size", 1)
     max_vehicles = event.get("max_vehicle_squads", 6)
@@ -1462,13 +1307,7 @@ def format_event_details(event: dict, lang: str = "de",
     heli_count = sum(1 for d in squads_all.values() if d.get("type") == "heli")
     infantry_count = sum(1 for d in squads_all.values() if d.get("type") == "infantry")
 
-    vehicle_player_slots = max_vehicles * veh_size
-    heli_player_slots = max_helis * heli_size
-    infantry_player_slots = max(0, server_cap - max_casters - vehicle_player_slots - heli_player_slots)
-    max_inf_squads = infantry_player_slots // inf_size if inf_size > 0 else 0
-    # Squad count is always even so both teams get the same number of squads.
-    max_inf_squads = _even_infantry_max(max_inf_squads)
-    unused = server_cap - max_casters - (max_inf_squads * inf_size) - vehicle_player_slots - heli_player_slots
+    max_inf_squads = _max_squads_for_type(event, "infantry")
 
     is_player_mode = event.get("mode") == "player"
     playstyle_enabled = event.get("playstyle_enabled", True)
@@ -1478,16 +1317,10 @@ def format_event_details(event: dict, lang: str = "de",
 
     # Slot overview — compact inline grid (row 1: server, caster, max/player)
     overview_name_key = "embed.seats_overview" if is_player_mode else "embed.server_overview"
-    if dont_waste_slots_active(event):
-        # Only the residual that no oversized squad can absorb anymore counts
-        # as unused while the mode is active.
-        unused = infantry_wasted_seats(event)
-    if unused > 0:
-        overview_value = t("embed.server_overview_value", lang,
-                           cap=server_cap, free=available, unused=unused)
-    else:
-        overview_value = t("embed.server_overview_value_no_unused", lang,
-                           cap=server_cap, free=available)
+    # No "unused" counter any more: the composition IS the capacity, so there is
+    # no remainder left over to waste.
+    overview_value = t("embed.server_overview_value_no_unused", lang,
+                       cap=server_cap, free=available)
     embed.add_field(name=t(overview_name_key, lang), value=overview_value, inline=True)
     if not is_player_mode:
         embed.add_field(name=t("embed.max_per_user_label", lang, count=max_squads_user), value="\u200b", inline=True)
@@ -1512,43 +1345,23 @@ def format_event_details(event: dict, lang: str = "de",
         size_label = "Größe" if lang == "de" else "Size"
         size_info = f"{size_label}: {size}"
         if type_key == "infantry":
-            # Oversized sizes (don't-waste mode) stay permanently visible in
-            # the header, shown like the squad counts: (registered/possible).
-            oversized_counts = {}
-            base_count = 0
+            # One (registered/configured) counter per configured size.
+            registered = {}
             for d in squad_group.values():
                 sq_size = d.get("size", size)
-                if sq_size > size:
-                    oversized_counts[sq_size] = oversized_counts.get(sq_size, 0) + 1
-                else:
-                    base_count += 1
-            totals = {}
-            base_remaining = 0
-            if is_player_mode and dont_waste_slots_active(event):
-                # Player mode: capacities are pre-planned by the bot, so the
-                # header shows the planned layout instead of registrant choices.
-                layout = planned_infantry_capacities(event)
-                base_remaining = max(0, layout.count(size) - base_count)
-                for cap_size in layout:
-                    if cap_size > size:
-                        totals[cap_size] = totals.get(cap_size, 0) + 1
-            else:
-                for opt_size, remaining in infantry_size_options(event):
-                    if opt_size == size:
-                        base_remaining = remaining
-                    else:
-                        totals[opt_size] = oversized_counts.get(opt_size, 0) + remaining
-            for opt_size, n in oversized_counts.items():
-                # Exhausted sizes (or leftovers after disabling the mode) stay visible.
-                totals.setdefault(opt_size, n)
-            if totals:
-                # With mixed sizes, the base size gets the same counter as the
-                # oversized entries; without them it would just repeat count/max.
-                size_info = (f"({base_count}/{base_count + base_remaining}) "
-                             f"{size_label}: {size}")
-            for opt_size in sorted(totals):
-                size_info += (f" | ({oversized_counts.get(opt_size, 0)}/{totals[opt_size]}) "
-                              f"{size_label}: {opt_size}")
+                registered[sq_size] = registered.get(sq_size, 0) + 1
+            totals = dict(infantry_composition(event))
+            for sq_size, n in registered.items():
+                # A size with no quota (an admin-resized squad) stays visible
+                # rather than vanishing from the header.
+                totals[sq_size] = max(totals.get(sq_size, 0), n)
+            if len(totals) > 1:
+                size_info = " | ".join(
+                    f"({registered.get(s, 0)}/{totals[s]}) {size_label}: {s}"
+                    for s in sorted(totals))
+            elif totals:
+                # A single size would only repeat the type's own count/max.
+                size_info = f"{size_label}: {next(iter(totals))}"
         name = t("embed.type_" + type_key, lang) + f" ({count}/{max_count}) [{size_info}]"
         if squad_group:
             text = ""

@@ -43,7 +43,7 @@ Use this mode for pick-up matches or community seat-filling events where individ
 | Registration UI | Squad name modal + playstyle picker | Type + optional role picker; Discord display name used |
 | Slot overview label | "🖥️ Server — 100 slots" | "📋 Seats — 17 slots" |
 | Admin-add | Add Squad (name + rep + playstyle) | Add Player (multi-select users + type + optional roles) |
-| Don't waste slots | Registrants pick an oversized squad size | Bot pre-plans squad capacities automatically |
+| Squad composition | Registrants pick one of the configured sizes | Bot fills the configured squads in order |
 
 ---
 
@@ -140,7 +140,7 @@ Use `/config_defaults` to edit server-wide default values for event creation via
 Use `/create_event` to start event creation. The bot replies with a message that explains both modes side by side; pick one with a button:
 
 - **🪖 Representative mode** — runs the full wizard below.
-- **🎮 Player mode** — skips the caster-roles step and the max-squads-per-user step, forces `max_caster_slots = 0`, and relabels "Server max players" to "Total seats".
+- **🎮 Player mode** — skips the caster-roles step and the max-squads-per-user step and forces `max_caster_slots = 0`.
 
 After you pick a mode, a multi-step wizard guides you through:
 
@@ -148,18 +148,21 @@ After you pick a mode, a multi-step wizard guides you through:
 - Event name, date, time, description
 - Registration start time (date/time or "now"/"sofort" for immediately)
 
-**Step 2 — Server Configuration (Modal):**
-- Server max players (rep mode) or Total seats (player mode), max caster slots (0 = casters disabled, and forced to 0 in player mode — the field is hidden), squad sizes (Infantry / Vehicle / Heli, each 1–9 — the in-game squad limit), max vehicle squads, max heli squads
+**Step 2 — Infantry composition:**
+- Pick a squad size, then how many squads of that size. Pick another size to add it — the step shows the running composition and seat total. See the composition section below.
+
+**Step 3 — Vehicle and heli squads:**
+- Count and size for each, all dropdowns. Skip keeps your server defaults.
 - All pre-filled from server defaults (`/config_defaults`)
 
-**Step 3 — Registration Roles:**
+**Step 4 — Registration Roles:**
 - Roles allowed to register — roles whose members may register squads / join (role gate, enforced during registration)
 - Roles with early access — roles whose members may register **before** registration opens
 - Notify on open — whether to @-mention these roles when registration opens (only asked when registration isn't opening immediately)
 
 > These two are **roles only** — individual users can't be selected here (casters, in Step 5, still allow users).
 
-**Step 4 — Slot Limits (only shown when a registration role is configured):**
+**Step 5 — Slot Limits (only shown when a registration role is configured):**
 
 Optionally cap how much each registration group may take. Casters never count, and percentages are of the player slots only. Members who exceed their group's cap are rejected with a message.
 - Early-access roles — max **% of player slots** (all early-access roles share this quota)
@@ -170,21 +173,18 @@ The two early-access caps (% and squads per role) apply **only until registratio
 
 Player mode shows only the early-access % cap.
 
-**Step 5 — Caster Roles (rep mode only — skipped in player mode):**
+**Step 6 — Caster Roles (rep mode only — skipped in player mode):**
 - Caster roles/users — Who can register as caster (role gate)
 - Caster early-access roles/users — Who can register as caster **before** registration opens
 - Ping on open toggle
 
-**Step 6 — Timing:**
+**Step 7 — Timing:**
 - Event reminder — Notification X minutes before event start (0 = disabled)
 - Registration countdown — Message sent X seconds before registration opens (auto-deleted when registration starts)
 
-**Step 7 — Playstyle & Squad Limit (rep mode) / Role selection (player mode):**
+**Step 8 — Playstyle & Squad Limit (rep mode) / Role selection (player mode):**
 - *Rep mode:* Playstyle selection — whether squads pick a playstyle when registering. Plus max squads per user (1–20) — only asked here when **no** registration-role gate is set; when a gate is configured, this is set in Step 4 (Slot Limits) instead.
 - *Player mode:* Role selection — whether players may pick an in-squad role (Squad Leader, Medic, Pilot, …) when registering. **When disabled, there is no role dropdown and roles are not shown in the embed.** Default: enabled. Can also be changed later via the DM editor.
-
-**Step 8 — Don't waste slots** *(only shown when the slot math leaves at least 2 unused seats)*:
-- The number of infantry squads is **always kept even** so both teams get the same count (see slot calculation below). When this step is enabled, the unused seats — the remainder plus, with an odd raw cap, the dropped squad's seats — can be absorbed by **oversized squads**. Offered are always the sizes that use the free seats with **as few oversized squads as possible** (least waste first, then fewest squads, bigger squads preferred): with 4 unused seats and squad size 6 that's one 8er pair (not two 7er pairs); with 8 unused seats a 9er pair plus a 7er pair. Oversized squads never exceed **9 players** — the in-game squad limit. The creator can additionally **restrict which oversized sizes are allowed** (e.g. only 7-player squads, or 7 and 8 but no 9) via a second dropdown in this step; default is all possible sizes. A third dropdown **caps the total number of oversized squads** (even values — they come in pairs; default: unlimited); the plan then absorbs as many seats as it can within that cap and the rest counts as unused. Oversized squads always come in **equal numbers per size** so organizers can mirror them across two teams — each offered size's complete **pair** fits the remaining unused seats, with the remaining count shown next to each option (e.g. 8 leftover seats: after a 9-player pair, a 7-player pair is offered for the remaining 2). If an oversized squad unregisters, its size is re-offered until the pair is complete again. Leftover seats that can't form a pair anymore stay unused and reappear as the "Unused" counter. That counter is only shown when there actually are wasted slots ("Unused: 0" is never displayed), and every size is permanently visible in the infantry field header with its own registered/possible counter — e.g. `⚔️ Infantry (1/16) [(0/14) Size: 6 | (1/2) Size: 7]` — in addition to each squad row showing its own seat count. **Player mode:** the same toggle works there too — nobody picks sizes; instead the bot pre-plans the squad capacities (base squads first, the minimal oversized pairs as the last squads) and players simply fill them. Consolidation (event start / admin button) re-derives the cleanest paired layout from the actual player count (e.g. 88 players at size 6 → 12× 6 + one 8-player pair). Default: disabled. Can also be changed later via the DM editor (properties 23–25) — enabling it there is rejected with an error while there are no unused slots, or only a single one (a lone slot can never form a pair). The wizard step itself only appears when at least 2 unused slots exist. Full details, worked examples, and guarantees: [docs/dont-waste-slots.md](docs/dont-waste-slots.md).
 
 **Step 9 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel
@@ -201,7 +201,7 @@ Server: 100 slots
 - Unused: 2 slots
 ```
 
-The infantry squad count is always rounded down to an **even** number so both teams get the same count — if the raw math yields an odd cap (e.g. 15), the cap becomes 14 and the dropped squad's seats count as unused. With **Don't waste slots** enabled, unused slots are offered as oversized squads instead — in the example above, the 2 unused slots would allow one pair of 7-player infantry squads.
+Capacity is simply the sum of the configured squads plus the caster slots — nothing is derived from a server-wide total any more, so nothing can be left over. If the sum exceeds the guild's **capacity warning limit** (default 100, today's Squad server cap, configurable via `/config_defaults`), the wizard and the editor show a note — it is advisory and never blocks anything.
 
 ### Editing an Event via DM
 
@@ -214,31 +214,57 @@ Organizers can edit a running event via DM: Click **Edit Event** in the admin pa
 4. Description
 
 **Squad Config:**
-5. Server max players
+5. Infantry composition (`count × size` entries — pick a size, then how many)
 6. Max caster slots
 7. Max vehicle squads
 8. Max heli squads
-9. Infantry squad size
-10. Vehicle squad size
-11. Heli squad size
-12. Max squads per user
+9. Vehicle squad size
+10. Heli squad size
+11. Max squads per user
 
 **Extras:**
-13. Event reminder (minutes, 0 = disable)
-14. Registration start time
-15. Event image (upload an image or paste an HTTPS URL)
-16. Recurrence (how the event repeats — see below)
-17. Duration (event length; defaults to 2h)
-18. Recreate next event after (for recurring events: delay after the current event ends before the follow-up is created)
-19. Playstyle selection at registration (on/off)
-20. Slot limit: early access (% of player slots)
-21. Max squads per early-access role
-22. Role selection at registration (player mode, on/off)
-23. Don't waste slots (bigger squads, on/off)
-24. Allowed oversized sizes (comma-separated, e.g. "7, 8"; empty = all)
-25. Max. oversized squads (even number; empty/0 = unlimited)
+12. Event reminder
+13. Registration start time
+14. Event image (upload an image or paste an HTTPS URL)
+15. Recurrence (how the event repeats — see below)
+16. Duration (event length; defaults to 2h)
+17. Recreate next event after (for recurring events: delay after the current event ends before the follow-up is created)
+18. Playstyle selection at registration (on/off)
+19. Slot limit: early access (% of player slots)
+20. Max squads per early-access role
+21. Role selection at registration (player mode, on/off)
+
+Every numeric property is a **dropdown**, not a typed value — Discord has no
+slider or number field, so a picker of the valid values is the closest thing.
+Side benefit: values that used to need an error message (an odd squad count, a
+size above the in-game limit of 9) simply cannot be selected.
 
 There's no separate confirm step — each edit applies as soon as you make it.
+
+**Capacity changes take effect immediately (player mode).** Editing a squad size, the
+seat budget (5, 6) or the vehicle/heli squad caps (7, 8) re-fits the squads that already
+exist and re-runs the waitlist right away:
+
+- **Increasing** capacity resizes the existing squads and pulls waiting players into the
+  new seats, oldest waitlist entry first. They get a DM and the promotion is logged.
+- **Decreasing** capacity sheds the last-joined members of each affected squad. If the
+  squad cap itself shrinks, the surplus squads are dissolved entirely. Everyone who loses
+  a seat is placed at the **front** of the waitlist — they were there before anyone
+  currently waiting — and is notified by DM. As long as the squad *count* stays the same,
+  a 6 → 8 → 6 round trip therefore restores the exact previous line-up; if the count
+  changes too, everyone keeps a seat but may end up in a different squad.
+- Anyone who is shed and immediately re-seated gets no DM — they never lost their spot.
+- **Shrinks ask first.** If an edit would leave players without a seat, the editor shows a
+  confirmation listing how many are affected and who, with Confirm/Cancel — this is the one
+  property edit that does not apply immediately. The list is a snapshot: if people register
+  or unregister while the prompt is open, confirming applies to whoever is seated at that
+  moment, not to the names shown. Edits that only add capacity, or that
+  re-seat everyone in differently sized squads, apply without a prompt.
+- An edit that would wipe out the infantry squads entirely (e.g. a seat budget too small for
+  a single squad) is refused outright, the same way disabling vehicle/heli squads is refused
+  while entries exist.
+
+Rep mode is unaffected: there a squad's size is what its rep signed up for.
 
 If your change would cause the next recurrence to fire during the current event (before `start + duration + spawn delay`), the edit is rejected with an explanation — shorten the event, increase the spawn delay, or pick a longer recurrence interval.
 

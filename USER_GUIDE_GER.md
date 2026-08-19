@@ -43,7 +43,7 @@ Dieser Modus eignet sich für Pick-up-Matches oder Community-Events, bei denen s
 | Anmelde-UI | Squad-Name-Modal + Spielstil | Typ + optionale Rolle, Discord-Anzeigename wird verwendet |
 | Slot-Übersicht-Label | „🖥️ Server — 100 Plätze" | „📋 Plätze — 17 Plätze" |
 | Admin-Hinzufügen | Squad hinzufügen (Name + Vertreter + Spielstil) | Spieler hinzufügen (Mehrfachauswahl Users + Typ + optionale Rollen) |
-| Slots nicht verschwenden | Anmelder wählen eine Übergröße | Bot plant die Squad-Kapazitäten automatisch |
+| Squad-Zusammenstellung | Anmelder wählen eine der konfigurierten Größen | Bot füllt die konfigurierten Squads der Reihe nach |
 
 ---
 
@@ -140,7 +140,7 @@ Mit `/config_defaults` können die Standardwerte für Event-Erstellung per DM-Di
 Verwende `/create_event`, um ein Event zu erstellen. Der Bot antwortet mit einer Nachricht, die beide Modi nebeneinander erklärt; wähle einen per Button:
 
 - **🪖 Vertreter-Modus** — durchläuft den vollen Wizard unten.
-- **🎮 Spieler-Modus** — überspringt den Caster-Rollen-Schritt und den Max-Squads-pro-User-Schritt, setzt `max_caster_slots = 0` zwangsweise und beschriftet „Server Max Spieler" als „Plätze gesamt".
+- **🎮 Spieler-Modus** — überspringt den Caster-Rollen-Schritt und den Max-Squads-pro-User-Schritt und setzt `max_caster_slots = 0` zwangsweise.
 
 Nach der Modus-Wahl führt dich ein mehrstufiger Wizard durch:
 
@@ -148,18 +148,27 @@ Nach der Modus-Wahl führt dich ein mehrstufiger Wizard durch:
 - Event-Name, Datum, Uhrzeit, Beschreibung
 - Anmeldezeitpunkt (Datum/Uhrzeit oder „sofort"/„jetzt" für sofortige Öffnung)
 
-**Schritt 2 — Server-Konfiguration (Modal):**
-- Server Max Spieler (Vertreter-Modus) bzw. Plätze gesamt (Spieler-Modus), Max Caster (0 = Caster deaktiviert; im Spieler-Modus fest auf 0 gesetzt und ausgeblendet), Squad-Größen (Inf / Fahr / Heli, jeweils 1–9 — das Squad-Limit im Spiel), Max Fahrzeug-Squads, Max Heli-Squads
+**Schritt 2 — Infanterie-Zusammenstellung:**
+- Erst eine Squad-Größe wählen, dann wie viele Squads es davon geben soll. Für weitere Größen einfach die nächste Größe wählen — der Schritt zeigt laufend die Zusammenstellung und die Gesamtzahl der Plätze.
+- Die Infanterie eines Events ist eine Liste aus `Anzahl × Größe` — zum Beispiel 10 × 6, 2 × 7 und 4 × 8. Die **Gesamtkapazität ergibt sich daraus**: alle Squad-Plätze plus Fahrzeug- und Heli-Squads plus Caster-Slots. Es gibt keine separate Zahl „Server Max Spieler" mehr und damit auch keinen Verschnitt, keinen „Ungenutzt"-Zähler und nichts, was noch aufgefüllt werden müsste.
+- Die Anzahl wird per Dropdown gewählt und bietet **gerade** Werte an (plus `1` für Mini-Events). Gerade Anzahlen sind das, was die Spiegelung auf zwei gleich starke Teams erlaubt — weil nur gerade Werte angeboten werden, braucht diese Regel keine Fehlermeldung mehr. Anzahl `0` entfernt die Größe.
+- Größen reichen von 1 bis **9 Spielern** — das Squad-Limit im Spiel.
+- Jede Größe hat ihre **eigene, unabhängige Quote**. Ein angemeldetes 7er-Squad verbraucht nie Kapazität, die für die 6er gedacht war; eine Größe bleibt wählbar, bis ihre eigene Anzahl aufgebraucht ist. Der Infanterie-Header zeigt je Größe einen `(angemeldet/konfiguriert)`-Zähler — z. B. `⚔️ Infanterie (3/16) [(1/10) Größe: 6 | (1/2) Größe: 7 | (1/4) Größe: 8]`.
+- **Spieler-Modus:** niemand wählt eine Größe; der Bot legt die konfigurierten Squads in der eingetragenen Reihenfolge an und füllt sie auf.
+- Die Zusammenstellung lässt sich jederzeit über den DM-Editor ändern (Eigenschaft 5) und als guild-weiter Standard über `/config_defaults`.
+
+**Schritt 3 — Fahrzeug- und Heli-Squads:**
+- Anzahl und Größe für beide, alles per Dropdown. Überspringen übernimmt die Vorgaben deines Servers.
 - Alle Werte vorausgefüllt aus den Server-Standardwerten (`/config_defaults`)
 
-**Schritt 3 — Anmelde-Rollen:**
+**Schritt 4 — Anmelde-Rollen:**
 - Rollen mit Anmeldeberechtigung — Rollen, deren Mitglieder Squads anmelden dürfen / beitreten können (Rollen-Gate)
 - Rollen mit Vorab-Zugang — Rollen, deren Mitglieder **vor** Anmeldungsstart anmelden dürfen
 - Benachrichtigung bei Öffnung — Ob diese Rollen bei Anmeldungsstart per @-Erwähnung benachrichtigt werden (wird nur gefragt, wenn die Anmeldung nicht sofort öffnet)
 
 > Diese beiden sind **nur Rollen** — einzelne User können hier nicht ausgewählt werden (Caster in Schritt 5 erlauben weiterhin User).
 
-**Schritt 4 — Slot-Limits (nur sichtbar, wenn eine Anmelde-Rolle konfiguriert ist):**
+**Schritt 5 — Slot-Limits (nur sichtbar, wenn eine Anmelde-Rolle konfiguriert ist):**
 
 Begrenze optional, wie viel jede Anmeldegruppe belegen darf. Caster zählen nie mit, und Prozente beziehen sich nur auf die Spieler-Slots. Mitglieder, die das Limit ihrer Gruppe überschreiten, werden mit einer Meldung abgelehnt.
 - Rollen mit Vorab-Zugang — max. **% der Spieler-Slots** (alle Vorab-Rollen teilen sich dieses Kontingent)
@@ -170,24 +179,21 @@ Die beiden Vorab-Zugang-Limits (% und Squads pro Rolle) gelten **nur bis zur Öf
 
 Im Spieler-Modus wird nur das %-Limit für Vorab-Zugang angezeigt.
 
-**Schritt 5 — Caster-Rollen (nur Vertreter-Modus — im Spieler-Modus übersprungen):**
+**Schritt 6 — Caster-Rollen (nur Vertreter-Modus — im Spieler-Modus übersprungen):**
 - Caster Rollen/User — Wer sich als Caster anmelden darf (Rollen-Gate)
 - Caster-Early-Access Rollen/User — Wer sich als Caster **vor** Anmeldungsstart anmelden darf
 - Ping bei Öffnung
 
-**Schritt 6 — Timing:**
+**Schritt 7 — Timing:**
 - Event-Erinnerung — Benachrichtigung X Minuten vor Event-Start (0 = deaktiviert)
 - Countdown — Nachricht X Sekunden vor Anmeldungsstart (wird bei Öffnung automatisch gelöscht)
 
-**Schritt 7 — Spielstil & Squad-Limit (Vertreter-Modus) / Rollen-Auswahl (Spieler-Modus):**
+**Schritt 8 — Spielstil & Squad-Limit (Vertreter-Modus) / Rollen-Auswahl (Spieler-Modus):**
 - *Vertreter-Modus:* Spielstil-Auswahl — ob Squads bei der Anmeldung einen Spielstil wählen. Plus Max. Squads pro Spieler (1–20) — wird hier nur gefragt, wenn **keine** Anmelde-Rolle gesetzt ist; mit Rollen-Gate wird dies in Schritt 4 (Slot-Limits) festgelegt.
 - *Spieler-Modus:* Rollen-Auswahl — ob Spieler bei der Anmeldung eine Rolle im Squad (Squad Leader, Medic, Pilot, …) wählen können. **Ist sie deaktiviert, gibt es kein Rollen-Dropdown und im Embed werden keine Rollen angezeigt.** Standard: aktiviert. Kann später auch über den DM-Editor geändert werden.
 
-**Schritt 8 — Slots nicht verschwenden** *(erscheint nur, wenn die Slot-Berechnung mindestens 2 ungenutzte Plätze übrig lässt)*:
-- Die Anzahl der Infanterie-Squads ist **immer gerade**, damit beide Teams gleich viele Squads erhalten (siehe Slot-Berechnung unten). Wenn dieser Schritt aktiviert wird, können die ungenutzten Plätze — der Verschnitt plus bei ungerader Roh-Anzahl die Plätze des weggefallenen Squads — durch **übergroße Squads** genutzt werden. Angeboten werden immer die Größen, die die freien Plätze mit **möglichst wenigen übergroßen Squads** ausnutzen (erst geringste Verschwendung, dann wenigste Squads, größere bevorzugt): bei 4 ungenutzten Plätzen und Squad-Größe 6 also ein 8er-Paar (statt zwei 7er-Paaren); bei 8 ungenutzten Plätzen ein 9er-Paar plus ein 7er-Paar. Übergroße Squads haben nie mehr als **9 Spieler** — das Squad-Limit im Spiel. Der Ersteller kann zusätzlich **einschränken, welche Übergrößen erlaubt sind** (z. B. nur 7er-Squads, oder 7er und 8er, aber keine 9er) — über ein zweites Dropdown in diesem Schritt; Standard sind alle möglichen Größen. Ein drittes Dropdown **begrenzt die Gesamtzahl übergroßer Squads** (gerade Werte — sie entstehen paarweise; Standard: unbegrenzt); der Plan nutzt dann so viele Plätze wie innerhalb der Grenze möglich, der Rest zählt als ungenutzt. Übergroße Squads gibt es immer in **gleicher Anzahl pro Größe**, damit die Organisatoren beide Teams spiegeln können — das komplette **Paar** jeder angebotenen Größe passt in die verbleibenden freien Plätze, mit der verbleibenden Anzahl neben jeder Option (z. B. 8 freie Plätze: nach einem 9er-Paar wird für die restlichen 2 ein 7er-Paar angeboten). Meldet sich ein übergroßes Squad ab, wird seine Größe wieder angeboten, bis das Paar erneut vollständig ist. Plätze, die kein Paar mehr ergeben, bleiben ungenutzt und erscheinen wieder als „Ungenutzt"-Zähler. Dieser Zähler erscheint nur, wenn tatsächlich Plätze verschwendet werden („Ungenutzt: 0" wird nie angezeigt), und jede Größe ist dauerhaft im Infanterie-Feld-Header sichtbar, mit eigenem Belegt/Möglich-Zähler — z. B. `⚔️ Infanterie (1/16) [(0/14) Größe: 6 | (1/2) Größe: 7]` — jede Squad-Zeile zeigt weiterhin ihre eigene Platzzahl. **Spieler-Modus:** Derselbe Schalter funktioniert auch dort — niemand wählt Größen; stattdessen plant der Bot die Squad-Kapazitäten vor (erst Basis-Squads, die minimalen übergroßen Paare als letzte Squads) und die Spieler füllen sie einfach auf. Die Konsolidierung (Event-Start / Admin-Button) berechnet das sauberste gepaarte Layout aus der tatsächlichen Spielerzahl neu (z. B. 88 Spieler bei Größe 6 → 12× 6er + ein 8er-Paar). Standard: deaktiviert. Kann später auch über den DM-Editor geändert werden (Eigenschaften 23–25) — das Aktivieren wird dort mit einer Fehlermeldung abgelehnt, solange es keine ungenutzten Slots gibt oder nur ein einzelner ungenutzt ist (ein einzelner Slot kann nie ein Paar bilden). Der Wizard-Schritt selbst erscheint nur, wenn mindestens 2 Slots ungenutzt sind. Alle Details, Beispiele und Garantien: [docs/dont-waste-slots_GER.md](docs/dont-waste-slots_GER.md).
-
 **Schritt 9 — Bestätigung:**
-- Zusammenfassungs-Embed mit allen Einstellungen inkl. ungenutzter Slots — Bestätigen oder Abbrechen
+- Zusammenfassungs-Embed mit der Kapazitäts-Tabelle (`Anzahl × Größe` je Squad-Gruppe plus abgeleitete Gesamtzahl) — Bestätigen oder Abbrechen. Liegt die Summe über der Warngrenze, wird das angemerkt, blockiert aber nichts.
 
 Jeder Schritt kann übersprungen werden — ohne Auswahl werden die Server-Standardwerte verwendet. Rollen können auch nachträglich mit `/set_event_roles` konfiguriert werden.
 
@@ -201,7 +207,7 @@ Server: 100 Slots
 - Ungenutzt: 2 Slots
 ```
 
-Die Infanterie-Squad-Anzahl wird immer auf eine **gerade** Zahl abgerundet, damit beide Teams gleich viele Squads erhalten — ergäbe die Berechnung eine ungerade Anzahl (z. B. 15), wird auf 14 abgerundet und die Plätze des weggefallenen Squads zählen als ungenutzt. Mit aktiviertem **Slots nicht verschwenden** werden ungenutzte Slots stattdessen als übergroße Squads angeboten — im Beispiel oben würden die 2 ungenutzten Slots ein Paar 7er-Infanterie-Squads erlauben.
+Die Kapazität ist schlicht die Summe der konfigurierten Squads plus der Caster-Slots — nichts wird mehr aus einer Server-Gesamtzahl abgeleitet, also kann auch nichts übrig bleiben. Liegt die Summe über der **Warngrenze** der Guild (Standard 100, das heutige Squad-Server-Limit, einstellbar über `/config_defaults`), zeigen Wizard und Editor einen Hinweis — er ist rein informativ und blockiert nichts.
 
 ### Event per DM bearbeiten
 
@@ -214,31 +220,62 @@ Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Pan
 4. Beschreibung
 
 **Squad-Konfiguration:**
-5. Server max. Spieler
+5. Infanterie-Zusammenstellung (`Anzahl × Größe` — erst Größe wählen, dann Anzahl)
 6. Max. Caster-Slots
 7. Max. Fahrzeug-Squads
 8. Max. Heli-Squads
-9. Infanterie-Squad-Größe
-10. Fahrzeug-Squad-Größe
-11. Heli-Squad-Größe
-12. Max. Squads pro Spieler
+9. Fahrzeug-Squad-Größe
+10. Heli-Squad-Größe
+11. Max. Squads pro Spieler
 
 **Extras:**
-13. Event-Erinnerung (Minuten, 0 = deaktivieren)
-14. Anmeldezeitpunkt
-15. Event-Bild (Bild hochladen oder HTTPS-URL einfügen)
-16. Wiederholung (wie das Event zyklisch wiederkehrt — siehe unten)
-17. Eventdauer (Länge des Events; Standard 2 Std.)
-18. Folge-Event erstellen nach (bei Wiederholung: Verzögerung nach dem Ende, bis das nächste Event erstellt wird)
-19. Spielstil-Auswahl bei Anmeldung (an/aus)
-20. Slot-Limit: Vorab-Zugang (% der Spieler-Slots)
-21. Max. Squads pro Vorab-Zugang-Rolle
-22. Rollenauswahl bei Anmeldung (Spieler-Modus, an/aus)
-23. Slots nicht verschwenden (größere Squads, an/aus)
-24. Erlaubte Übergrößen (kommagetrennt, z. B. „7, 8"; leer = alle)
-25. Max. übergroße Squads (gerade Zahl; leer/0 = unbegrenzt)
+12. Event-Erinnerung
+13. Anmeldezeitpunkt
+14. Event-Bild (Bild hochladen oder HTTPS-URL einfügen)
+15. Wiederholung (wie das Event zyklisch wiederkehrt — siehe unten)
+16. Eventdauer (Länge des Events; Standard 2 Std.)
+17. Folge-Event erstellen nach (bei Wiederholung: Verzögerung nach dem Ende, bis das nächste Event erstellt wird)
+18. Spielstil-Auswahl bei Anmeldung (an/aus)
+19. Slot-Limit: Vorab-Zugang (% der Spieler-Slots)
+20. Max. Squads pro Vorab-Zugang-Rolle
+21. Rollenauswahl bei Anmeldung (Spieler-Modus, an/aus)
+
+Jede Zahl-Eigenschaft ist ein **Dropdown** statt eines Eingabefelds — Discord
+kennt weder Slider noch Zahlenfeld, ein Picker der gültigen Werte ist das
+Nächstliegende. Nebeneffekt: Werte, für die es früher eine Fehlermeldung gab
+(ungerade Squad-Anzahl, Größe über dem Spiel-Limit 9), lassen sich gar nicht
+mehr auswählen.
 
 Es gibt keinen separaten Bestätigungsschritt — jede Änderung greift sofort.
+
+**Kapazitätsänderungen wirken sofort (Spieler-Modus).** Wenn du eine Squad-Größe, das
+Platzbudget (5, 6) oder die Fahrzeug-/Heli-Squad-Anzahl (7, 8) änderst, werden die bereits
+bestehenden Squads sofort angepasst und die Warteliste neu abgearbeitet:
+
+- **Vergrößern** setzt die bestehenden Squads auf die neue Größe und zieht Wartende in die
+  neuen Plätze nach — der älteste Wartelisteneintrag zuerst. Sie bekommen eine DM, das
+  Nachrücken wird im Log-Kanal protokolliert.
+- **Verkleinern** entfernt die zuletzt hinzugekommenen Mitglieder der betroffenen Squads.
+  Sinkt die Squad-Anzahl selbst, werden die überzähligen Squads komplett aufgelöst. Wer
+  seinen Platz verliert, landet **ganz oben** auf der Warteliste — er war vor allen aktuell
+  Wartenden da — und wird per DM informiert. Solange sich die *Anzahl* der Squads nicht
+  ändert, stellt ein Wechsel 6 → 8 → 6 damit exakt die vorherige Aufstellung wieder her;
+  ändert sich auch die Anzahl, behält zwar jeder einen Platz, kann aber in einem anderen
+  Squad landen.
+- Wer verdrängt und sofort wieder gesetzt wird, bekommt keine DM — er hat seinen Platz nie
+  verloren.
+- **Verkleinern fragt nach.** Würde eine Änderung Spielern den Platz nehmen, zeigt der Editor
+  vorher eine Bestätigung mit Anzahl und Namen der Betroffenen sowie Bestätigen/Abbrechen —
+  die einzige Eigenschaft, die nicht sofort greift. Die Liste ist eine Momentaufnahme: melden
+  sich währenddessen Leute an oder ab, gilt beim Bestätigen der dann aktuelle Stand, nicht die
+  angezeigten Namen. Änderungen, die nur Kapazität hinzufügen
+  oder alle in anders geschnittenen Squads unterbringen, greifen ohne Rückfrage.
+- Eine Änderung, die die Infanterie-Squads komplett auflösen würde (z. B. ein Platzbudget, das
+  nicht mal für ein Squad reicht), wird abgelehnt — genau wie das Deaktivieren von
+  Fahrzeug-/Heli-Squads, solange dort Einträge existieren.
+
+Der Vertreter-Modus ist nicht betroffen: dort gilt die Größe, mit der sich der Vertreter
+angemeldet hat.
 
 Änderungen an Datum/Uhrzeit, Wiederholung, Eventdauer oder „Folge-Event erstellen nach" werden validiert — falls die nächste Wiederholung noch während des aktuellen Events (bis `Start + Dauer + Verzögerung`) fallen würde, wird die Änderung mit einer Erklärung abgelehnt. Verkürze das Event, reduziere die Verzögerung oder wähle einen längeren Wiederholungsrhythmus.
 

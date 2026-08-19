@@ -14,7 +14,7 @@ A Discord bot for managing squad-based events with interactive registration, wai
 - **Guided squad registration** — Step-by-step flow with dropdowns for squad type (Infantry/Vehicle/Heli) and playstyle (Casual/Normal/Focused) in rep mode; type + optional multi-role picker (Squad Leader, Medic, Pilot, …) in player mode. The role picker is itself toggleable by the event creator (like playstyle) — disable it and players pick no role and no roles show in the embed. Squad Leaders sort to the top of their squad and are routed into squads without an existing SL when capacity allows.
 - **Three squad types** — Infantry, Vehicle, and Heli squads with independent size and count limits
 - **Server slot calculation** — Automatic distribution of server capacity across all squad types and casters. The infantry squad cap is always even so both teams get the same count
-- **Don't waste slots** — Optional per-event mode that offers leftover seats as **oversized infantry squads in mirrored pairs** (equal numbers per size for two equal teams, at most 9 players, as few oversized squads as possible, optional size whitelist and squad-count cap). Reps pick the size at registration; in player mode the bot pre-plans squad capacities. See [docs/dont-waste-slots.md](docs/dont-waste-slots.md)
+- **Squad composition = capacity** — An event's infantry is configured as a list of `count × size` entries (e.g. 10 × 6, 2 × 7, 4 × 8). Total capacity is derived from it, so there are no leftover seats to manage. Each size carries its own independent quota; reps pick a size at registration, player mode fills the squads in configuration order
 - **Multi-squad support** — Configurable number of squads per player (1–20)
 - **Caster + squad simultaneously** — Players can register as caster AND with squads
 - **Role-based access control** — Squad-Rep, Community-Rep, and Caster roles/users restrict who can register (multi-select with roles and individual users)
@@ -104,32 +104,32 @@ Event creation uses a multi-step wizard:
 - Event name, date, time, description
 - Registration start time (date/time or "sofort"/"now" for immediately)
 
-**Step 2 — Modal (Server Configuration):**
-- Server max players, max caster slots (0 = casters disabled), squad sizes (Infantry / Vehicle / Heli, each 1–9), max vehicle squads, max heli squads
+**Step 2 — Infantry composition:**
+- Pick a squad size, then how many squads of it. Repeat for as many sizes as you want (e.g. 10 × 6, 2 × 7, 4 × 8) — the running seat total is shown as you go
+
+**Step 3 — Vehicle and heli squads:**
+- Count and size for each, all dropdowns
 - All pre-filled from server defaults (`/config_defaults`)
 
-**Step 3 — Squad Roles:**
+**Step 4 — Squad Roles:**
 - Squad-Rep roles/users — who can register squads (role gate)
 - Community-Rep roles/users — who can register before registration opens (early access)
 - Ping on open toggle
 
-**Step 4 — Caster Roles:**
+**Step 5 — Caster Roles (rep mode only):**
 - Caster roles/users — who can register as caster (role gate)
 - Caster early-access roles/users
 - Ping on open toggle
 
-**Step 5 — Timing:**
+**Step 6 — Timing:**
 - Event reminder (0–1440 minutes before event start)
 - Registration countdown (0–28800 seconds before registration opens)
 
-**Step 6 — Squad Limit:**
+**Step 7 — Squad Limit:**
 - Max squads per user (1–20)
 
-**Step 7 — Don't waste slots** (only when ≥ 2 slots stay unused):
-- Offer the leftover infantry seats as oversized squads — always in equal numbers per size so both teams can be mirrored; any size whose pair still fits the remaining seats is offered. The "Unused" counter only shows seats no pair can absorb anymore.
-
 **Step 8 — Confirmation:**
-- Summary embed with all settings including unused slots — confirm or cancel
+- Summary embed with the capacity table (`count × size` per squad group plus the derived total) — confirm or cancel. A total above the guild's capacity warning limit is flagged but never blocks.
 
 Each step can be skipped. Server defaults from `/config_defaults` are used as starting values.
 
@@ -143,17 +143,19 @@ Server: 100 slots
 - Unused: 2 slots
 ```
 
-The infantry squad count is always rounded down to an even number so both teams get the same count; an odd cap's dropped squad counts as unused. With **Don't waste slots** enabled, unused slots are offered as oversized squads — here, one pair of 7-player infantry squads.
+Capacity is the sum of the configured squads plus the caster slots — nothing is left over, so there is no "unused" figure. Counts are picked from a dropdown that offers even numbers (plus 1 for tiny events), which is how both teams keep the same number of squads of each size. If the total exceeds the guild's capacity warning limit (default 100, the current Squad server cap), the bot says so — but never blocks the event.
 
 ## DM Event Editing
 
 Organizers can edit a running event via DM by clicking **Edit Event** in the admin panel. The bot sends a grouped property list:
 
 **General:** Name, Date, Time, Description
-**Squad Config:** Server max players, Max caster slots, Max vehicle/heli squads, Infantry/vehicle/heli squad size, Max squads per user
+**Squad Config:** Infantry composition, Max caster slots, Max vehicle/heli squads, Vehicle/heli squad size, Max squads per user
 **Extras:** Event reminder, Registration start time, Event image, Recurrence, Duration, Spawn delay
 
 Each edit shows old → new value with a confirmation step. The event display updates automatically after each change. Edits to date/time, recurrence, duration, or spawn delay are validated — if the next recurrence would fire during the current event (start → end + spawn delay), the edit is rejected with a specific reason.
+
+In **player mode**, editing any capacity property (squad sizes, seat budget, vehicle/heli squad caps, don't-waste settings) re-fits the existing squads and re-runs the waitlist immediately: growing capacity promotes waiting players into the new seats, shrinking it sheds the last-joined members to the **front** of the waitlist. Both directions DM the affected players and write a log line. A shrink that would actually cost players their seat is gated behind a Confirm/Cancel prompt listing who is affected; one that would dissolve the infantry squads entirely is refused. Rep mode is unaffected.
 
 ## Recurring Events
 
@@ -294,8 +296,8 @@ On startup the log shows `Application emojis loaded: N`.
 | Setting | Default |
 |---|---|
 | Language | `de` |
-| Server max players | `100` |
-| Infantry squad size | `6` |
+| Infantry composition | `14 × 6` |
+| Capacity warning limit | `100` |
 | Vehicle squad size | `2` |
 | Heli squad size | `1` |
 | Max vehicle squads | `6` |
@@ -313,11 +315,11 @@ On startup the log shows `Application emojis loaded: N`.
     "date": "15.04.2026",
     "time": "20:00",
     "description": "Event description",
-    "server_max_players": 100,
-    "infantry_squad_size": 6,
+    # Capacity is derived from this: [[squad_size, how_many], ...].
+    # Stored as pairs, not {size: count} — JSON would make those keys strings.
+    "infantry_squads": [[6, 14]],
     "vehicle_squad_size": 2,
     "heli_squad_size": 1,
-    "max_player_slots": 98,
     "max_caster_slots": 2,
     "max_vehicle_squads": 6,
     "max_heli_squads": 2,

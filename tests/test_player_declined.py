@@ -37,14 +37,23 @@ import utils  # noqa: E402
 from i18n import t  # noqa: E402
 
 
+def _infantry_squads(seats, inf, veh, heli, max_veh, max_heli):
+    """Translate a legacy seat budget into the composition it used to imply, so
+    these fixtures keep expressing capacity the way the tests read best."""
+    inf_seats = max(0, seats - max_veh * veh - max_heli * heli)
+    count = inf_seats // inf if inf else 0
+    if count >= 2:
+        count -= count % 2
+    return [[inf, count]]
+
+
 def _make_event(inf=6, heli=1, max_heli=1):
     return {
         "name": "Test Event",
         "date": "01.01.2099",
         "time": "20:00",
         "mode": "player",
-        "max_player_slots": 17,
-        "infantry_squad_size": inf,
+        "infantry_squads": _infantry_squads(17, inf, 2, heli, 2, max_heli),
         "vehicle_squad_size": 2,
         "heli_squad_size": heli,
         "max_vehicle_squads": 2,

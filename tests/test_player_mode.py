@@ -34,12 +34,21 @@ except ImportError:
 import utils  # noqa: E402
 
 
+def _infantry_squads(seats, inf, veh, heli, max_veh, max_heli):
+    """Translate a legacy seat budget into the composition it used to imply, so
+    these fixtures keep expressing capacity the way the tests read best."""
+    inf_seats = max(0, seats - max_veh * veh - max_heli * heli)
+    count = inf_seats // inf if inf else 0
+    if count >= 2:
+        count -= count % 2
+    return [[inf, count]]
+
+
 def _make_event(seats=17, inf=6, veh=2, heli=1, max_veh=2, max_heli=1):
     veh_slots = max_veh * veh
     heli_slots = max_heli * heli
     return {
-        "max_player_slots": seats,
-        "infantry_squad_size": inf,
+        "infantry_squads": _infantry_squads(seats, inf, veh, heli, max_veh, max_heli),
         "vehicle_squad_size": veh,
         "heli_squad_size": heli,
         "max_vehicle_squads": max_veh,

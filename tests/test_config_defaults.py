@@ -49,11 +49,13 @@ class TestGuildEditPropertiesTable(unittest.TestCase):
                 self.assertNotIn("missing", val,
                                  f"label key '{label_key}' missing for lang={lang}")
 
-    def test_vtypes_subset_of_valid(self):
-        allowed = {"int", "int_zero", "bool"}
+    def test_every_vtype_has_an_editor(self):
+        """A vtype with no editor silently falls through to the free-text modal,
+        which is exactly what the dropdowns replaced — pin it."""
+        handled = set(bot._NUMERIC_PRESETS) | {"bool", "composition"}
         for num, key, label_key, vtype, special in bot._GUILD_EDIT_PROPERTIES:
-            self.assertIn(vtype, allowed,
-                          f"key '{key}' has unexpected vtype '{vtype}'")
+            self.assertIn(vtype, handled,
+                          f"key '{key}' has no editor for vtype '{vtype}'")
 
     def test_special_all_none(self):
         for num, key, label_key, vtype, special in bot._GUILD_EDIT_PROPERTIES:
@@ -100,10 +102,10 @@ class TestGuildTargetLoad(unittest.TestCase):
 
     def test_load_returns_saved_settings(self):
         settings = dict(DEFAULT_GUILD_SETTINGS)
-        settings["server_max_players"] = 200
+        settings["infantry_squads"] = [[6, 10], [8, 4]]
         save_guild_settings(GUILD_ID, settings)
         obj = bot._GUILD_TARGET.load(GUILD_ID, 0, None)
-        self.assertEqual(obj["server_max_players"], 200)
+        self.assertEqual(obj["infantry_squads"], [[6, 10], [8, 4]])
 
 
 class TestPersistGuildEdit(unittest.TestCase):
@@ -127,15 +129,15 @@ class TestPersistGuildEdit(unittest.TestCase):
         return next(p for p in bot._GUILD_EDIT_PROPERTIES if p[1] == key)
 
     def test_happy_path_ok_and_reloads(self):
-        prop = self._prop("server_max_players")
+        prop = self._prop("max_caster_slots")
         # Stub bot.get_guild → None to skip log channel
         with patch.object(bot.bot, "get_guild", return_value=None):
             status, payload = _run(
-                bot._persist_guild_edit(GUILD_ID, prop, 150, "en", "tester"))
+                bot._persist_guild_edit(GUILD_ID, prop, 5, "en", "tester"))
         self.assertEqual(status, "ok")
         self.assertIsNone(payload)
         reloaded = get_guild_settings(GUILD_ID)
-        self.assertEqual(reloaded["server_max_players"], 150)
+        self.assertEqual(reloaded["max_caster_slots"], 5)
 
     def test_max_vehicle_squads_zero_succeeds_for_defaults(self):
         """max_vehicle_squads=0 must succeed for guild defaults (no event guard)."""
@@ -147,9 +149,9 @@ class TestPersistGuildEdit(unittest.TestCase):
         reloaded = get_guild_settings(GUILD_ID)
         self.assertEqual(reloaded["max_vehicle_squads"], 0)
 
-    def test_server_max_players_zero_returns_error(self):
-        """int type: 0 is below min=1 → error."""
-        prop = self._prop("server_max_players")
+    def test_squads_per_user_zero_returns_error(self):
+        """A per-user squad limit of 0 would lock everyone out → below min=1."""
+        prop = self._prop("max_squads_per_user")
         with patch.object(bot.bot, "get_guild", return_value=None):
             status, payload = _run(
                 bot._persist_guild_edit(GUILD_ID, prop, 0, "en", "tester"))
@@ -157,7 +159,7 @@ class TestPersistGuildEdit(unittest.TestCase):
         self.assertIsNotNone(payload)
         # Value must NOT have been saved
         reloaded = get_guild_settings(GUILD_ID)
-        self.assertNotEqual(reloaded["server_max_players"], 0)
+        self.assertNotEqual(reloaded["max_squads_per_user"], 0)
 
     def test_negative_int_zero_returns_error(self):
         """int_zero type: negative values are rejected."""

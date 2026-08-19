@@ -42,7 +42,7 @@ class _Guild:
 def _event(**over):
     ev = {
         "mode": "rep",
-        "max_player_slots": 98,
+        "infantry_squads": [[7, 14]],  # 98 seats
         "squad_rep_role_ids": [REG],
         "community_rep_role_ids": [EARLY],
         "community_rep_cap_percent": None,
@@ -144,7 +144,7 @@ class TestCapUsageStrings(unittest.TestCase):
 
     def test_seat_cap_usage(self):
         # 4 seats used of 98 → 4%, cap 50%.
-        ev = _event(community_rep_cap_percent=50, max_player_slots=98, squads={"s1": {"size": 4}})
+        ev = _event(community_rep_cap_percent=50, squads={"s1": {"size": 4}})
         guild = _Guild({10: _Member([EARLY])})
         self.assertEqual(bot._seat_cap_usage(ev, {"10": ["s1"]}, guild, _Member([EARLY])), "4%/50%")
         # None when uncapped / open / ungrouped.
@@ -165,7 +165,7 @@ class TestCapUsageStrings(unittest.TestCase):
         self.assertIsNone(bot._squad_role_cap_usage(_event(), {}, _Guild({}), _Member([EARLY])))
 
     def test_check_returns_usage_on_block(self):
-        ev = _event(community_rep_cap_percent=5, max_player_slots=98, squads={"s1": {"size": 4}})
+        ev = _event(community_rep_cap_percent=5, squads={"s1": {"size": 4}})
         ua = {"10": ["s1"]}
         guild = _Guild({10: _Member([EARLY])})
         ok, key, usage = bot._check_seat_cap(ev, ua, guild, _Member([EARLY]), 1)
