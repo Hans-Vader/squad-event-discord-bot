@@ -6359,24 +6359,34 @@ async def _advance_to_confirmation(current, interaction):
 
 
 def _capacity_table(event: dict, lang: str) -> str:
-    """The capacity table — every squad group with its seats, then the total.
+    """The capacity table — every squad group with its count and seats, then the total.
+
+    Every group gets a row even at zero. Hiding empty groups made a deliberate
+    "no casters" indistinguishable from a missing figure, and made rows appear
+    and vanish under the organizer while they were still configuring.
 
     Rendered in a code block, so it uses the plain `squad.label_*` names rather
     than the emoji-prefixed `embed.type_*` ones: emoji have no fixed width in a
     monospace block and would knock the columns out of line.
     """
     rows = []   # (label, "n × size", seats)
-    for i, (size, count) in enumerate(infantry_composition(event)):
-        label = t("squad.label_infantry", lang) if i == 0 else ""
-        rows.append((label, f"{count} × {size}", count * size))
+    composition = infantry_composition(event)
+    if composition:
+        for i, (size, count) in enumerate(composition):
+            label = t("squad.label_infantry", lang) if i == 0 else ""
+            rows.append((label, f"{count} × {size}", count * size))
+    else:
+        rows.append((t("squad.label_infantry", lang), "0", 0))
     for count_key, size_key, type_key in (("max_vehicle_squads", "vehicle_squad_size", "vehicle"),
                                           ("max_heli_squads", "heli_squad_size", "heli")):
         count, size = event.get(count_key, 0), event.get(size_key, 0)
-        if count:
-            rows.append((t(f"squad.label_{type_key}", lang), f"{count} × {size}", count * size))
+        rows.append((t(f"squad.label_{type_key}", lang),
+                     f"{count} × {size}" if count else "0", count * size))
     casters = event.get("max_caster_slots", 0)
-    if casters:
-        rows.append((t("embed.casters", lang), "", casters))
+    if not is_player_mode(event):
+        # Casters have no squad size, so their count goes in the count column —
+        # an empty cell there reads as a missing figure.
+        rows.append((t("embed.casters", lang), str(casters), casters))
 
     total = player_capacity(event) + casters
     label_w = max([len(r[0]) for r in rows] + [len(t("wizard.summary_total", lang))])
@@ -6471,7 +6481,9 @@ def _build_confirmation_embed(event: dict, guild_id: int, settings: dict = None)
     warning = capacity_warning(event, settings or DEFAULT_GUILD_SETTINGS, lang)
     if warning:
         server_info += f"\n{warning}"
-    embed.add_field(name=t("wizard.summary_server", lang), value=server_info, inline=False)
+    # "Server-Einstellungen" no longer fits — the field holds the capacity
+    # breakdown. `wizard.server_capacity` already existed and was unused.
+    embed.add_field(name=t("wizard.server_capacity", lang), value=server_info, inline=False)
 
     none_text = t("wizard.summary_none", lang)
 

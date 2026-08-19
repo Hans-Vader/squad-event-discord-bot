@@ -772,6 +772,65 @@ class WizardTextQualityTest(unittest.TestCase):
             self.assertNotRegex(doc, r"^Step \d", name)
 
 
+class CapacityTableTest(unittest.TestCase):
+    """The table is the capacity breakdown — a group missing from it reads as a
+    missing figure, not as a zero."""
+
+    def _event(self, **kw):
+        return database.build_default_event(
+            dict(database.DEFAULT_GUILD_SETTINGS), "C", "01.01.2030", "20:00", **kw)
+
+    def _rows(self, event):
+        return [l for l in botmod._capacity_table(event, "de").strip("`\n").splitlines()
+                if l and not l.startswith("─")]
+
+    def test_every_group_has_a_row_even_at_zero(self):
+        """Hiding empty groups made a deliberate 'no casters' indistinguishable
+        from a figure that was simply absent."""
+        event = self._event(mode="rep", max_caster_slots=0,
+                            max_vehicle_squads=0, max_heli_squads=0)
+        rows = self._rows(event)
+        for label in ("Infanterie", "Fahrzeug", "Heli", "Caster"):
+            self.assertTrue(any(r.startswith(label) for r in rows), f"{label} missing\n" + "\n".join(rows))
+
+    def test_the_caster_row_states_its_count(self):
+        event = self._event(mode="rep", max_caster_slots=3)
+        caster_row = next(r for r in self._rows(event) if r.startswith("Caster"))
+        self.assertIn("3", caster_row)
+        # count column and seats column, not one lonely number in the seats column
+        self.assertEqual(caster_row.split(), ["Caster", "3", "3"])
+
+    def test_zero_casters_shows_a_zero_rather_than_vanishing(self):
+        caster_row = next(r for r in self._rows(self._event(mode="rep", max_caster_slots=0))
+                          if r.startswith("Caster"))
+        self.assertEqual(caster_row.split(), ["Caster", "0", "0"])
+
+    def test_player_mode_has_no_caster_row_at_all(self):
+        """There casters are not zero — they do not exist as a concept."""
+        rows = self._rows(self._event(mode="player", max_caster_slots=0))
+        self.assertFalse(any(r.startswith("Caster") for r in rows))
+
+    def test_rows_do_not_appear_and_vanish_while_configuring(self):
+        """Stable rows: setting a group to 0 in the wizard must not make the
+        table jump under the organizer."""
+        full = self._rows(self._event(mode="rep"))
+        emptied = self._rows(self._event(mode="rep", max_vehicle_squads=0, max_heli_squads=0))
+        self.assertEqual(len(full), len(emptied))
+
+    def test_an_empty_infantry_composition_still_shows_the_group(self):
+        event = self._event(mode="rep")
+        event["infantry_squads"] = []
+        self.assertTrue(any(r.startswith("Infanterie") for r in self._rows(event)))
+
+    def test_the_total_matches_the_rows(self):
+        for kw in ({"mode": "rep"}, {"mode": "rep", "max_caster_slots": 0},
+                   {"mode": "player", "max_caster_slots": 0}):
+            event = self._event(**kw)
+            rows = self._rows(event)
+            seats = sum(int(r.split()[-1]) for r in rows[:-1])
+            self.assertEqual(int(rows[-1].split()[-1]), seats, kw)
+
+
 class I18nKeyTest(unittest.TestCase):
 
     def test_new_keys_exist_in_both_languages(self):

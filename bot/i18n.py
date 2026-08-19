@@ -2091,10 +2091,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Caster Vorab-Zugang",
         "en": "Caster early access",
     },
-    "wizard.summary_server": {
-        "de": "Server-Einstellungen",
-        "en": "Server settings",
-    },
     "wizard.summary_none": {
         "de": "Keine",
         "en": "None",
