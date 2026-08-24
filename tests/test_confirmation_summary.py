@@ -27,7 +27,7 @@ def _event(**over):
         "server_max_players": 100, "max_caster_slots": 2,
         "infantry_squad_size": 6, "vehicle_squad_size": 2, "heli_squad_size": 1,
         "max_vehicle_squads": 2, "max_heli_squads": 1, "max_squads_per_user": 1,
-        "event_reminder_minutes": None, "playstyle_enabled": True,
+        "event_reminder_minutes": None,
         "recurrence": {"type": "every_weeks", "interval": 1},
         "duration_minutes": 120, "spawn_offset_minutes": 5,
         "community_rep_role_ids": [100], "community_rep_user_ids": [],

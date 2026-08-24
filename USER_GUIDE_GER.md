@@ -19,13 +19,13 @@ Events werden in einem von zwei Modi erstellt, ausgewählt bei der Erstellung. D
 
 ### Vertreter-Modus (Standard)
 
-Das klassische Verhalten. Jede Anmeldung ist ein **Squad** mit Name, Typ, Spielstil und einem Discord-User als Vertreter. Eine Anmeldung belegt `squad_size` Plätze (z.B. 6 für Infanterie, 2 für Fahrzeug, 1 für Heli). Ein User kann **mehrere Squads** anmelden (bis zum konfigurierten Limit). Caster melden sich separat an.
+Das klassische Verhalten. Jede Anmeldung ist ein **Squad** mit Name, Typ und einem Discord-User als Vertreter. Eine Anmeldung belegt `squad_size` Plätze (z.B. 6 für Infanterie, 2 für Fahrzeug, 1 für Heli). Ein User kann **mehrere Squads** anmelden (bis zum konfigurierten Limit). Caster melden sich separat an.
 
-Dieser Modus passt, wenn Squad-Leads ihre eigenen Teams koordinieren und der Organisator Squad-spezifische Informationen (Spielstil, Vertretername) benötigt.
+Dieser Modus passt, wenn Squad-Leads ihre eigenen Teams koordinieren und der Organisator Squad-spezifische Informationen (Squad-Name, Vertretername) benötigt.
 
 ### Spieler-Modus
 
-Jede Anmeldung ist ein **einzelner Spieler** — nur der User selbst. Der Bot weist Spieler automatisch Squads zu, in der Reihenfolge der Anmeldung: Die ersten 6 Infanterie-Anmeldungen bilden „Infantry 1", die nächsten 6 „Infantry 2", usw. Beim Event-Start — oder jederzeit manuell durch die Orga über das Admin-Panel — legt der Bot teilweise gefüllte Squads zusammen und entfernt leere Squads, damit die Übersicht kompakt bleibt. Jeder Spieler kann zusätzlich eine **optionale Rolle im Squad** (Squad Leader, Medic, Pilot, …) wählen — die Rolle erscheint hinter dem Namen im Event-Embed, und Squad Leader werden ans obere Ende ihres Squads sortiert. Kein Spielstil, kein Squad-Name, keine Caster-Rolle. **Ein User = eine Anmeldung.**
+Jede Anmeldung ist ein **einzelner Spieler** — nur der User selbst. Der Bot weist Spieler automatisch Squads zu, in der Reihenfolge der Anmeldung: Die ersten 6 Infanterie-Anmeldungen bilden „Infantry 1", die nächsten 6 „Infantry 2", usw. Beim Event-Start — oder jederzeit manuell durch die Orga über das Admin-Panel — legt der Bot teilweise gefüllte Squads zusammen und entfernt leere Squads, damit die Übersicht kompakt bleibt. Jeder Spieler kann zusätzlich eine **optionale Rolle im Squad** (Squad Leader, Medic, Pilot, …) wählen — die Rolle erscheint hinter dem Namen im Event-Embed, und Squad Leader werden ans obere Ende ihres Squads sortiert. Kein Squad-Name, keine Caster-Rolle. **Ein User = eine Anmeldung.**
 
 Dieser Modus eignet sich für Pick-up-Matches oder Community-Events, bei denen sich Einzelpersonen anmelden und die Squad-Zusammensetzung egal ist.
 
@@ -33,16 +33,15 @@ Dieser Modus eignet sich für Pick-up-Matches oder Community-Events, bei denen s
 
 | Aspekt | Vertreter-Modus | Spieler-Modus |
 |---|---|---|
-| Was wird angemeldet | Ein Squad (Name + Typ + Spielstil) | Ein einzelner Spieler |
+| Was wird angemeldet | Ein Squad (Name + Typ) | Ein einzelner Spieler |
 | Wer meldet an | Ein Vertreter für sein Squad | Jeder Spieler für sich selbst |
 | Slots pro Anmeldung | `squad_size` (z.B. 6) | 1 |
 | Mehrere Anmeldungen pro User | Bis zum Limit | Immer 1 |
-| Spielstil-Auswahl | Ja | Nein |
 | Rollen-Auswahl im Squad | Nein | Optionale Mehrfachauswahl (Squad Leader, Medic, Pilot, …) |
 | Caster | Konfigurierbar | Deaktiviert |
-| Anmelde-UI | Squad-Name-Modal + Spielstil | Typ + optionale Rolle, Discord-Anzeigename wird verwendet |
+| Anmelde-UI | Typ-Auswahl + Squad-Name-Modal | Typ + optionale Rolle, Discord-Anzeigename wird verwendet |
 | Slot-Übersicht-Label | „🖥️ Server — 100 Plätze" | „📋 Plätze — 17 Plätze" |
-| Admin-Hinzufügen | Squad hinzufügen (Name + Vertreter + Spielstil) | Spieler hinzufügen (Mehrfachauswahl Users + Typ + optionale Rollen) |
+| Admin-Hinzufügen | Squad hinzufügen (Name + Vertreter) | Spieler hinzufügen (Mehrfachauswahl Users + Typ + optionale Rollen) |
 | Slots nicht verschwenden | Anmelder wählen eine Übergröße | Bot plant die Squad-Kapazitäten automatisch |
 
 ---
@@ -56,9 +55,8 @@ Es gibt zwei Wege, einen Squad anzumelden:
 **Per Button (empfohlen):**
 1. Klicke auf **Squad** (🪖) in der Event-Anzeige
 2. Wähle den Squad-Typ im Dropdown: Infanterie, Fahrzeug oder Heli
-3. Wähle den Spielstil: Casual, Normal oder Focused
-4. Gib im Modal den Squad-Namen ein
-5. Der Bot bestätigt die Anmeldung oder setzt den Squad auf die Warteliste
+3. Gib im Modal den Squad-Namen ein
+4. Der Bot bestätigt die Anmeldung oder setzt den Squad auf die Warteliste
 
 ### Anmelden — Spieler-Modus
 
@@ -105,6 +103,15 @@ Der Button **Abmelden** (❌) hat im Spieler-Modus eine zweite Aktion. Klickst d
 Nur im **Vertreter-Modus** verfügbar (Caster ist im Spieler-Modus deaktiviert).
 
 - Klicke auf **Caster** (🎙️) in der Event-Anzeige
+
+**Stream-Link (optional, wenn die Orga es aktiviert hat):** Der Button öffnet ein
+kleines Formular mit einem Feld für deinen Stream-Link. Lass es leer, um dich ohne
+Link anzumelden. Mit Link erscheint hinter deinem Namen im Event-Embed ein
+klickbarer **🔴 Stream**-Link. Zum Ändern oder Entfernen klickst du später erneut
+auf **Caster** (🎙️) — das Formular öffnet sich mit deinem aktuellen Link (leer
+abschicken löscht ihn). Der Link muss mit `http://` oder `https://` beginnen und
+darf keine Leerzeichen oder Klammern enthalten, sonst wird er abgelehnt. Nach
+Anmeldeschluss kann der Link nicht mehr geändert werden.
 
 Spieler können gleichzeitig als Caster **und** mit Squads angemeldet sein.
 
@@ -174,17 +181,18 @@ Im Spieler-Modus wird nur das %-Limit für Vorab-Zugang angezeigt.
 - Caster Rollen/User — Wer sich als Caster anmelden darf (Rollen-Gate)
 - Caster-Early-Access Rollen/User — Wer sich als Caster **vor** Anmeldungsstart anmelden darf
 - Ping bei Öffnung
+- Caster-Stream-Links — ob Caster bei der Anmeldung einen Link zu ihrem Stream angeben dürfen. Standard: deaktiviert. Kann später auch über den DM-Editor geändert werden (Eigenschaft 25)
 
 **Schritt 6 — Timing:**
 - Event-Erinnerung — Benachrichtigung X Minuten vor Event-Start (0 = deaktiviert)
 - Countdown — Nachricht X Sekunden vor Anmeldungsstart (wird bei Öffnung automatisch gelöscht)
 
-**Schritt 7 — Spielstil & Squad-Limit (Vertreter-Modus) / Rollen-Auswahl (Spieler-Modus):**
-- *Vertreter-Modus:* Spielstil-Auswahl — ob Squads bei der Anmeldung einen Spielstil wählen. Plus Max. Squads pro Spieler (1–20) — wird hier nur gefragt, wenn **keine** Anmelde-Rolle gesetzt ist; mit Rollen-Gate wird dies in Schritt 4 (Slot-Limits) festgelegt.
+**Schritt 7 — Squad-Limit (Vertreter-Modus) / Rollen-Auswahl (Spieler-Modus):**
+- *Vertreter-Modus:* Max. Squads pro Spieler (1–20) — wird nur gefragt, wenn **keine** Anmelde-Rolle gesetzt ist. Mit Rollen-Gate wird das Limit in Schritt 4 (Slot-Limits) festgelegt und dieser Schritt komplett übersprungen.
 - *Spieler-Modus:* Rollen-Auswahl — ob Spieler bei der Anmeldung eine Rolle im Squad (Squad Leader, Medic, Pilot, …) wählen können. **Ist sie deaktiviert, gibt es kein Rollen-Dropdown und im Embed werden keine Rollen angezeigt.** Standard: aktiviert. Kann später auch über den DM-Editor geändert werden.
 
 **Schritt 8 — Slots nicht verschwenden** *(erscheint nur, wenn die Slot-Berechnung mindestens 2 ungenutzte Plätze übrig lässt)*:
-- Die Anzahl der Infanterie-Squads ist **immer gerade**, damit beide Teams gleich viele Squads erhalten (siehe Slot-Berechnung unten). Wenn dieser Schritt aktiviert wird, können die ungenutzten Plätze — der Verschnitt plus bei ungerader Roh-Anzahl die Plätze des weggefallenen Squads — durch **übergroße Squads** genutzt werden. Angeboten werden immer die Größen, die die freien Plätze mit **möglichst wenigen übergroßen Squads** ausnutzen (erst geringste Verschwendung, dann wenigste Squads, größere bevorzugt): bei 4 ungenutzten Plätzen und Squad-Größe 6 also ein 8er-Paar (statt zwei 7er-Paaren); bei 8 ungenutzten Plätzen ein 9er-Paar plus ein 7er-Paar. Übergroße Squads haben nie mehr als **9 Spieler** — das Squad-Limit im Spiel. Der Ersteller kann zusätzlich **einschränken, welche Übergrößen erlaubt sind** (z. B. nur 7er-Squads, oder 7er und 8er, aber keine 9er) — über ein zweites Dropdown in diesem Schritt; Standard sind alle möglichen Größen. Ein drittes Dropdown **begrenzt die Gesamtzahl übergroßer Squads** (gerade Werte — sie entstehen paarweise; Standard: unbegrenzt); der Plan nutzt dann so viele Plätze wie innerhalb der Grenze möglich, der Rest zählt als ungenutzt. Übergroße Squads gibt es immer in **gleicher Anzahl pro Größe**, damit die Organisatoren beide Teams spiegeln können — das komplette **Paar** jeder angebotenen Größe passt in die verbleibenden freien Plätze, mit der verbleibenden Anzahl neben jeder Option (z. B. 8 freie Plätze: nach einem 9er-Paar wird für die restlichen 2 ein 7er-Paar angeboten). Meldet sich ein übergroßes Squad ab, wird seine Größe wieder angeboten, bis das Paar erneut vollständig ist. Plätze, die kein Paar mehr ergeben, bleiben ungenutzt und erscheinen wieder als „Ungenutzt"-Zähler. Dieser Zähler erscheint nur, wenn tatsächlich Plätze verschwendet werden („Ungenutzt: 0" wird nie angezeigt), und jede Größe ist dauerhaft im Infanterie-Feld-Header sichtbar, mit eigenem Belegt/Möglich-Zähler — z. B. `⚔️ Infanterie (1/16) [(0/14) Größe: 6 | (1/2) Größe: 7]` — jede Squad-Zeile zeigt weiterhin ihre eigene Platzzahl. **Spieler-Modus:** Derselbe Schalter funktioniert auch dort — niemand wählt Größen; stattdessen plant der Bot die Squad-Kapazitäten vor (erst Basis-Squads, die minimalen übergroßen Paare als letzte Squads) und die Spieler füllen sie einfach auf. Die Konsolidierung (Event-Start / Admin-Button) berechnet das sauberste gepaarte Layout aus der tatsächlichen Spielerzahl neu (z. B. 88 Spieler bei Größe 6 → 12× 6er + ein 8er-Paar). Standard: deaktiviert. Kann später auch über den DM-Editor geändert werden (Eigenschaften 23–25) — das Aktivieren wird dort mit einer Fehlermeldung abgelehnt, solange es keine ungenutzten Slots gibt oder nur ein einzelner ungenutzt ist (ein einzelner Slot kann nie ein Paar bilden). Der Wizard-Schritt selbst erscheint nur, wenn mindestens 2 Slots ungenutzt sind. Alle Details, Beispiele und Garantien: [docs/dont-waste-slots_GER.md](docs/dont-waste-slots_GER.md).
+- Die Anzahl der Infanterie-Squads ist **immer gerade**, damit beide Teams gleich viele Squads erhalten (siehe Slot-Berechnung unten). Wenn dieser Schritt aktiviert wird, können die ungenutzten Plätze — der Verschnitt plus bei ungerader Roh-Anzahl die Plätze des weggefallenen Squads — durch **übergroße Squads** genutzt werden. Angeboten werden immer die Größen, die die freien Plätze mit **möglichst wenigen übergroßen Squads** ausnutzen (erst geringste Verschwendung, dann wenigste Squads, größere bevorzugt): bei 4 ungenutzten Plätzen und Squad-Größe 6 also ein 8er-Paar (statt zwei 7er-Paaren); bei 8 ungenutzten Plätzen ein 9er-Paar plus ein 7er-Paar. Übergroße Squads haben nie mehr als **9 Spieler** — das Squad-Limit im Spiel. Der Ersteller kann zusätzlich **einschränken, welche Übergrößen erlaubt sind** (z. B. nur 7er-Squads, oder 7er und 8er, aber keine 9er) — über ein zweites Dropdown in diesem Schritt; Standard sind alle möglichen Größen. Ein drittes Dropdown **begrenzt die Gesamtzahl übergroßer Squads** (gerade Werte — sie entstehen paarweise; Standard: unbegrenzt); der Plan nutzt dann so viele Plätze wie innerhalb der Grenze möglich, der Rest zählt als ungenutzt. Übergroße Squads gibt es immer in **gleicher Anzahl pro Größe**, damit die Organisatoren beide Teams spiegeln können — das komplette **Paar** jeder angebotenen Größe passt in die verbleibenden freien Plätze, mit der verbleibenden Anzahl neben jeder Option (z. B. 8 freie Plätze: nach einem 9er-Paar wird für die restlichen 2 ein 7er-Paar angeboten). Meldet sich ein übergroßes Squad ab, wird seine Größe wieder angeboten, bis das Paar erneut vollständig ist. Plätze, die kein Paar mehr ergeben, bleiben ungenutzt und erscheinen wieder als „Ungenutzt"-Zähler. Dieser Zähler erscheint nur, wenn tatsächlich Plätze verschwendet werden („Ungenutzt: 0" wird nie angezeigt), und jede Größe ist dauerhaft im Infanterie-Feld-Header sichtbar, mit eigenem Belegt/Möglich-Zähler — z. B. `⚔️ Infanterie (1/16) [(0/14) Größe: 6 | (1/2) Größe: 7]` — jede Squad-Zeile zeigt weiterhin ihre eigene Platzzahl. **Spieler-Modus:** Derselbe Schalter funktioniert auch dort — niemand wählt Größen; stattdessen plant der Bot die Squad-Kapazitäten vor (erst Basis-Squads, die minimalen übergroßen Paare als letzte Squads) und die Spieler füllen sie einfach auf. Die Konsolidierung (Event-Start / Admin-Button) berechnet das sauberste gepaarte Layout aus der tatsächlichen Spielerzahl neu (z. B. 88 Spieler bei Größe 6 → 12× 6er + ein 8er-Paar). Standard: deaktiviert. Kann später auch über den DM-Editor geändert werden (Eigenschaften 22–24) — das Aktivieren wird dort mit einer Fehlermeldung abgelehnt, solange es keine ungenutzten Slots gibt oder nur ein einzelner ungenutzt ist (ein einzelner Slot kann nie ein Paar bilden). Der Wizard-Schritt selbst erscheint nur, wenn mindestens 2 Slots ungenutzt sind. Alle Details, Beispiele und Garantien: [docs/dont-waste-slots_GER.md](docs/dont-waste-slots_GER.md).
 
 **Schritt 9 — Bestätigung:**
 - Zusammenfassungs-Embed mit allen Einstellungen inkl. ungenutzter Slots — Bestätigen oder Abbrechen
@@ -230,13 +238,13 @@ Organisatoren können ein laufendes Event per DM bearbeiten: Klicke im Admin-Pan
 16. Wiederholung (wie das Event zyklisch wiederkehrt — siehe unten)
 17. Eventdauer (Länge des Events; Standard 2 Std.)
 18. Folge-Event erstellen nach (bei Wiederholung: Verzögerung nach dem Ende, bis das nächste Event erstellt wird)
-19. Spielstil-Auswahl bei Anmeldung (an/aus)
-20. Slot-Limit: Vorab-Zugang (% der Spieler-Slots)
-21. Max. Squads pro Vorab-Zugang-Rolle
-22. Rollenauswahl bei Anmeldung (Spieler-Modus, an/aus)
-23. Slots nicht verschwenden (größere Squads, an/aus)
-24. Erlaubte Übergrößen (kommagetrennt, z. B. „7, 8"; leer = alle)
-25. Max. übergroße Squads (gerade Zahl; leer/0 = unbegrenzt)
+19. Slot-Limit: Vorab-Zugang (% der Spieler-Slots)
+20. Max. Squads pro Vorab-Zugang-Rolle
+21. Rollenauswahl bei Anmeldung (Spieler-Modus, an/aus)
+22. Slots nicht verschwenden (größere Squads, an/aus)
+23. Erlaubte Übergrößen (kommagetrennt, z. B. „7, 8"; leer = alle)
+24. Max. übergroße Squads (gerade Zahl; leer/0 = unbegrenzt)
+25. Stream-Links für Caster (Vertreter-Modus, an/aus)
 
 Es gibt keinen separaten Bestätigungsschritt — jede Änderung greift sofort.
 
@@ -278,7 +286,7 @@ Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu �
 
 | Reihe | Button | Beschreibung |
 |---|---|---|
-| Squad | **Squad hinzufügen** | Typ, Spielstil und Vertreter auswählen, dann Squad-Name eingeben |
+| Squad | **Squad hinzufügen** | Typ und Vertreter auswählen, dann Squad-Name eingeben |
 | Squad | **Squad entfernen** | Squad zum Entfernen auswählen (inkl. Warteliste) |
 | Caster | **Caster hinzufügen** | Discord-User als Caster hinzufügen |
 | Caster | **Caster entfernen** | Caster zum Entfernen auswählen (inkl. Warteliste) |
@@ -354,9 +362,9 @@ Die Event-Anzeige enthält folgende Buttons. Alle Buttons sind für jeden sichtb
 
 | Button | Funktion |
 |---|---|
-| **Squad** (🪖) | Vertreter-Modus: startet die geführte Anmeldung (Typ → Spielstil → Name) |
+| **Squad** (🪖) | Vertreter-Modus: startet die geführte Anmeldung (Typ → Name) |
 | **Beitreten** (🪖) | Spieler-Modus: Typ und optionale Rolle im Squad wählen, dann automatische Zuweisung zu einem Squad |
-| **Caster** (🎙️) | Direkte Caster-Anmeldung |
+| **Caster** (🎙️) | Direkte Caster-Anmeldung; bei aktivierten Caster-Stream-Links öffnet sich zuerst ein Formular für den optionalen Stream-Link (und später erneut zum Ändern) |
 | **Abmelden** (❌) | Squad/Caster abmelden (mit Bestätigung); im Spieler-Modus schaltet ein Klick ohne aktive Anmeldung stattdessen eine „abgemeldet"-Markierung um |
 | **Admin** (⚙️) | Öffnet Admin-Panel (nur Organisator) |
 | **Kalender** (📅) | Lädt eine `.ics`-Datei zum Import des Events in deinen Kalender herunter |
@@ -380,13 +388,13 @@ Die Wartelisten-Semantik ist in beiden Modi identisch — nur die Einheit unters
 ## Häufig gestellte Fragen
 
 **F: Was ist der Unterschied zwischen Vertreter-Modus und Spieler-Modus?**
-A: Im Vertreter-Modus meldest du einen ganzen Squad an (mit Name, Spielstil und einem User als Vertreter). Im Spieler-Modus meldest du dich als einzelne Person an, und der Bot gruppiert Spieler automatisch zu Squads (die ersten 6 Infanterie-Anmeldungen bilden „Infantry 1", die nächsten 6 „Infantry 2", usw.). Caster sind im Spieler-Modus deaktiviert. Organisatoren wählen den Modus bei der Event-Erstellung; er kann nicht mehr geändert werden.
+A: Im Vertreter-Modus meldest du einen ganzen Squad an (mit Name und einem User als Vertreter). Im Spieler-Modus meldest du dich als einzelne Person an, und der Bot gruppiert Spieler automatisch zu Squads (die ersten 6 Infanterie-Anmeldungen bilden „Infantry 1", die nächsten 6 „Infantry 2", usw.). Caster sind im Spieler-Modus deaktiviert. Organisatoren wählen den Modus bei der Event-Erstellung; er kann nicht mehr geändert werden.
 
 **F: Warum hat mein Event einen „Beitreten"-Button statt einem „Squad"-Button?**
 A: Das Event wurde im Spieler-Modus erstellt. Du meldest dich als einzelne Person an — der Bot kümmert sich um die Squad-Zuweisung. Du wählst einen Squad-Typ, optional eine Rolle im Squad (Squad Leader, Medic, …), und klickst dann auf Weiter; dein Discord-Anzeigename wird automatisch verwendet.
 
 **F: Wie melde ich meinen Squad an?**
-A: Klicke auf **Squad** (🪖) in der Event-Anzeige. Du wirst durch Typ, Spielstil und Namenswahl geführt. (Das ist der Vertreter-Modus — der Spieler-Modus hat einen **Beitreten**-Ablauf mit Typ und optionaler Rolle.)
+A: Klicke auf **Squad** (🪖) in der Event-Anzeige. Du wirst durch Typ- und Namenswahl geführt. (Das ist der Vertreter-Modus — der Spieler-Modus hat einen **Beitreten**-Ablauf mit Typ und optionaler Rolle.)
 
 **F: Was macht der Rollen-Picker im Spieler-Modus?**
 A: Rollen signalisieren, was du gerne spielen würdest (Squad Leader, Medic, Pilot, …), damit andere sehen, wer welche Kits übernimmt. Du kannst **mehrere Rollen** in einer Anmeldung wählen — z.B. „Squad Leader + Medic", falls du beides spielen kannst. Die Liste passt sich dem gewählten Squad-Typ an. Rollen sind für alle in der Squad-Liste sichtbar (`Name (Rolle)` oder `Name (Rolle1, Rolle2)`). Squad Leader werden ans obere Ende ihres Squads sortiert, und ein neuer SL wird bevorzugt in ein Squad ohne bestehenden SL platziert, sofern Kapazität vorhanden ist. Wähle nichts aus, um als **Egal** registriert zu werden.

@@ -243,7 +243,7 @@ class UnregisterAndCompactTest(unittest.TestCase):
         self.assertEqual(len(event["squads"]), 1)
         self.assertEqual(event["squads"]["Heli 1"]["members"][0]["user_id"], "p2")
         self.assertEqual(len(event["heli_waitlist"]), 1)
-        self.assertEqual(event["heli_waitlist"][0][4], "p3")
+        self.assertEqual(event["heli_waitlist"][0][3], "p3")
 
     def test_waitlist_promotion_survives_json_roundtrip(self):
         """Regression: waitlist entries come back as lists (not tuples) after JSON

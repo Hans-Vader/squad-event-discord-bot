@@ -33,8 +33,8 @@ def _event():
         },
         "infantry_waitlist": [],
         "vehicle_waitlist": [],
-        # entry tuple: (name, type, playstyle, size, squad_id, rep_name)
-        "heli_waitlist": [("Charlie", "heli", "normal", 1, "sq-3", "rep")],
+        # entry tuple: (name, type, size, squad_id, rep_name)
+        "heli_waitlist": [("Charlie", "heli", 1, "sq-3", "rep")],
     }
 
 

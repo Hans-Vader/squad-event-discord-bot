@@ -19,13 +19,13 @@ Events are created in one of two modes, picked at creation time. The mode is loc
 
 ### Representative Mode (default)
 
-The classic behavior. Each registration is a **squad** with a name, type, playstyle, and a Discord user acting as its representative. One registration occupies `squad_size` seats (e.g. 6 for Infantry, 2 for Vehicle, 1 for Heli). A user can register **multiple squads** (up to the configured per-user limit). Casters register separately.
+The classic behavior. Each registration is a **squad** with a name, type, and a Discord user acting as its representative. One registration occupies `squad_size` seats (e.g. 6 for Infantry, 2 for Vehicle, 1 for Heli). A user can register **multiple squads** (up to the configured per-user limit). Casters register separately.
 
-Use this mode when squad leads coordinate their own teams and the organizer needs per-squad metadata (playstyle, rep name).
+Use this mode when squad leads coordinate their own teams and the organizer needs per-squad metadata (squad name, rep name).
 
 ### Player Mode
 
-Each registration is a **single player** — just the user themselves. The bot auto-assigns individuals to squads in arrival order: the first 6 Infantry sign-ups form "Infantry 1", the next 6 form "Infantry 2", and so on. When the event starts — or at any time manually via the admin panel — the bot merges partially-filled squads and removes empty ones so the overview stays compact. Each player can also pick an **optional in-squad role** (Squad Leader, Medic, Pilot, …) — the role appears next to their name in the event embed, and Squad Leaders sort to the top of their squad. No playstyle, no squad name, no caster role. **One user = one registration.**
+Each registration is a **single player** — just the user themselves. The bot auto-assigns individuals to squads in arrival order: the first 6 Infantry sign-ups form "Infantry 1", the next 6 form "Infantry 2", and so on. When the event starts — or at any time manually via the admin panel — the bot merges partially-filled squads and removes empty ones so the overview stays compact. Each player can also pick an **optional in-squad role** (Squad Leader, Medic, Pilot, …) — the role appears next to their name in the event embed, and Squad Leaders sort to the top of their squad. No squad name, no caster role. **One user = one registration.**
 
 Use this mode for pick-up matches or community seat-filling events where individuals sign up and organizers don't care about squad composition.
 
@@ -33,16 +33,15 @@ Use this mode for pick-up matches or community seat-filling events where individ
 
 | Aspect | Representative mode | Player mode |
 |---|---|---|
-| What's registered | A squad (name + type + playstyle) | A single player |
+| What's registered | A squad (name + type) | A single player |
 | Who registers | A squad rep on behalf of their squad | Each player for themselves |
 | Slots per registration | `squad_size` (e.g. 6) | 1 |
 | Multiple registrations per user | Up to configured limit | Always 1 |
-| Playstyle selection | Yes | No |
 | In-squad role picker | No | Optional multi-select (Squad Leader, Medic, Pilot, …) |
 | Casters | Configurable | Disabled |
-| Registration UI | Squad name modal + playstyle picker | Type + optional role picker; Discord display name used |
+| Registration UI | Type picker + squad name modal | Type + optional role picker; Discord display name used |
 | Slot overview label | "🖥️ Server — 100 slots" | "📋 Seats — 17 slots" |
-| Admin-add | Add Squad (name + rep + playstyle) | Add Player (multi-select users + type + optional roles) |
+| Admin-add | Add Squad (name + rep) | Add Player (multi-select users + type + optional roles) |
 | Don't waste slots | Registrants pick an oversized squad size | Bot pre-plans squad capacities automatically |
 
 ---
@@ -56,9 +55,8 @@ There are two ways to register a squad:
 **Via button (recommended):**
 1. Click **Squad** (🪖) in the event display
 2. Select the squad type from the dropdown: Infantry, Vehicle, or Heli
-3. Select the playstyle: Casual, Normal, or Focused
-4. Enter the squad name in the modal
-5. The bot confirms the registration or places the squad on the waitlist
+3. Enter the squad name in the modal
+4. The bot confirms the registration or places the squad on the waitlist
 
 ### Registering — Player Mode
 
@@ -105,6 +103,15 @@ The **Decline** (❌) button has a second action in player mode. If you click it
 Only available in **representative mode** (caster is disabled in player mode).
 
 - Click **Caster** (🎙️) in the event display
+
+**Stream link (optional, if the organizer enabled it):** the button opens a small
+form with one field for your stream link. Leave it empty to register without a
+link. With a link set, your name in the event embed carries a clickable
+**🔴 Stream** link. To change or remove it later, click **Caster** (🎙️) again —
+the form reopens with your current link (submitting it empty clears the link).
+The link must start with `http://` or `https://` and must not contain spaces or
+brackets, otherwise it is rejected. Once registration is closed the link can no
+longer be changed.
 
 Players can be registered as a caster **and** with squads at the same time.
 
@@ -174,17 +181,18 @@ Player mode shows only the early-access % cap.
 - Caster roles/users — Who can register as caster (role gate)
 - Caster early-access roles/users — Who can register as caster **before** registration opens
 - Ping on open toggle
+- Caster stream links — whether casters may add a link to their stream when registering. Default: disabled. Can also be changed later via the DM editor (property 25)
 
 **Step 6 — Timing:**
 - Event reminder — Notification X minutes before event start (0 = disabled)
 - Registration countdown — Message sent X seconds before registration opens (auto-deleted when registration starts)
 
-**Step 7 — Playstyle & Squad Limit (rep mode) / Role selection (player mode):**
-- *Rep mode:* Playstyle selection — whether squads pick a playstyle when registering. Plus max squads per user (1–20) — only asked here when **no** registration-role gate is set; when a gate is configured, this is set in Step 4 (Slot Limits) instead.
+**Step 7 — Squad Limit (rep mode) / Role selection (player mode):**
+- *Rep mode:* Max squads per user (1–20) — only asked when **no** registration-role gate is set. With a gate configured the limit is set in Step 4 (Slot Limits) instead and this step is skipped entirely.
 - *Player mode:* Role selection — whether players may pick an in-squad role (Squad Leader, Medic, Pilot, …) when registering. **When disabled, there is no role dropdown and roles are not shown in the embed.** Default: enabled. Can also be changed later via the DM editor.
 
 **Step 8 — Don't waste slots** *(only shown when the slot math leaves at least 2 unused seats)*:
-- The number of infantry squads is **always kept even** so both teams get the same count (see slot calculation below). When this step is enabled, the unused seats — the remainder plus, with an odd raw cap, the dropped squad's seats — can be absorbed by **oversized squads**. Offered are always the sizes that use the free seats with **as few oversized squads as possible** (least waste first, then fewest squads, bigger squads preferred): with 4 unused seats and squad size 6 that's one 8er pair (not two 7er pairs); with 8 unused seats a 9er pair plus a 7er pair. Oversized squads never exceed **9 players** — the in-game squad limit. The creator can additionally **restrict which oversized sizes are allowed** (e.g. only 7-player squads, or 7 and 8 but no 9) via a second dropdown in this step; default is all possible sizes. A third dropdown **caps the total number of oversized squads** (even values — they come in pairs; default: unlimited); the plan then absorbs as many seats as it can within that cap and the rest counts as unused. Oversized squads always come in **equal numbers per size** so organizers can mirror them across two teams — each offered size's complete **pair** fits the remaining unused seats, with the remaining count shown next to each option (e.g. 8 leftover seats: after a 9-player pair, a 7-player pair is offered for the remaining 2). If an oversized squad unregisters, its size is re-offered until the pair is complete again. Leftover seats that can't form a pair anymore stay unused and reappear as the "Unused" counter. That counter is only shown when there actually are wasted slots ("Unused: 0" is never displayed), and every size is permanently visible in the infantry field header with its own registered/possible counter — e.g. `⚔️ Infantry (1/16) [(0/14) Size: 6 | (1/2) Size: 7]` — in addition to each squad row showing its own seat count. **Player mode:** the same toggle works there too — nobody picks sizes; instead the bot pre-plans the squad capacities (base squads first, the minimal oversized pairs as the last squads) and players simply fill them. Consolidation (event start / admin button) re-derives the cleanest paired layout from the actual player count (e.g. 88 players at size 6 → 12× 6 + one 8-player pair). Default: disabled. Can also be changed later via the DM editor (properties 23–25) — enabling it there is rejected with an error while there are no unused slots, or only a single one (a lone slot can never form a pair). The wizard step itself only appears when at least 2 unused slots exist. Full details, worked examples, and guarantees: [docs/dont-waste-slots.md](docs/dont-waste-slots.md).
+- The number of infantry squads is **always kept even** so both teams get the same count (see slot calculation below). When this step is enabled, the unused seats — the remainder plus, with an odd raw cap, the dropped squad's seats — can be absorbed by **oversized squads**. Offered are always the sizes that use the free seats with **as few oversized squads as possible** (least waste first, then fewest squads, bigger squads preferred): with 4 unused seats and squad size 6 that's one 8er pair (not two 7er pairs); with 8 unused seats a 9er pair plus a 7er pair. Oversized squads never exceed **9 players** — the in-game squad limit. The creator can additionally **restrict which oversized sizes are allowed** (e.g. only 7-player squads, or 7 and 8 but no 9) via a second dropdown in this step; default is all possible sizes. A third dropdown **caps the total number of oversized squads** (even values — they come in pairs; default: unlimited); the plan then absorbs as many seats as it can within that cap and the rest counts as unused. Oversized squads always come in **equal numbers per size** so organizers can mirror them across two teams — each offered size's complete **pair** fits the remaining unused seats, with the remaining count shown next to each option (e.g. 8 leftover seats: after a 9-player pair, a 7-player pair is offered for the remaining 2). If an oversized squad unregisters, its size is re-offered until the pair is complete again. Leftover seats that can't form a pair anymore stay unused and reappear as the "Unused" counter. That counter is only shown when there actually are wasted slots ("Unused: 0" is never displayed), and every size is permanently visible in the infantry field header with its own registered/possible counter — e.g. `⚔️ Infantry (1/16) [(0/14) Size: 6 | (1/2) Size: 7]` — in addition to each squad row showing its own seat count. **Player mode:** the same toggle works there too — nobody picks sizes; instead the bot pre-plans the squad capacities (base squads first, the minimal oversized pairs as the last squads) and players simply fill them. Consolidation (event start / admin button) re-derives the cleanest paired layout from the actual player count (e.g. 88 players at size 6 → 12× 6 + one 8-player pair). Default: disabled. Can also be changed later via the DM editor (properties 22–24) — enabling it there is rejected with an error while there are no unused slots, or only a single one (a lone slot can never form a pair). The wizard step itself only appears when at least 2 unused slots exist. Full details, worked examples, and guarantees: [docs/dont-waste-slots.md](docs/dont-waste-slots.md).
 
 **Step 9 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel
@@ -230,13 +238,13 @@ Organizers can edit a running event via DM: Click **Edit Event** in the admin pa
 16. Recurrence (how the event repeats — see below)
 17. Duration (event length; defaults to 2h)
 18. Recreate next event after (for recurring events: delay after the current event ends before the follow-up is created)
-19. Playstyle selection at registration (on/off)
-20. Slot limit: early access (% of player slots)
-21. Max squads per early-access role
-22. Role selection at registration (player mode, on/off)
-23. Don't waste slots (bigger squads, on/off)
-24. Allowed oversized sizes (comma-separated, e.g. "7, 8"; empty = all)
-25. Max. oversized squads (even number; empty/0 = unlimited)
+19. Slot limit: early access (% of player slots)
+20. Max squads per early-access role
+21. Role selection at registration (player mode, on/off)
+22. Don't waste slots (bigger squads, on/off)
+23. Allowed oversized sizes (comma-separated, e.g. "7, 8"; empty = all)
+24. Max. oversized squads (even number; empty/0 = unlimited)
+25. Stream links for casters (rep mode, on/off)
 
 There's no separate confirm step — each edit applies as soon as you make it.
 
@@ -278,7 +286,7 @@ Click the **Admin** (⚙️) button on the event embed to open the admin panel. 
 
 | Row | Button | Description |
 |---|---|---|
-| Squad | **Add Squad** | Select type, playstyle, representative user, then enter squad name |
+| Squad | **Add Squad** | Select type and representative user, then enter squad name |
 | Squad | **Remove Squad** | Select a squad to remove (includes waitlisted squads) |
 | Caster | **Add Caster** | Select a Discord user to add as caster |
 | Caster | **Remove Caster** | Select a caster to remove (includes waitlisted casters) |
@@ -354,9 +362,9 @@ The event display contains the following buttons. All buttons are visible to eve
 
 | Button | Function |
 |---|---|
-| **Squad** (🪖) | Rep mode: starts the guided registration (type → playstyle → name) |
+| **Squad** (🪖) | Rep mode: starts the guided registration (type → name) |
 | **Join** (🪖) | Player mode: pick type and optional in-squad role, then auto-assigned to a squad |
-| **Caster** (🎙️) | Direct caster registration |
+| **Caster** (🎙️) | Direct caster registration; with caster stream links enabled, a form for the optional stream link opens first (and reopens later to edit it) |
 | **Decline** (❌) | Unregister squad/caster (with confirmation); in player mode, clicking while not registered toggles a "declined" mark instead |
 | **Admin** (⚙️) | Opens admin panel (organizer only) |
 | **Calendar** (📅) | Download an `.ics` file to import the event into your calendar app |
@@ -380,13 +388,13 @@ Waitlist semantics are the same in both modes — only the unit differs (a full 
 ## FAQ
 
 **Q: What's the difference between representative mode and player mode?**
-A: Rep mode has you register a whole squad (with a name, playstyle, and a user as its lead). Player mode has you register as a single individual, and the bot groups individuals into squads automatically (first 6 Infantry sign-ups form "Infantry 1", next 6 form "Infantry 2", etc.). Casters are disabled in player mode. Organizers pick the mode at event creation; it can't be changed later.
+A: Rep mode has you register a whole squad (with a name and a user as its lead). Player mode has you register as a single individual, and the bot groups individuals into squads automatically (first 6 Infantry sign-ups form "Infantry 1", next 6 form "Infantry 2", etc.). Casters are disabled in player mode. Organizers pick the mode at event creation; it can't be changed later.
 
 **Q: Why does my event have a "Join" button instead of a "Squad" button?**
 A: The event was created in player mode. You register yourself individually — the bot handles squad assignment. You pick a squad type, optionally an in-squad role (Squad Leader, Medic, …), then click Continue; your Discord display name is used automatically.
 
 **Q: How do I register my squad?**
-A: Click **Squad** (🪖) in the event display. You'll be guided through type, playstyle, and name selection. (This is rep mode — player mode's **Join** flow picks type and an optional in-squad role.)
+A: Click **Squad** (🪖) in the event display. You'll be guided through type and name selection. (This is rep mode — player mode's **Join** flow picks type and an optional in-squad role.)
 
 **Q: What does the in-squad role picker in player mode do?**
 A: Roles let you signal what you'd like to play (Squad Leader, Medic, Pilot, …) so others know who's filling which kits. You can pick **multiple roles** in one registration — for example "Squad Leader + Medic" if you can run either. The list adapts to the squad type you picked. Roles are visible to everyone in the squad list as `Name (Role)` or `Name (Role1, Role2)`. Squad Leaders sort to the top of their squad, and a new SL is routed into a squad without an existing one whenever capacity allows. Select nothing to register as **I don't care**.

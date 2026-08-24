@@ -177,7 +177,7 @@ class DeclinedEmbedTest(unittest.TestCase):
 
 class I18nKeysTest(unittest.TestCase):
     def test_new_keys_present(self):
-        for key in ("embed.declined_label", "embed.declined_more",
+        for key in ("embed.declined_label", "embed.more_entries",
                     "player.declined_added", "player.declined_removed",
                     "log.player_declined", "log.player_declined_removed"):
             for lang in ("de", "en"):

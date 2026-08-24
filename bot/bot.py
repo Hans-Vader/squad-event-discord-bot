@@ -131,14 +131,17 @@ _EDIT_PROPERTIES = [
     (16, "recurrence",             "edit.property.recurrence",      "recurrence",      None),
     (17, "duration_minutes",       "edit.property.duration",        "duration",        None),
     (18, "spawn_offset_minutes",   "edit.property.spawn_offset",    "spawn_offset",    None),
-    (19, "playstyle_enabled",      "edit.property.playstyle_enabled","bool",           None),
-    (20, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
-    (21, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
-    (22, "player_roles_enabled",   "edit.property.player_roles_enabled","bool",         None),
-    (23, "dont_waste_slots",       "edit.property.dont_waste_slots",    "bool",         None),
-    (24, "dont_waste_allowed_sizes", "edit.property.dont_waste_sizes",  "size_list",    None),
-    (25, "dont_waste_max_squads",  "edit.property.dont_waste_max",      "int_nullable", None),
+    (19, "community_rep_cap_percent",    "edit.property.early_pct_cap",   "percent",     None),
+    (20, "early_access_squads_per_role", "edit.property.early_squad_cap", "squad_count", None),
+    (21, "player_roles_enabled",   "edit.property.player_roles_enabled","bool",         None),
+    (22, "dont_waste_slots",       "edit.property.dont_waste_slots",    "bool",         None),
+    (23, "dont_waste_allowed_sizes", "edit.property.dont_waste_sizes",  "size_list",    None),
+    (24, "dont_waste_max_squads",  "edit.property.dont_waste_max",      "int_nullable", None),
+    (25, "caster_stream_links_enabled", "edit.property.caster_stream_links", "bool",    None),
 ]
+# ponytail: 25 rows = Discord's hard select cap, and _visible_edit_properties hides
+#           exactly one per mode, so the dropdown sits at 24. One more property needs
+#           a second chained select — slicing [:25] would silently drop the tail.
 
 
 def _get_guild_lock(guild_id: int) -> asyncio.Lock:
@@ -456,8 +459,9 @@ def _ensure_event_keys(event: dict):
         "mode": "rep",
         "dont_waste_slots": False,
         "dont_waste_allowed_sizes": None,
-        "playstyle_enabled": True,
         "player_roles_enabled": True,
+        "caster_stream_links_enabled": False,
+        "caster_stream_urls": {},
         "community_rep_cap_percent": None,
         "early_access_squads_per_role": None,
     }
@@ -471,6 +475,22 @@ def _ensure_event_keys(event: dict):
             key = _waitlist_key(entry[1])
             event[key].append(entry)
         event["waitlist"] = []
+
+    # Drop the retired playstyle slot from persisted waitlist entries. Both old
+    # shapes carried it at index 2 — rep (name, type, playstyle, size, squad_id,
+    # rep_name) as a string, player (name, type, None, 1, uid, name, roles) as
+    # None. The current shapes always hold the int size there, so anything
+    # non-int marks a pre-migration entry. Idempotent.
+    def _is_legacy(entry):
+        return (isinstance(entry, (tuple, list)) and len(entry) > 3
+                and not isinstance(entry[2], int))
+
+    for _st in SQUAD_TYPES:
+        _key = _waitlist_key(_st)
+        _wl = event.get(_key)
+        if not _wl or not any(_is_legacy(e) for e in _wl):
+            continue
+        event[_key] = [tuple(e[:2]) + tuple(e[3:]) if _is_legacy(e) else e for e in _wl]
 
 # ---------------------------------------------------------------------------
 # Helper: user assignments
@@ -515,7 +535,7 @@ def _resolve_squad_name(event, squad_id):
         return data.get("name", squad_id)
     for st in ("infantry", "vehicle", "heli"):
         for entry in event.get(f"{st}_waitlist", []):
-            if len(entry) > 4 and entry[4] == squad_id:
+            if len(entry) > 3 and entry[3] == squad_id:
                 return entry[0]
     return squad_id
 
@@ -524,16 +544,16 @@ def _resolve_squad_meta(event, squad_id):
     """Resolve a squad_id to its ``(name, type, size)`` for display.
 
     Looks in the active squads first, then the per-type waitlists (whose entries
-    are ``(name, type, playstyle, size, squad_id, rep_name)`` tuples). Falls back
-    to the raw id with ``None`` type/size when the squad can't be found.
+    are ``(name, type, size, squad_id, rep_name)`` tuples). Falls back to the raw
+    id with ``None`` type/size when the squad can't be found.
     """
     data = event.get("squads", {}).get(squad_id)
     if data:
         return data.get("name", squad_id), data.get("type"), data.get("size")
     for st in ("infantry", "vehicle", "heli"):
         for entry in event.get(f"{st}_waitlist", []):
-            if len(entry) > 4 and entry[4] == squad_id:
-                return entry[0], entry[1], entry[3]
+            if len(entry) > 3 and entry[3] == squad_id:
+                return entry[0], entry[1], entry[2]
     return squad_id, None, None
 
 
@@ -1150,7 +1170,7 @@ async def send_event_details(channel, event, db_id, lang="de", caster_enabled=Tr
 # ---------------------------------------------------------------------------
 # Core: squad registration
 # ---------------------------------------------------------------------------
-async def register_squad(interaction, guild_id, channel_id, db_id, squad_name, squad_type, playstyle,
+async def register_squad(interaction, guild_id, channel_id, db_id, squad_name, squad_type,
                          requested_size=None):
     """Register a squad. Uses guild lock for thread safety.
 
@@ -1220,14 +1240,14 @@ async def register_squad(interaction, guild_id, channel_id, db_id, squad_name, s
 
         wl_key = _waitlist_key(squad_type)
         if type_full:
-            event[wl_key].append((squad_name, squad_type, playstyle, size, squad_id, rep_name))
+            event[wl_key].append((squad_name, squad_type, size, squad_id, rep_name))
             add_user_assignment(user_assignments, user_id, squad_id)
             save_event(db_id, event, user_assignments)
             result = "type_full_waitlisted"
             wl_pos = len(event[wl_key])
         elif size <= available:
             event["squads"][squad_id] = {
-                "name": squad_name, "type": squad_type, "playstyle": playstyle,
+                "name": squad_name, "type": squad_type,
                 "size": size, "rep_name": rep_name,
             }
             event["player_slots_used"] += size
@@ -1236,7 +1256,7 @@ async def register_squad(interaction, guild_id, channel_id, db_id, squad_name, s
             result = "registered"
             wl_pos = None
         else:
-            event[wl_key].append((squad_name, squad_type, playstyle, size, squad_id, rep_name))
+            event[wl_key].append((squad_name, squad_type, size, squad_id, rep_name))
             add_user_assignment(user_assignments, user_id, squad_id)
             save_event(db_id, event, user_assignments)
             result = "waitlisted"
@@ -1257,33 +1277,27 @@ async def register_squad(interaction, guild_id, channel_id, db_id, squad_name, s
     else:
         user_squads_now = len(get_user_squad_ids(user_assignments, user_id))
         squad_info = t("squad.your_squads_info", lang, current=user_squads_now, max=max_squads)
-    playstyle_enabled = event.get("playstyle_enabled", True)
 
     if result == "registered":
-        msg_key = "squad.registered" if playstyle_enabled else "squad.registered_no_playstyle"
         await send_feedback(interaction,
-            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, info=squad_info),
+            t("squad.registered", lang, name=squad_name, type=type_label, size=size, info=squad_info),
             ephemeral=True)
         await send_to_log_channel(
-            t("log.squad_registered", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=playstyle),
+            t("log.squad_registered", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size),
             guild=interaction.guild)
     elif result == "type_full_waitlisted":
-        if mirror_reserved:
-            # Not actually full — the last slot is held for an oversized pair's
-            # mirror, so don't claim "all slots taken".
-            msg_key = "squad.waitlisted_mirror"
-        else:
-            msg_key = "squad.type_full" if playstyle_enabled else "squad.type_full_no_playstyle"
+        # Not actually full when a mirror slot is held for an oversized pair's
+        # counterpart, so don't claim "all slots taken".
+        msg_key = "squad.waitlisted_mirror" if mirror_reserved else "squad.type_full"
         await send_feedback(interaction,
-            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
+            t(msg_key, lang, name=squad_name, type=type_label, size=size, pos=wl_pos, info=squad_info),
             ephemeral=True)
         await send_to_log_channel(
             t("log.squad_type_full_waitlisted", lang, user=interaction.user.name, squad=squad_name, type=type_label),
             guild=interaction.guild)
     else:
-        msg_key = "squad.waitlisted" if playstyle_enabled else "squad.waitlisted_no_playstyle"
         await send_feedback(interaction,
-            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=playstyle, pos=wl_pos, info=squad_info),
+            t("squad.waitlisted", lang, name=squad_name, type=type_label, size=size, pos=wl_pos, info=squad_info),
             ephemeral=True)
         await send_to_log_channel(
             t("log.squad_waitlisted", lang, user=interaction.user.name, squad=squad_name),
@@ -1570,7 +1584,7 @@ async def unregister_squad(interaction, guild_id, channel_id, db_id, squad_id, i
             for st in SQUAD_TYPES:
                 wl_key = _waitlist_key(st)
                 for i, entry in enumerate(event.get(wl_key, [])):
-                    if len(entry) > 4 and entry[4] == squad_id:
+                    if len(entry) > 3 and entry[3] == squad_id:
                         found_in_waitlist = (wl_key, i)
                         break
                 if found_in_waitlist:
@@ -1630,12 +1644,12 @@ async def _process_squad_waitlist(event, user_assignments, db_id, guild_id, chan
         for i, entry in enumerate(wl):
             if remaining <= 0:
                 break
-            squad_name, squad_type, playstyle, size, squad_id, *_rest = entry
+            squad_name, squad_type, size, squad_id, *_rest = entry
             rep_name = _rest[0] if _rest else None
             type_full = (_is_squad_type_full(event, squad_type)
                          or _squad_slot_reserved(event, squad_type, size))
             if size <= remaining and not type_full:
-                squad_data = {"name": squad_name, "type": squad_type, "playstyle": playstyle, "size": size}
+                squad_data = {"name": squad_name, "type": squad_type, "size": size}
                 if rep_name:
                     squad_data["rep_name"] = rep_name
                 event["squads"][squad_id] = squad_data
@@ -1678,7 +1692,42 @@ async def _send_squad_dm(user_assignments, squad_id, message):
 # ---------------------------------------------------------------------------
 # Core: caster registration
 # ---------------------------------------------------------------------------
-async def register_caster(interaction, guild_id, channel_id, db_id):
+# A caster-supplied stream link is rendered as markdown inside the PUBLIC event
+# embed, so the stored value must never be able to break out of the link syntax
+# — hence the character blacklist on top of the scheme check.
+STREAM_URL_MAX_LENGTH = 200
+_STREAM_URL_FORBIDDEN = set(" \t\n\r()[]<>\\`|\"'")
+
+
+def _validate_stream_url(text):
+    """Validate a caster-provided stream link.
+
+    Returns (url_or_None, error_i18n_key_or_None). Empty input is valid and
+    means "no link" — the field is optional and clears an existing link.
+    """
+    url = (text or "").strip()
+    if not url:
+        return None, None
+    if len(url) > STREAM_URL_MAX_LENGTH:
+        return None, "caster.stream_link_invalid"
+    lowered = url.lower()
+    if not (lowered.startswith("http://") or lowered.startswith("https://")):
+        return None, "caster.stream_link_invalid"
+    if any(ch in _STREAM_URL_FORBIDDEN for ch in url):
+        return None, "caster.stream_link_invalid"
+    if not url.split("://", 1)[1]:
+        return None, "caster.stream_link_invalid"
+    return url, None
+
+
+def _drop_caster_stream_url(event, user_id):
+    """Forget a caster's stream link — called from every caster-removal path."""
+    urls = event.get("caster_stream_urls")
+    if isinstance(urls, dict):
+        urls.pop(str(user_id), None)
+
+
+async def register_caster(interaction, guild_id, channel_id, db_id, stream_url=None):
     lock = _get_guild_lock(guild_id)
     lang = get_guild_language(guild_id)
 
@@ -1704,6 +1753,11 @@ async def register_caster(interaction, guild_id, channel_id, db_id):
             return False
 
         display_name = interaction.user.display_name
+        if stream_url and event.get("caster_stream_links_enabled", False):
+            event.setdefault("caster_stream_urls", {})[user_id] = stream_url
+            stream_logged = stream_url
+        else:
+            stream_url = stream_logged = None
 
         if event["caster_slots_used"] < event["max_caster_slots"]:
             event["casters"][user_id] = {"name": display_name, "id": user_id}
@@ -1721,7 +1775,13 @@ async def register_caster(interaction, guild_id, channel_id, db_id):
     if result == "registered":
         await send_feedback(interaction, t("caster.registered", lang), ephemeral=True)
         await send_to_log_channel(t("log.caster_registered", lang, user=interaction.user.name, uid=user_id), guild=interaction.guild)
-    else:
+    if stream_logged:
+        # The link goes into the public embed, so the initial one is logged too —
+        # not just later edits.
+        await send_to_log_channel(
+            t("log.caster_stream_link", lang, user=interaction.user.name, uid=user_id, url=stream_logged),
+            guild=interaction.guild)
+    if result != "registered":
         await send_feedback(interaction, t("caster.waitlisted", lang, pos=wl_pos), ephemeral=True)
 
     await update_event_displays(guild_id, db_id)
@@ -1744,11 +1804,13 @@ async def unregister_caster(interaction, guild_id, channel_id, db_id):
             del event["casters"][user_id]
             event["caster_slots_used"] = max(0, event["caster_slots_used"] - 1)
             remove_user_assignment(user_assignments, user_id, "__caster__")
+            _drop_caster_stream_url(event, user_id)
             save_event(db_id, event, user_assignments)
             await _process_caster_waitlist(event, user_assignments, db_id, guild_id, channel_id)
         elif any(uid == user_id for uid, _ in event["caster_waitlist"]):
             event["caster_waitlist"] = [(uid, name) for uid, name in event["caster_waitlist"] if uid != user_id]
             remove_user_assignment(user_assignments, user_id, "__caster__")
+            _drop_caster_stream_url(event, user_id)
             save_event(db_id, event, user_assignments)
         else:
             await send_feedback(interaction, t("caster.not_registered", lang), ephemeral=True)
@@ -1758,6 +1820,79 @@ async def unregister_caster(interaction, guild_id, channel_id, db_id):
     await send_to_log_channel(t("log.caster_unregistered", lang, user=interaction.user.name, uid=user_id), guild=interaction.guild)
     await update_event_displays(guild_id, db_id)
     return True
+
+
+async def update_caster_stream_url(interaction, guild_id, db_id, url):
+    """Set or clear the stream link of an already-registered caster."""
+    lock = _get_guild_lock(guild_id)
+    lang = get_guild_language(guild_id)
+
+    async with lock:
+        event, user_assignments, _ = _get_event_by_dbid(guild_id, db_id)
+        if not event:
+            await send_feedback(interaction, t("general.no_active_event", lang), ephemeral=True)
+            return False
+
+        if not event.get("caster_stream_links_enabled", False):
+            await send_feedback(interaction, t("caster.stream_links_disabled", lang), ephemeral=True)
+            return False
+
+        user_id = str(interaction.user.id)
+        if not user_has_caster(user_assignments, user_id):
+            await send_feedback(interaction, t("caster.not_registered", lang), ephemeral=True)
+            return False
+
+        if url:
+            event.setdefault("caster_stream_urls", {})[user_id] = url
+        else:
+            _drop_caster_stream_url(event, user_id)
+        save_event(db_id, event, user_assignments)
+
+    await send_feedback(interaction,
+                        t("caster.stream_link_updated" if url else "caster.stream_link_removed", lang),
+                        ephemeral=True)
+    await send_to_log_channel(
+        t("log.caster_stream_link", lang, user=interaction.user.name, uid=user_id, url=url or "—"),
+        guild=interaction.guild)
+    await update_event_displays(guild_id, db_id)
+    return True
+
+
+class CasterStreamLinkModal(ui.Modal):
+    """Optional stream link for a caster.
+
+    Shown when the caster button is pressed and the event allows stream links —
+    for a new sign-up it registers them with the link, for an already-registered
+    caster it edits the stored link (empty input clears it).
+    """
+
+    def __init__(self, guild_id, channel_id, db_id, lang, current_url=None, editing=False):
+        super().__init__(title=t("caster.stream_modal_title_edit" if editing
+                                 else "caster.stream_modal_title", lang))
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.db_id = db_id
+        self.lang = lang
+        self.editing = editing
+
+        self.stream_url = ui.TextInput(
+            label=t("caster.stream_link_label", lang),
+            placeholder=t("caster.stream_link_placeholder", lang),
+            default=current_url or None,
+            required=False, max_length=STREAM_URL_MAX_LENGTH)
+        self.add_item(self.stream_url)
+
+    async def on_submit(self, interaction):
+        url, err = _validate_stream_url(self.stream_url.value)
+        if err:
+            await interaction.response.send_message(t(err, self.lang), ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        if self.editing:
+            await update_caster_stream_url(interaction, self.guild_id, self.db_id, url)
+        else:
+            await register_caster(interaction, self.guild_id, self.channel_id, self.db_id,
+                                  stream_url=url)
 
 
 async def _process_caster_waitlist(event, user_assignments, db_id, guild_id, channel_id):
@@ -1938,9 +2073,8 @@ class EventActionView(ui.View):
 
         settings = get_guild_settings(gid) or DEFAULT_GUILD_SETTINGS
         view = SquadRegistrationView(gid, cid, db_id, event)
-        desc_key = "squad.step_1_desc" if event.get("playstyle_enabled", True) else "squad.step_1_desc_no_playstyle"
         await interaction.response.send_message(
-            f"**{t('squad.step_1_title', lang)}**\n{t(desc_key, lang)}",
+            f"**{t('squad.step_1_title', lang)}**\n{t('squad.step_1_desc', lang)}",
             view=view, ephemeral=True)
 
     async def _register_tentative(self, interaction: discord.Interaction):
@@ -1995,7 +2129,12 @@ class EventActionView(ui.View):
             await interaction.response.send_message(t("caster.disabled", lang), ephemeral=True)
             return
 
-        if user_has_caster(user_assignments, str(interaction.user.id)):
+        # With stream links enabled the same button doubles as "edit my link",
+        # so an already-registered caster is not turned away here.
+        stream_links = bool(event.get("caster_stream_links_enabled", False))
+        user_id = str(interaction.user.id)
+        already = user_has_caster(user_assignments, user_id)
+        if already and not stream_links:
             await interaction.response.send_message(t("caster.already_registered", lang), ephemeral=True)
             return
 
@@ -2007,6 +2146,12 @@ class EventActionView(ui.View):
         allowed, gate_key = check_role_gate(event, interaction.user, "caster")
         if not allowed:
             await interaction.response.send_message(t(gate_key, lang), ephemeral=True)
+            return
+
+        if stream_links:
+            current = (event.get("caster_stream_urls") or {}).get(user_id)
+            await interaction.response.send_modal(CasterStreamLinkModal(
+                gid, cid, db_id, lang, current_url=current, editing=already))
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -2211,12 +2356,9 @@ class SquadRegistrationView(BaseView):
         self.channel_id = channel_id
         self.db_id = db_id
         self.selected_type = None
-        self.playstyle_enabled = bool(event.get("playstyle_enabled", True))
-        self.selected_playstyle = None if self.playstyle_enabled else "Normal"
         self.event = event
         self._type_fits = True  # set False if the picked type exceeds the early-access seat-% cap
 
-        sizes = _get_squad_sizes(event)
         lang = get_guild_language(guild_id)
 
         self.type_select = ui.Select(
@@ -2226,40 +2368,21 @@ class SquadRegistrationView(BaseView):
         self.type_select.callback = lambda i: self._on_select(i, self.type_select, 'selected_type')
         self.add_item(self.type_select)
 
-        if self.playstyle_enabled:
-            self.playstyle_select = ui.Select(
-                placeholder=t("squad.playstyle_select", lang),
-                options=[
-                    discord.SelectOption(label="Casual", value="Casual"),
-                    discord.SelectOption(label="Normal", value="Normal"),
-                    discord.SelectOption(label="Focused", value="Focused"),
-                ],
-                custom_id="squad_playstyle_select", row=1)
-            self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
-            self.add_item(self.playstyle_select)
-        else:
-            self.playstyle_select = None
-
-        self.continue_button = ui.Button(label=t("squad.continue", lang), style=discord.ButtonStyle.success, disabled=True, row=2)
+        self.continue_button = ui.Button(label=t("squad.continue", lang), style=discord.ButtonStyle.success, disabled=True, row=1)
         self.continue_button.callback = self._continue
         self.add_item(self.continue_button)
 
     def _ready(self):
-        if self.playstyle_enabled:
-            return bool(self.selected_type and self.selected_playstyle)
         return bool(self.selected_type)
 
     def _build_status_content(self):
         lang = get_guild_language(self.guild_id)
         sizes = _get_squad_sizes(self.event)
-        desc_key = "squad.step_1_desc" if self.playstyle_enabled else "squad.step_1_desc_no_playstyle"
-        lines = [f"**{t('squad.step_1_title', lang)}**", t(desc_key, lang)]
+        lines = [f"**{t('squad.step_1_title', lang)}**", t("squad.step_1_desc", lang)]
         if self.selected_type:
             stype, req_size = _parse_squad_type_value(self.selected_type)
             type_label = t(f"squad.type_{stype}", lang, size=req_size or sizes.get(stype, "?"))
             lines.append(t("squad.selected_type", lang, label=type_label))
-        if self.playstyle_enabled and self.selected_playstyle:
-            lines.append(t("squad.selected_playstyle", lang, label=self.selected_playstyle))
         return "\n".join(lines)
 
     async def _on_select(self, interaction, select, attr):
@@ -2291,20 +2414,19 @@ class SquadRegistrationView(BaseView):
         if not self._ready():
             return
         stype, req_size = _parse_squad_type_value(self.selected_type)
-        modal = SquadNameModal(self.guild_id, self.channel_id, self.db_id, stype, self.selected_playstyle,
+        modal = SquadNameModal(self.guild_id, self.channel_id, self.db_id, stype,
                                requested_size=req_size)
         await interaction.response.send_modal(modal)
 
 
 class SquadNameModal(ui.Modal):
-    def __init__(self, guild_id, channel_id, db_id, squad_type, playstyle, requested_size=None):
+    def __init__(self, guild_id, channel_id, db_id, squad_type, requested_size=None):
         lang = get_guild_language(guild_id)
         super().__init__(title=t("squad.register_title", lang))
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.db_id = db_id
         self.squad_type = squad_type
-        self.playstyle = playstyle
         self.requested_size = requested_size
 
         self.squad_name = ui.TextInput(
@@ -2319,7 +2441,7 @@ class SquadNameModal(ui.Modal):
         interaction.extras["edit_feedback"] = True
         await interaction.response.defer(ephemeral=True)
         await register_squad(interaction, self.guild_id, self.channel_id, self.db_id,
-                             self.squad_name.value.strip(), self.squad_type, self.playstyle,
+                             self.squad_name.value.strip(), self.squad_type,
                              requested_size=self.requested_size)
 
 
@@ -3033,10 +3155,10 @@ class AdminActionView(BaseView):
         for st in SQUAD_TYPES:
             abbr = TYPE_ABBREV.get(st, "?")
             for entry in event.get(_waitlist_key(st), []):
-                if not isinstance(entry, (tuple, list)) or len(entry) < 6:
+                if not isinstance(entry, (tuple, list)) or len(entry) < 5:
                     continue
-                player_name = entry[5]
-                uid = str(entry[4])
+                player_name = entry[4]
+                uid = str(entry[3])
                 opts.append(discord.SelectOption(
                     label=f"[WL-{abbr}] {player_name}",
                     value=uid,
@@ -3081,7 +3203,7 @@ class AdminActionView(BaseView):
         wl_opts = []
         for entry in _all_squad_waitlist_entries(event):
             abbr = TYPE_ABBREV.get(entry[1], "?")
-            wl_opts.append(discord.SelectOption(label=f"[WL-{abbr}] {entry[0]}", value=entry[4]))
+            wl_opts.append(discord.SelectOption(label=f"[WL-{abbr}] {entry[0]}", value=entry[3]))
         if wl_opts:
             wl_label = t("embed.waitlist_label", lang, count=len(wl_opts))
             select_groups.append((wl_label, wl_opts[:25]))
@@ -3375,19 +3497,16 @@ class _AdminPlayerRemoveView(BaseView):
 
 
 class _AdminSquadRegView(BaseView):
-    """Admin add-squad: type select + playstyle select + continue → name modal."""
+    """Admin add-squad: type select + rep user select + continue → name modal."""
     def __init__(self, guild_id, channel_id, db_id, event):
         super().__init__(timeout=300, title="Admin Add Squad")
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.db_id = db_id
         self.event = event
-        self.playstyle_enabled = bool(event.get("playstyle_enabled", True))
         self.selected_type = None
-        self.selected_playstyle = None if self.playstyle_enabled else "Normal"
         self.selected_user = None
 
-        sizes = _get_squad_sizes(event)
         lang = get_guild_language(guild_id)
 
         self.type_select = ui.Select(
@@ -3397,47 +3516,29 @@ class _AdminSquadRegView(BaseView):
         self.type_select.callback = lambda i: self._on_select(i, self.type_select, 'selected_type')
         self.add_item(self.type_select)
 
-        if self.playstyle_enabled:
-            self.playstyle_select = ui.Select(
-                placeholder=t("squad.playstyle_select", lang),
-                options=[
-                    discord.SelectOption(label="Casual", value="Casual"),
-                    discord.SelectOption(label="Normal", value="Normal"),
-                    discord.SelectOption(label="Focused", value="Focused"),
-                ], row=1)
-            self.playstyle_select.callback = lambda i: self._on_select(i, self.playstyle_select, 'selected_playstyle')
-            self.add_item(self.playstyle_select)
-        else:
-            self.playstyle_select = None
-
         self.user_select = ui.UserSelect(
-            placeholder=t("admin.select_rep_user", lang), min_values=1, max_values=1, row=2)
+            placeholder=t("admin.select_rep_user", lang), min_values=1, max_values=1, row=1)
         self.user_select.callback = self._user_selected
         self.add_item(self.user_select)
 
         self.continue_button = ui.Button(
-            label=t("squad.continue", lang), style=discord.ButtonStyle.success, disabled=True, row=3)
+            label=t("squad.continue", lang), style=discord.ButtonStyle.success, disabled=True, row=2)
         self.continue_button.callback = self._continue
         self.add_item(self.continue_button)
 
     def _build_status(self):
         lang = get_guild_language(self.guild_id)
         sizes = _get_squad_sizes(self.event)
-        desc_key = "squad.step_1_desc" if self.playstyle_enabled else "squad.step_1_desc_no_playstyle"
-        lines = [f"**{t('squad.step_1_title', lang)}**", t(desc_key, lang)]
+        lines = [f"**{t('squad.step_1_title', lang)}**", t("squad.step_1_desc", lang)]
         if self.selected_type:
             stype, req_size = _parse_squad_type_value(self.selected_type)
             type_label = t(f"squad.type_{stype}", lang, size=req_size or sizes.get(stype, "?"))
             lines.append(t("squad.selected_type", lang, label=type_label))
-        if self.playstyle_enabled and self.selected_playstyle:
-            lines.append(t("squad.selected_playstyle", lang, label=self.selected_playstyle))
         if self.selected_user:
             lines.append(t("admin.selected_rep_user", lang, user=self.selected_user.display_name))
         return "\n".join(lines)
 
     def _all_selected(self):
-        if self.playstyle_enabled:
-            return self.selected_type and self.selected_playstyle and self.selected_user
         return self.selected_type and self.selected_user
 
     async def _on_select(self, interaction, select, attr):
@@ -3456,21 +3557,20 @@ class _AdminSquadRegView(BaseView):
         if not self._all_selected():
             return
         stype, req_size = _parse_squad_type_value(self.selected_type)
-        modal = _AdminSquadNameModal(self.guild_id, self.channel_id, self.db_id, stype, self.selected_playstyle,
+        modal = _AdminSquadNameModal(self.guild_id, self.channel_id, self.db_id, stype,
                                      self.selected_user, requested_size=req_size)
         await interaction.response.send_modal(modal)
 
 
 class _AdminSquadNameModal(ui.Modal):
     """Admin add-squad step 2: enter squad name and register."""
-    def __init__(self, guild_id, channel_id, db_id, squad_type, playstyle, rep_user, requested_size=None):
+    def __init__(self, guild_id, channel_id, db_id, squad_type, rep_user, requested_size=None):
         lang = get_guild_language(guild_id)
         super().__init__(title=t("squad.register_title", lang))
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.db_id = db_id
         self.squad_type = squad_type
-        self.playstyle = playstyle
         self.rep_user = rep_user
         self.requested_size = requested_size
         self.squad_name = ui.TextInput(
@@ -3513,18 +3613,18 @@ class _AdminSquadNameModal(ui.Modal):
 
             wl_key = _waitlist_key(self.squad_type)
             if type_full:
-                event[wl_key].append((squad_name, self.squad_type, self.playstyle, size, squad_id, rep_name))
+                event[wl_key].append((squad_name, self.squad_type, size, squad_id, rep_name))
                 wl_pos = len(event[wl_key])
                 status = t("admin.squad_type_full_waitlist", lang, type=self.squad_type)
             elif size <= available:
                 event["squads"][squad_id] = {
-                    "name": squad_name, "type": self.squad_type, "playstyle": self.playstyle,
+                    "name": squad_name, "type": self.squad_type,
                     "size": size, "rep_name": rep_name,
                 }
                 event["player_slots_used"] += size
                 status = t("admin.squad_added_registered", lang)
             else:
-                event[wl_key].append((squad_name, self.squad_type, self.playstyle, size, squad_id, rep_name))
+                event[wl_key].append((squad_name, self.squad_type, size, squad_id, rep_name))
                 wl_pos = len(event[wl_key])
                 status = t("admin.squad_added_waitlist", lang, pos=wl_pos)
 
@@ -3532,12 +3632,11 @@ class _AdminSquadNameModal(ui.Modal):
             save_event(db_id, event, user_assignments)
 
         type_label = t(f"squad.label_{self.squad_type}", lang) if self.squad_type in SQUAD_TYPES else self.squad_type
-        msg_key = "admin.squad_added" if event.get("playstyle_enabled", True) else "admin.squad_added_no_playstyle"
         await interaction.followup.send(
-            t(msg_key, lang, name=squad_name, type=type_label, size=size, playstyle=self.playstyle, status=status),
+            t("admin.squad_added", lang, name=squad_name, type=type_label, size=size, status=status),
             ephemeral=True)
         await send_to_log_channel(
-            t("log.admin_squad_added", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size, playstyle=self.playstyle),
+            t("log.admin_squad_added", lang, user=interaction.user.name, squad=squad_name, type=type_label, size=size),
             guild=interaction.guild)
         await update_event_displays(gid, db_id)
 
@@ -3693,6 +3792,7 @@ class _ConfirmRemoveView(BaseView):
                     del event["casters"][self.target]
                     event["caster_slots_used"] = max(0, event["caster_slots_used"] - 1)
                     remove_user_assignment(user_assignments, self.target, "__caster__")
+                    _drop_caster_stream_url(event, self.target)
                     save_event(db_id, event, user_assignments)
                     await _process_caster_waitlist(event, user_assignments, db_id, gid, cid)
                 else:
@@ -3701,6 +3801,7 @@ class _ConfirmRemoveView(BaseView):
                             caster_name = name
                             event["caster_waitlist"].pop(i)
                             remove_user_assignment(user_assignments, self.target, "__caster__")
+                            _drop_caster_stream_url(event, self.target)
                             save_event(db_id, event, user_assignments)
                             break
 
@@ -3994,13 +4095,17 @@ def _parse_int_list(text):
 def _visible_edit_properties(event):
     """Return the editable properties relevant to this event's mode.
 
-    Player-mode events never use playstyle (rep concept); rep-mode events never
-    use the player-mode in-squad-role toggle. Each toggle is hidden in the other
-    mode.
+    Player-mode events have no casters, so the caster stream-link toggle is
+    hidden there; rep-mode events never use the player-mode in-squad-role
+    toggle. Each toggle is hidden in the other mode.
     """
     if is_player_mode(event):
-        return [p for p in _EDIT_PROPERTIES if p[1] != "playstyle_enabled"]
-    return [p for p in _EDIT_PROPERTIES if p[1] != "player_roles_enabled"]
+        return [p for p in _EDIT_PROPERTIES if p[1] != "caster_stream_links_enabled"]
+    props = [p for p in _EDIT_PROPERTIES if p[1] != "player_roles_enabled"]
+    if event.get("max_caster_slots", 2) == 0:
+        # No caster slots → the toggle would be a no-op the organizer can't see.
+        props = [p for p in props if p[1] != "caster_stream_links_enabled"]
+    return props
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -5513,11 +5618,24 @@ class WizardCasterRolesView(BaseView):
         self.ping_select.callback = self._ping_selected
         self.add_item(self.ping_select)
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=3)
+        stream_default = bool(event.get("caster_stream_links_enabled", False))
+        self.stream_select = ui.Select(
+            placeholder=t("wizard.caster_stream_select_title", lang),
+            options=[
+                discord.SelectOption(label=t("wizard.caster_stream_no", lang),
+                                     value="no", default=not stream_default),
+                discord.SelectOption(label=t("wizard.caster_stream_yes", lang),
+                                     value="yes", default=stream_default),
+            ],
+            min_values=1, max_values=1, row=3)
+        self.stream_select.callback = self._stream_selected
+        self.add_item(self.stream_select)
+
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=4)
         skip_btn.callback = self._skip
         self.add_item(skip_btn)
 
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=3)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=4)
         continue_btn.callback = self._continue
         self.add_item(continue_btn)
 
@@ -5526,6 +5644,7 @@ class WizardCasterRolesView(BaseView):
         self._caster_early_roles = []
         self._caster_early_users = []
         self._ping_on_open = ping_default
+        self._stream_links = stream_default
 
     async def _caster_role_selected(self, interaction):
         self._caster_roles = [v.id for v in self.caster_role_select.values if isinstance(v, discord.Role)]
@@ -5541,6 +5660,10 @@ class WizardCasterRolesView(BaseView):
         self._ping_on_open = self.ping_select.values[0] == "yes"
         await interaction.response.defer()
 
+    async def _stream_selected(self, interaction):
+        self._stream_links = self.stream_select.values[0] == "yes"
+        await interaction.response.defer()
+
     def _save_selections(self):
         if self._caster_roles or self._caster_users:
             self.event["caster_role_ids"] = self._caster_roles
@@ -5549,6 +5672,7 @@ class WizardCasterRolesView(BaseView):
             self.event["caster_community_role_ids"] = self._caster_early_roles
             self.event["caster_community_user_ids"] = self._caster_early_users
         self.event["ping_on_open"] = self._ping_on_open
+        self.event["caster_stream_links_enabled"] = self._stream_links
 
     async def _continue(self, interaction):
         self._save_selections()
@@ -5644,7 +5768,7 @@ class WizardTimingView(BaseView):
         lang = get_guild_language(self.guild_id)
         if is_player_mode(self.event):
             # Player mode: one user per registration, no squad-limit step — but
-            # offer the in-squad-role toggle (player-mode analogue of playstyle).
+            # offer the in-squad-role toggle instead.
             self.event["max_squads_per_user"] = 1
             next_view = WizardPlayerRolesView(
                 self.guild_id, self.channel_id, self.event, self.user_assignments,
@@ -5652,15 +5776,17 @@ class WizardTimingView(BaseView):
             content = f"**{t('wizard.player_roles_step_title', lang)}**\n{t('wizard.player_roles_step_desc', lang)}"
             await interaction.response.edit_message(content=content, embed=None, view=next_view)
             return
+        if _gate_configured(self.event):
+            # The per-user squad limit was already set in the Slot Limits step,
+            # which leaves this step with nothing to configure — skip it.
+            await _advance_to_dont_waste_or_confirmation(
+                interaction, self.guild_id, self.channel_id, self.event,
+                self.user_assignments, self.settings, self.interaction_user)
+            return
         default_limit = self.event.get("max_squads_per_user", 1)
         next_view = WizardSquadLimitView(self.guild_id, self.channel_id, self.event, self.user_assignments,
                                          self.settings, self.interaction_user)
-        if _gate_configured(self.event):
-            # The per-user squad limit was already set in the Slot Limits step;
-            # this step now only configures playstyle.
-            content = f"**{t('wizard.playstyle_step_title', lang)}**\n{t('wizard.playstyle_step_desc', lang)}"
-        else:
-            content = f"**{t('wizard.squad_limit_title', lang)}**\n{t('wizard.squad_limit_desc', lang, default=default_limit)}"
+        content = f"**{t('wizard.squad_limit_title', lang)}**\n{t('wizard.squad_limit_desc', lang, default=default_limit)}"
         await interaction.response.edit_message(content=content, embed=None, view=next_view)
 
     async def _continue(self, interaction):
@@ -5672,7 +5798,12 @@ class WizardTimingView(BaseView):
 
 
 class WizardSquadLimitView(BaseView):
-    """Step 4: configure max squads per user and squad-registration options."""
+    """Step 4: configure max squads per user.
+
+    Only reached when no role gate is configured — with a gate, the per-user
+    squad limit (#12) is already set in the Slot Limits step and the caller
+    skips this step entirely.
+    """
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
         super().__init__(timeout=300, title="Wizard Squad Limit")
@@ -5684,59 +5815,33 @@ class WizardSquadLimitView(BaseView):
         self.interaction_user = interaction_user
         lang = get_guild_language(guild_id)
 
-        # When a role gate is configured, the per-user squad limit (#12) is set in
-        # the Slot Limits step instead, so this step only configures playstyle.
-        self.limit_select = None
-        play_row = 0
-        if not _gate_configured(event):
-            current_default = event.get("max_squads_per_user", 1)
-            options = []
-            for n in range(1, 21):
-                label = f"{n} Squad" if n == 1 else f"{n} Squads"
-                options.append(discord.SelectOption(label=label, value=str(n), default=(n == current_default)))
-            self.limit_select = ui.Select(placeholder=t("wizard.squad_limit_placeholder", lang),
-                                          options=options, min_values=1, max_values=1, row=0)
-            self.limit_select.callback = self._limit_selected
-            self.add_item(self.limit_select)
-            play_row = 1
+        current_default = event.get("max_squads_per_user", 1)
+        options = []
+        for n in range(1, 21):
+            label = f"{n} Squad" if n == 1 else f"{n} Squads"
+            options.append(discord.SelectOption(label=label, value=str(n), default=(n == current_default)))
+        self.limit_select = ui.Select(placeholder=t("wizard.squad_limit_placeholder", lang),
+                                      options=options, min_values=1, max_values=1, row=0)
+        self.limit_select.callback = self._limit_selected
+        self.add_item(self.limit_select)
 
-        playstyle_default = bool(event.get("playstyle_enabled", True))
-        self.playstyle_select = ui.Select(
-            placeholder=t("wizard.playstyle_select_placeholder", lang),
-            options=[
-                discord.SelectOption(label=t("wizard.playstyle_enabled", lang),
-                                     value="yes", default=playstyle_default),
-                discord.SelectOption(label=t("wizard.playstyle_disabled", lang),
-                                     value="no", default=not playstyle_default),
-            ],
-            min_values=1, max_values=1, row=play_row)
-        self.playstyle_select.callback = self._playstyle_selected
-        self.add_item(self.playstyle_select)
-
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=2)
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=1)
         skip_btn.callback = self._skip
         self.add_item(skip_btn)
 
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=2)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=1)
         continue_btn.callback = self._continue
         self.add_item(continue_btn)
 
         self._selected_limit = None
-        self._selected_playstyle_enabled = None
 
     async def _limit_selected(self, interaction):
         self._selected_limit = int(self.limit_select.values[0])
         await interaction.response.defer()
 
-    async def _playstyle_selected(self, interaction):
-        self._selected_playstyle_enabled = self.playstyle_select.values[0] == "yes"
-        await interaction.response.defer()
-
     def _save_selections(self):
         if self._selected_limit is not None:
             self.event["max_squads_per_user"] = self._selected_limit
-        if self._selected_playstyle_enabled is not None:
-            self.event["playstyle_enabled"] = self._selected_playstyle_enabled
 
     async def _continue(self, interaction):
         self._save_selections()
@@ -5752,8 +5857,8 @@ class WizardSquadLimitView(BaseView):
 
 class WizardPlayerRolesView(BaseView):
     """Player-mode step: enable or disable the in-squad role selection (Squad
-    Leader, Medic, Pilot, …). Player-mode analogue of the rep-mode playstyle
-    toggle. When disabled, players can't pick a role and roles aren't shown."""
+    Leader, Medic, Pilot, …). When disabled, players can't pick a role and roles
+    aren't shown."""
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
         super().__init__(timeout=300, title="Wizard Player Roles")
@@ -5991,16 +6096,16 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
     ping_val = t("wizard.summary_ping_yes", lang) if event.get("ping_on_open", False) else t("wizard.summary_ping_no", lang)
     embed.add_field(name=t("wizard.summary_ping", lang), value=ping_val, inline=True)
 
-    if event.get("mode", "rep") != "player":
-        playstyle_val = (t("wizard.summary_playstyle_yes", lang)
-                         if event.get("playstyle_enabled", True)
-                         else t("wizard.summary_playstyle_no", lang))
-        embed.add_field(name=t("wizard.summary_playstyle", lang), value=playstyle_val, inline=True)
-    else:
+    if event.get("mode", "rep") == "player":
         roles_val = (t("wizard.summary_player_roles_yes", lang)
                      if event.get("player_roles_enabled", True)
                      else t("wizard.summary_player_roles_no", lang))
         embed.add_field(name=t("wizard.summary_player_roles", lang), value=roles_val, inline=True)
+    elif event.get("max_caster_slots", 2) > 0:
+        stream_val = (t("wizard.summary_caster_stream_yes", lang)
+                      if event.get("caster_stream_links_enabled", False)
+                      else t("wizard.summary_caster_stream_no", lang))
+        embed.add_field(name=t("wizard.summary_caster_stream", lang), value=stream_val, inline=True)
 
     if dont_waste_slots_possible(event):
         dw_val = (t("wizard.summary_dont_waste_yes", lang)
@@ -7231,7 +7336,7 @@ def _find_squad_by_name(event, squad_name):
         wl_key = _waitlist_key(st)
         for entry in event.get(wl_key, []):
             if entry[0].lower() == lower:
-                return entry[4], wl_key
+                return entry[3], wl_key
     return None, None
 
 
@@ -7247,7 +7352,7 @@ async def _squad_name_autocomplete(interaction: discord.Interaction, current: st
         name = data.get("name", sid)
         choices.append(app_commands.Choice(name=name, value=sid))
     for entry in _all_squad_waitlist_entries(event):
-        choices.append(app_commands.Choice(name=entry[0], value=entry[4]))
+        choices.append(app_commands.Choice(name=entry[0], value=entry[3]))
     current_lower = current.lower()
     return [c for c in choices if current_lower in c.name.lower()][:25]
 
@@ -7296,10 +7401,10 @@ async def admin_edit_squad_cmd(interaction: discord.Interaction, squad_name: str
             else:
                 # In per-type waitlist — update the tuple entry
                 for i, entry in enumerate(event[location]):
-                    if len(entry) > 4 and entry[4] == found_id:
-                        old_size = entry[3]
+                    if len(entry) > 3 and entry[3] == found_id:
+                        old_size = entry[2]
                         lst = list(entry)
-                        lst[3] = new_size
+                        lst[2] = new_size
                         event[location][i] = tuple(lst)
                         break
                 save_event(db_id, event, user_assignments)
@@ -7342,18 +7447,15 @@ async def admin_waitlist_cmd(interaction: discord.Interaction):
             color=discord.Color.orange())
 
         type_labels = {"infantry": "Inf.", "vehicle": "Veh.", "heli": "Heli"}
-        entry_key = ("admin.waitlist_squad_entry"
-                     if event.get("playstyle_enabled", True)
-                     else "admin.waitlist_squad_entry_no_playstyle")
         for st in SQUAD_TYPES:
             wl = event.get(_waitlist_key(st), [])
             if wl:
                 lines = []
                 for i, entry in enumerate(wl, 1):
-                    squad_name, squad_type, playstyle, size, *_rest = entry
-                    lines.append(t(entry_key, lang,
+                    squad_name, squad_type, size, *_rest = entry
+                    lines.append(t("admin.waitlist_squad_entry", lang,
                                   pos=i, name=squad_name, type=type_labels.get(squad_type, squad_type),
-                                  size=size, playstyle=playstyle))
+                                  size=size))
                 embed.add_field(
                     name=t("embed.type_waitlist_label", lang, type=t(f"embed.type_{st}", lang), count=len(wl)),
                     value="\n".join(lines), inline=False)
@@ -7361,7 +7463,7 @@ async def admin_waitlist_cmd(interaction: discord.Interaction):
         if caster_wl:
             lines = []
             for i, entry in enumerate(caster_wl, 1):
-                name, uid = entry[0], entry[1]
+                uid, name = entry[0], entry[1]
                 lines.append(t("admin.waitlist_caster_entry", lang, pos=i, name=name, uid=uid))
             embed.add_field(name="Casters", value="\n".join(lines), inline=False)
 
@@ -7493,26 +7595,25 @@ async def export_csv_cmd(interaction: discord.Interaction):
                         squad_type, squad_name, status_registered,
                     ])
             for entry in _all_squad_waitlist_entries(event):
-                # (display_name, squad_type, None, 1, user_id, display_name)
-                if len(entry) < 6:
+                # (display_name, squad_type, 1, user_id, display_name, roles)
+                if len(entry) < 5:
                     continue
-                display_name = entry[5]
+                display_name = entry[4]
                 squad_type = entry[1]
-                user_id = entry[4]
+                user_id = entry[3]
                 writer.writerow([user_id, display_name, squad_type, "", status_waitlist])
         else:
-            writer.writerow(["Squad Name", "Squad Type", "Size", "Playstyle", "Rep Name", "Squad ID", "Status"])
+            writer.writerow(["Squad Name", "Squad Type", "Size", "Rep Name", "Squad ID", "Status"])
             for sid, data in event.get("squads", {}).items():
                 writer.writerow([
                     data.get("name", ""), data.get("type", ""), data.get("size", 0),
-                    data.get("playstyle", ""), data.get("rep_name", ""),
-                    sid, status_registered,
+                    data.get("rep_name", ""), sid, status_registered,
                 ])
             for entry in _all_squad_waitlist_entries(event):
-                squad_name, squad_type, playstyle, size, squad_id, *rest = entry
+                squad_name, squad_type, size, squad_id, *rest = entry
                 rep_name = rest[0] if rest else ""
                 writer.writerow([
-                    squad_name, squad_type, size, playstyle,
+                    squad_name, squad_type, size,
                     rep_name, squad_id, status_waitlist,
                 ])
 

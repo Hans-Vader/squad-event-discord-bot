@@ -266,7 +266,7 @@ class TestI18nKeys(unittest.TestCase):
         "edit.property.early_pct_cap", "edit.property.early_squad_cap",
         "gate.seat_cap_reached", "gate.squad_role_cap_reached",
         "limit.prefix.regular", "limit.prefix.early", "limit.squads_per_user", "limit.squads_per_role",
-        "wizard.cap_regular_squads_title", "wizard.playstyle_step_title", "wizard.playstyle_step_desc",
+        "wizard.cap_regular_squads_title",
         "squad.cap_info_seat", "squad.cap_info_squads",
     ]
 

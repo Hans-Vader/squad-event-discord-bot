@@ -79,9 +79,9 @@ class RepModeGatherTest(unittest.TestCase):
         event = {
             "mode": "squad",
             "squads": {
-                "sq-1": {"name": "Alpha", "type": "infantry", "playstyle": "casual",
+                "sq-1": {"name": "Alpha", "type": "infantry",
                          "size": 6, "rep_name": "Rita"},
-                "sq-2": {"name": "Bravo", "type": "vehicle", "playstyle": "serious",
+                "sq-2": {"name": "Bravo", "type": "vehicle",
                          "size": 3, "rep_name": "Rob"},
             },
             "casters": {"u9": {"name": "Cass", "id": "u9"}},

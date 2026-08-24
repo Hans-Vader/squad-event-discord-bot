@@ -183,8 +183,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "🪖 Representative mode",
     },
     "event.mode_rep_desc": {
-        "de": "Ein Vertreter meldet komplette Squads an – mit Squad-Name, Typ (Infanterie/Fahrzeug/Heli) und Spielstil. Mehrere Squads pro Vertreter möglich, Caster können sich anmelden.",
-        "en": "A representative registers complete squads – with squad name, type (Infantry/Vehicle/Heli) and playstyle. Multiple squads per representative are possible, casters can register.",
+        "de": "Ein Vertreter meldet komplette Squads an – mit Squad-Name und Typ (Infanterie/Fahrzeug/Heli). Mehrere Squads pro Vertreter möglich, Caster können sich anmelden.",
+        "en": "A representative registers complete squads – with squad name and type (Infantry/Vehicle/Heli). Multiple squads per representative are possible, casters can register.",
     },
     "event.mode_player_name": {
         "de": "🎮 Spieler-Modus",
@@ -465,20 +465,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Register squad",
     },
     "squad.step_1_desc": {
-        "de": "Wähle den Squad-Typ und Spielstil:",
-        "en": "Choose squad type and playstyle:",
-    },
-    "squad.step_1_desc_no_playstyle": {
         "de": "Wähle den Squad-Typ:",
         "en": "Choose squad type:",
     },
     "squad.type_select": {
         "de": "Squad-Typ wählen...",
         "en": "Choose squad type...",
-    },
-    "squad.playstyle_select": {
-        "de": "Spielstil wählen...",
-        "en": "Choose playstyle...",
     },
     "squad.type_infantry": {
         "de": "⚔️ Infanterie ({size} Spieler)",
@@ -504,18 +496,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "🚁 Heli ({size} Spieler)",
         "en": "🚁 Heli ({size} players)",
     },
-    "squad.playstyle_casual": {
-        "de": "Casual",
-        "en": "Casual",
-    },
-    "squad.playstyle_normal": {
-        "de": "Normal",
-        "en": "Normal",
-    },
-    "squad.playstyle_focused": {
-        "de": "Focused",
-        "en": "Focused",
-    },
     "squad.name_label": {
         "de": "Squad-Name",
         "en": "Squad name",
@@ -528,35 +508,19 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "**Typ:** {label}",
         "en": "**Type:** {label}",
     },
-    "squad.selected_playstyle": {
-        "de": "**Spielstil:** {label}",
-        "en": "**Playstyle:** {label}",
-    },
     "squad.continue": {
         "de": "Weiter",
         "en": "Continue",
     },
     "squad.registered": {
-        "de": "Squad **{name}** ({type}, {size} Spieler, {playstyle}) wurde erfolgreich angemeldet! {info}",
-        "en": "Squad **{name}** ({type}, {size} players, {playstyle}) registered successfully! {info}",
-    },
-    "squad.registered_no_playstyle": {
         "de": "Squad **{name}** ({type}, {size} Spieler) wurde erfolgreich angemeldet! {info}",
         "en": "Squad **{name}** ({type}, {size} players) registered successfully! {info}",
     },
     "squad.waitlisted": {
-        "de": "Nicht genügend Plätze! Squad **{name}** ({type}, {size} Spieler, {playstyle}) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
-        "en": "Not enough slots! Squad **{name}** ({type}, {size} players, {playstyle}) has been waitlisted (position {pos}). {info}",
-    },
-    "squad.waitlisted_no_playstyle": {
         "de": "Nicht genügend Plätze! Squad **{name}** ({type}, {size} Spieler) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
         "en": "Not enough slots! Squad **{name}** ({type}, {size} players) has been waitlisted (position {pos}). {info}",
     },
     "squad.type_full": {
-        "de": "Alle {type}-Plätze sind belegt! Squad **{name}** ({type}, {size} Spieler, {playstyle}) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
-        "en": "All {type} slots are taken! Squad **{name}** ({type}, {size} players, {playstyle}) has been waitlisted (position {pos}). {info}",
-    },
-    "squad.type_full_no_playstyle": {
         "de": "Alle {type}-Plätze sind belegt! Squad **{name}** ({type}, {size} Spieler) wurde auf die Warteliste gesetzt (Position {pos}). {info}",
         "en": "All {type} slots are taken! Squad **{name}** ({type}, {size} players) has been waitlisted (position {pos}). {info}",
     },
@@ -659,7 +623,45 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "You don't have the required role to register as a caster.",
     },
 
+    # ── Caster stream links ───────────────────────────────────────────────
+    "caster.stream_modal_title": {
+        "de": "Als Caster anmelden",
+        "en": "Register as caster",
+    },
+    "caster.stream_modal_title_edit": {
+        "de": "Stream-Link bearbeiten",
+        "en": "Edit stream link",
+    },
+    "caster.stream_link_label": {
+        "de": "Stream-Link (optional)",
+        "en": "Stream link (optional)",
+    },
+    "caster.stream_link_placeholder": {
+        "de": "https://twitch.tv/deinkanal — leer lassen für keinen Link",
+        "en": "https://twitch.tv/yourchannel — leave empty for no link",
+    },
+    "caster.stream_link_invalid": {
+        "de": "Ungültiger Stream-Link. Er muss mit http:// oder https:// beginnen und darf keine Leerzeichen oder Klammern enthalten.",
+        "en": "Invalid stream link. It must start with http:// or https:// and must not contain spaces or brackets.",
+    },
+    "caster.stream_link_updated": {
+        "de": "Dein Stream-Link wurde gespeichert.",
+        "en": "Your stream link has been saved.",
+    },
+    "caster.stream_link_removed": {
+        "de": "Dein Stream-Link wurde entfernt.",
+        "en": "Your stream link has been removed.",
+    },
+    "caster.stream_links_disabled": {
+        "de": "Stream-Links sind für dieses Event deaktiviert.",
+        "en": "Stream links are disabled for this event.",
+    },
+
     # ── Event embed / display ─────────────────────────────────────────────
+    "embed.stream_link": {
+        "de": "🔴 Stream",
+        "en": "🔴 Stream",
+    },
     "embed.title": {
         "de": "Event: {name}",
         "en": "Event: {name}",
@@ -917,7 +919,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "🚫 Abgemeldet ({count})",
         "en": "🚫 Declined ({count})",
     },
-    "embed.declined_more": {
+    "embed.more_entries": {
         "de": "+{count} weitere",
         "en": "+{count} more",
     },
@@ -1239,8 +1241,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Event '{name}' expired automatically.",
     },
     "log.squad_registered": {
-        "de": "Squad angemeldet: {user} hat Squad '{squad}' ({type}, {size} Spieler, {playstyle}) angemeldet",
-        "en": "Squad registered: {user} registered squad '{squad}' ({type}, {size} players, {playstyle})",
+        "de": "Squad angemeldet: {user} hat Squad '{squad}' ({type}, {size} Spieler) angemeldet",
+        "en": "Squad registered: {user} registered squad '{squad}' ({type}, {size} players)",
     },
     "log.squad_waitlisted": {
         "de": "Squad auf Warteliste: {user} hat Squad '{squad}' auf Warteliste gesetzt",
@@ -1261,6 +1263,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "log.caster_registered": {
         "de": "Caster angemeldet: {user} ({uid})",
         "en": "Caster registered: {user} ({uid})",
+    },
+    "log.caster_stream_link": {
+        "de": "Caster-Stream-Link: {user} ({uid}) → {url}",
+        "en": "Caster stream link: {user} ({uid}) → {url}",
     },
     "log.caster_unregistered": {
         "de": "Caster abgemeldet: {user} ({uid})",
@@ -1648,21 +1654,17 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "18. Folge-Event erstellen nach",
         "en": "18. Recreate next event after",
     },
-    "edit.property.playstyle_enabled": {
-        "de": "19. Spielstil-Auswahl bei Anmeldung",
-        "en": "19. Playstyle selection at registration",
-    },
     "edit.property.player_roles_enabled": {
-        "de": "22. Rollenauswahl bei Anmeldung",
-        "en": "22. Role selection at registration",
+        "de": "21. Rollenauswahl bei Anmeldung",
+        "en": "21. Role selection at registration",
     },
     "edit.property.dont_waste_slots": {
-        "de": "23. Slots nicht verschwenden (größere Squads)",
-        "en": "23. Don't waste slots (bigger squads)",
+        "de": "22. Slots nicht verschwenden (größere Squads)",
+        "en": "22. Don't waste slots (bigger squads)",
     },
     "edit.property.dont_waste_sizes": {
-        "de": "24. Erlaubte Übergrößen (leer = alle)",
-        "en": "24. Allowed oversized sizes (empty = all)",
+        "de": "23. Erlaubte Übergrößen (leer = alle)",
+        "en": "23. Allowed oversized sizes (empty = all)",
     },
     "edit.sizes_all": {
         "de": "Alle",
@@ -1693,8 +1695,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "This option cannot be enabled: with the current configuration there are no unused slots.",
     },
     "edit.property.dont_waste_max": {
-        "de": "25. Max. übergroße Squads (leer/0 = unbegrenzt)",
-        "en": "25. Max. oversized squads (empty/0 = unlimited)",
+        "de": "24. Max. übergroße Squads (leer/0 = unbegrenzt)",
+        "en": "24. Max. oversized squads (empty/0 = unlimited)",
+    },
+    "edit.property.caster_stream_links": {
+        "de": "25. Stream-Links für Caster",
+        "en": "25. Stream links for casters",
     },
     "edit.max_unlimited": {
         "de": "Unbegrenzt",
@@ -1938,14 +1944,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Vorab-Zugang-Rollen — max. Squads pro Rolle",
         "en": "Early-access roles — max squads per role",
     },
-    "wizard.playstyle_step_title": {
-        "de": "Spielstil-Auswahl",
-        "en": "Playstyle selection",
-    },
-    "wizard.playstyle_step_desc": {
-        "de": "Sollen Squads bei der Anmeldung einen Spielstil wählen?",
-        "en": "Should squads pick a playstyle when registering?",
-    },
     "wizard.player_roles_step_title": {
         "de": "Rollen-Auswahl",
         "en": "Role selection",
@@ -1955,12 +1953,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Should players be able to optionally pick an in-squad role (e.g. Squad Leader, Medic, Pilot) when registering?",
     },
     "edit.property.early_pct_cap": {
-        "de": "20. Slot-Limit: Vorab-Zugang (%)",
-        "en": "20. Slot limit: early access (%)",
+        "de": "19. Slot-Limit: Vorab-Zugang (%)",
+        "en": "19. Slot limit: early access (%)",
     },
     "edit.property.early_squad_cap": {
-        "de": "21. Max. Squads pro Vorab-Zugang-Rolle",
-        "en": "21. Max squads per early-access role",
+        "de": "20. Max. Squads pro Vorab-Zugang-Rolle",
+        "en": "20. Max squads per early-access role",
     },
     "gate.seat_cap_reached": {
         "de": "Slot-Kontingent deiner Anmeldegruppe: {usage} — würde das Limit überschreiten.",
@@ -2237,6 +2235,30 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Countdown",
         "en": "Countdown",
     },
+    "wizard.caster_stream_select_title": {
+        "de": "Dürfen Caster einen Stream-Link angeben?",
+        "en": "May casters provide a stream link?",
+    },
+    "wizard.caster_stream_yes": {
+        "de": "Ja — Stream-Link bei der Anmeldung erlauben",
+        "en": "Yes — allow a stream link at registration",
+    },
+    "wizard.caster_stream_no": {
+        "de": "Nein — keine Stream-Links",
+        "en": "No — no stream links",
+    },
+    "wizard.summary_caster_stream": {
+        "de": "Caster-Stream-Links",
+        "en": "Caster stream links",
+    },
+    "wizard.summary_caster_stream_yes": {
+        "de": "Aktiviert",
+        "en": "Enabled",
+    },
+    "wizard.summary_caster_stream_no": {
+        "de": "Deaktiviert",
+        "en": "Disabled",
+    },
     "wizard.ping_select_title": {
         "de": "Ausgewählte Rollen/Benutzer bei Anmeldestart benachrichtigen?",
         "en": "Notify the selected roles/users when registration opens?",
@@ -2266,36 +2288,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Squad Limit & Options (optional)",
     },
     "wizard.squad_limit_desc": {
-        "de": "Wie viele Squads darf ein Spieler maximal anmelden (Standard: {default}) und soll bei der Squad-Anmeldung ein Spielstil ausgewählt werden?",
-        "en": "How many squads can a user register at most (default: {default}), and should a playstyle be selected during squad registration?",
+        "de": "Wie viele Squads darf ein Spieler maximal anmelden (Standard: {default})?",
+        "en": "How many squads can a user register at most (default: {default})?",
     },
     "wizard.squad_limit_placeholder": {
         "de": "Max. Squads pro Spieler",
         "en": "Max squads per user",
-    },
-    "wizard.playstyle_select_placeholder": {
-        "de": "Spielstil-Auswahl bei Anmeldung...",
-        "en": "Playstyle selection at registration...",
-    },
-    "wizard.playstyle_enabled": {
-        "de": "Spielstil-Auswahl aktivieren",
-        "en": "Enable playstyle selection",
-    },
-    "wizard.playstyle_disabled": {
-        "de": "Spielstil-Auswahl deaktivieren",
-        "en": "Disable playstyle selection",
-    },
-    "wizard.summary_playstyle": {
-        "de": "Spielstil-Auswahl",
-        "en": "Playstyle selection",
-    },
-    "wizard.summary_playstyle_yes": {
-        "de": "Aktiviert",
-        "en": "Enabled",
-    },
-    "wizard.summary_playstyle_no": {
-        "de": "Deaktiviert",
-        "en": "Disabled",
     },
     "wizard.player_roles_select_placeholder": {
         "de": "Rollenauswahl bei Anmeldung...",
@@ -2579,10 +2577,6 @@ _STRINGS: dict[str, dict[str, str]] = {
 
     # ── Admin squad management ───────────────────────────────────────────
     "admin.squad_added": {
-        "de": "Squad **{name}** ({type}, {size} Spieler, {playstyle}) hinzugefügt. Status: {status}",
-        "en": "Squad **{name}** ({type}, {size} players, {playstyle}) added. Status: {status}",
-    },
-    "admin.squad_added_no_playstyle": {
         "de": "Squad **{name}** ({type}, {size} Spieler) hinzugefügt. Status: {status}",
         "en": "Squad **{name}** ({type}, {size} players) added. Status: {status}",
     },
@@ -2627,10 +2621,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "The waitlist is empty.",
     },
     "admin.waitlist_squad_entry": {
-        "de": "**{pos}.** {name} ({type}, {size} Spieler, {playstyle})",
-        "en": "**{pos}.** {name} ({type}, {size} players, {playstyle})",
-    },
-    "admin.waitlist_squad_entry_no_playstyle": {
         "de": "**{pos}.** {name} ({type}, {size} Spieler)",
         "en": "**{pos}.** {name} ({type}, {size} players)",
     },
@@ -2659,8 +2649,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Invalid size. Must be at least 1.",
     },
     "log.admin_squad_added": {
-        "de": "Admin: {user} hat Squad '{squad}' ({type}, {size}, {playstyle}) hinzugefügt",
-        "en": "Admin: {user} added squad '{squad}' ({type}, {size}, {playstyle})",
+        "de": "Admin: {user} hat Squad '{squad}' ({type}, {size}) hinzugefügt",
+        "en": "Admin: {user} added squad '{squad}' ({type}, {size})",
     },
     "log.admin_squad_edited": {
         "de": "Admin: {user} hat Squad '{squad}' Größe {old}→{new} geändert",

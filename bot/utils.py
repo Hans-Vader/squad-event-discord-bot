@@ -125,8 +125,7 @@ _SQUAD_TYPE_LABEL = {"infantry": "Infantry", "vehicle": "Vehicle", "heli": "Heli
 
 # Per-role display translations. Stored role values are English; the dropdown
 # label and the embed parenthetical render the localized form. Roles missing
-# from this map fall back to the raw English value (matching the playstyle
-# convention).
+# from this map fall back to the raw English value.
 _ROLE_LABEL_TRANSLATIONS = {
     "Logi driver": {"de": "Logi-Fahrer"},
     "Mortar":      {"de": "Mörser"},
@@ -227,6 +226,36 @@ def _format_role_suffix(roles, lang, roles_enabled=True) -> str:
         icon = unarmed_emoji()
         return f" ({icon})" if icon else ""
     return f" ({', '.join(labels)})"
+
+
+def _clamp_field_lines(lines, lang, budget=950) -> str:
+    """Join lines into one embed-field value that stays under Discord's cap.
+
+    A field value over 1024 chars makes the *whole* embed edit fail, and the
+    caller only logs that — the public event display would silently freeze. So
+    every unbounded list collapses its tail into "+X weitere" instead.
+    """
+    value, shown = "", 0
+    for line in lines:
+        if len(value) + len(line) + 1 > budget:
+            break
+        value += ("\n" if value else "") + line
+        shown += 1
+    if shown < len(lines):
+        value += "\n*" + t("embed.more_entries", lang, count=len(lines) - shown) + "*"
+    return value
+
+
+def _caster_display(user_id, name, stream_urls, lang) -> str:
+    """Caster name, plus a clickable stream link when one is stored for them.
+
+    The URL was validated on input (bot._validate_stream_url rejects whitespace
+    and brackets), so it cannot break out of the markdown link syntax here.
+    """
+    url = stream_urls.get(str(user_id)) if stream_urls else None
+    if not url:
+        return f"**{name}**"
+    return f"**{name}** · [{t('embed.stream_link', lang)}]({url})"
 
 
 def _waitlist_key(squad_type: str) -> str:
@@ -584,7 +613,7 @@ def _player_register(event: dict, user_assignments: dict, user_id, display_name:
         return placed, "registered"
 
     event.setdefault(_waitlist_key(squad_type), []).append(
-        (display_name, squad_type, None, 1, uid, display_name, list(roles or [])))
+        (display_name, squad_type, 1, uid, display_name, list(roles or [])))
     return None, "waitlisted"
 
 
@@ -714,12 +743,12 @@ def _promote_player_waitlist(event: dict, user_assignments: dict, squad_type: st
     waitlist = event.get(_waitlist_key(squad_type), [])
     while waitlist:
         entry = waitlist[0]
-        if not isinstance(entry, (tuple, list)) or len(entry) < 6:
+        if not isinstance(entry, (tuple, list)) or len(entry) < 5:
             waitlist.pop(0)
             continue
-        uid = str(entry[4])
-        name = entry[5]
-        role_data = entry[6] if len(entry) > 6 else None
+        uid = str(entry[3])
+        name = entry[4]
+        role_data = entry[5] if len(entry) > 5 else None
         if isinstance(role_data, list):
             roles = role_data
         elif isinstance(role_data, str) and role_data:
@@ -748,9 +777,9 @@ def _player_remove_from_waitlist(event: dict, user_id) -> Optional[str]:
     for st in _SQUAD_TYPES:
         wl = event.get(_waitlist_key(st), [])
         for i, entry in enumerate(wl):
-            if not isinstance(entry, (tuple, list)) or len(entry) <= 4:
+            if not isinstance(entry, (tuple, list)) or len(entry) <= 3:
                 continue
-            if str(entry[4]) == uid:
+            if str(entry[3]) == uid:
                 wl.pop(i)
                 return st
     return None
@@ -847,7 +876,7 @@ def _player_waitlist_type(event: dict, user_id) -> Optional[str]:
     uid = str(user_id)
     for st in _SQUAD_TYPES:
         for entry in event.get(_waitlist_key(st), []):
-            if isinstance(entry, (tuple, list)) and len(entry) > 4 and str(entry[4]) == uid:
+            if isinstance(entry, (tuple, list)) and len(entry) > 3 and str(entry[3]) == uid:
                 return st
     return None
 
@@ -971,8 +1000,8 @@ def _player_current_assignment(event: dict, user_assignments: dict, user_id) -> 
             return squad.get("type"), []
     for st in _SQUAD_TYPES:
         for entry in event.get(_waitlist_key(st), []):
-            if isinstance(entry, (tuple, list)) and len(entry) > 4 and str(entry[4]) == uid:
-                role_data = entry[6] if len(entry) > 6 else None
+            if isinstance(entry, (tuple, list)) and len(entry) > 3 and str(entry[3]) == uid:
+                role_data = entry[5] if len(entry) > 5 else None
                 if isinstance(role_data, list):
                     return st, list(role_data)
                 if isinstance(role_data, str) and role_data:
@@ -1361,14 +1390,12 @@ def build_event_summary_embed(event: dict, lang: str = "de") -> Embed:
     # List squads
     if squads:
         lines = []
-        playstyle_enabled = event.get("playstyle_enabled", True)
         for squad_id, data in squads.items():
             type_map = {"infantry": "Inf.", "vehicle": "Veh.", "heli": "Heli"}
             tl = type_map.get(data.get("type", ""), "?")
             rep = data.get("rep_name", "")
             rep_suffix = f" — {rep}" if rep else ""
-            ps_prefix = f"[{data.get('playstyle', 'Normal')}] " if playstyle_enabled else ""
-            lines.append(f"{ps_prefix}**{data.get('name', squad_id)}** ({tl}, {data.get('size', 0)}){rep_suffix}")
+            lines.append(f"**{data.get('name', squad_id)}** ({tl}, {data.get('size', 0)}){rep_suffix}")
         embed.add_field(
             name=f"{t('embed.squads_label', lang)} ({len(squads)})",
             value="\n".join(lines[:25]) or "—",
@@ -1471,7 +1498,6 @@ def format_event_details(event: dict, lang: str = "de",
     unused = server_cap - max_casters - (max_inf_squads * inf_size) - vehicle_player_slots - heli_player_slots
 
     is_player_mode = event.get("mode") == "player"
-    playstyle_enabled = event.get("playstyle_enabled", True)
     # Player-mode in-squad roles are opt-out per event: when disabled, roles are
     # never shown (even if stored on a member from before the toggle was flipped).
     roles_enabled = event.get("player_roles_enabled", True)
@@ -1579,12 +1605,10 @@ def format_event_details(event: dict, lang: str = "de",
                         header += f" ⚠️ {t('embed.no_squad_leader', lang)}"
                     text += f"{header}:\n{names}\n\n"
                 else:
-                    playstyle = data.get("playstyle", "Normal")
                     sq_size = data.get("size", 0)
                     rep = data.get("rep_name")
                     rep_suffix = f" — {rep}" if rep else ""
-                    ps_prefix = f"[{playstyle}] " if playstyle_enabled else ""
-                    text += f"{ps_prefix}**{data.get('name', squad_id)}** (👥 {sq_size}){rep_suffix}\n"
+                    text += f"**{data.get('name', squad_id)}** (👥 {sq_size}){rep_suffix}\n"
             embed.add_field(name=name, value=text.rstrip("\n"), inline=False)
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
@@ -1595,9 +1619,9 @@ def format_event_details(event: dict, lang: str = "de",
             wl_text = ""
             for i, entry in enumerate(wl):
                 if is_player_mode:
-                    # (display_name, type, None, 1, user_id, display_name, roles)
-                    player_name = entry[5] if len(entry) > 5 else entry[0]
-                    role_data = entry[6] if len(entry) > 6 else None
+                    # (display_name, type, 1, user_id, display_name, roles)
+                    player_name = entry[4] if len(entry) > 4 else entry[0]
+                    role_data = entry[5] if len(entry) > 5 else None
                     if isinstance(role_data, list):
                         wl_roles = role_data
                     elif isinstance(role_data, str) and role_data:
@@ -1606,11 +1630,10 @@ def format_event_details(event: dict, lang: str = "de",
                         wl_roles = []
                     wl_text += f"{i+1}. **{player_name}**{_format_role_suffix(wl_roles, lang, roles_enabled)}\n"
                 else:
-                    squad_name, _squad_type, playstyle, sq_size, _squad_id, *_rest = entry
+                    squad_name, _squad_type, sq_size, _squad_id, *_rest = entry
                     rep_name = _rest[0] if _rest else None
                     rep_suffix = f" — {rep_name}" if rep_name else ""
-                    ps_prefix = f"[{playstyle}] " if playstyle_enabled else ""
-                    wl_text += f"{i+1}. {ps_prefix}**{squad_name}** (👥 {sq_size}){rep_suffix}\n"
+                    wl_text += f"{i+1}. **{squad_name}** (👥 {sq_size}){rep_suffix}\n"
             embed.add_field(
                 name=t("embed.type_waitlist_label", lang, type=t(f"embed.type_{type_key}", lang), count=len(wl)),
                 value=wl_text, inline=False)
@@ -1621,9 +1644,15 @@ def format_event_details(event: dict, lang: str = "de",
     if caster_enabled:
         casters = event.get("casters", {})
         caster_used = event.get("caster_slots_used", 0)
+        # The toggle is authoritative for display too: switching it off hides
+        # stored links without deleting them (switching it back on restores them).
+        stream_urls = ((event.get("caster_stream_urls") or {})
+                       if event.get("caster_stream_links_enabled", False) else {})
         name = t("embed.caster_overview_compact", lang, count=caster_used, max=max_casters)
         if casters:
-            caster_text = "\n".join(f"**{d.get('name', '?')}**" for d in casters.values())
+            caster_text = _clamp_field_lines(
+                [_caster_display(uid, d.get("name", "?"), stream_urls, lang)
+                 for uid, d in casters.items()], lang)
             embed.add_field(name=name, value=caster_text, inline=False)
         else:
             embed.add_field(name=name, value=t("embed.no_entries", lang), inline=False)
@@ -1631,7 +1660,9 @@ def format_event_details(event: dict, lang: str = "de",
         # Caster waitlist — directly below caster entries
         caster_wl = event.get("caster_waitlist", [])
         if caster_wl:
-            cwl_text = "\n".join(f"{i+1}. **{name}**" for i, (_, name) in enumerate(caster_wl))
+            cwl_text = _clamp_field_lines(
+                [f"{i+1}. {_caster_display(uid, wl_name, stream_urls, lang)}"
+                 for i, (uid, wl_name) in enumerate(caster_wl)], lang)
             embed.add_field(name=t("embed.caster_waitlist_label", lang, count=len(caster_wl)), value=cwl_text, inline=False)
 
     # Tentative ("Vorläufig") players — one field per squad type at the very
@@ -1656,15 +1687,7 @@ def format_event_details(event: dict, lang: str = "de",
     # field limit, else the whole embed edit would be rejected.
     declined = event.get("declined", [])
     if is_player_mode and declined:
-        names = [f"**{d.get('name', '?')}**" for d in declined]
-        value, shown = "", 0
-        for n in names:  # ponytail: 1024-char field cap; overflow collapses to "+X weitere"
-            if len(value) + len(n) + 1 > 950:
-                break
-            value += ("\n" if value else "") + n
-            shown += 1
-        if shown < len(names):
-            value += "\n*" + t("embed.declined_more", lang, count=len(names) - shown) + "*"
+        value = _clamp_field_lines([f"**{d.get('name', '?')}**" for d in declined], lang)
         embed.add_field(
             name=t("embed.declined_label", lang, count=len(declined)),
             value=value, inline=False)
