@@ -288,7 +288,7 @@ Click the **Admin** (⚙️) button on the event embed to open the admin panel. 
 |---|---|---|
 | Squad | **Add Squad** | Select type and representative user, then enter squad name |
 | Squad | **Remove Squad** | Select a squad to remove (includes waitlisted squads) |
-| Caster | **Add Caster** | Select a Discord user to add as caster |
+| Caster | **Add Caster** | Select a Discord user to add as caster; with caster stream links enabled, a form for that user's optional stream link opens next |
 | Caster | **Remove Caster** | Select a caster to remove (includes waitlisted casters) |
 | Registration | **Open Registration** | Open registration manually — gated behind a confirmation prompt (opening may send a ping to the configured roles) |
 | Registration | **Close Registration** | Close registration manually — gated behind a confirmation prompt. For rep/caster events this reverts the event to its early-access state (only early-access roles can register) |

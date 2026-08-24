@@ -473,5 +473,88 @@ class AdminToggleTest(unittest.TestCase):
                          "stored links are runtime state, they must not be cloned")
 
 
+# ---------------------------------------------------------------------------
+# Admin panel: add caster with a link
+# ---------------------------------------------------------------------------
+
+class AdminAddCasterTest(_StoreDrivenCase):
+    def _view(self, target):
+        view = bot._AdminAddCasterView(1, 2, 7)
+        view.user_select._values = [target]
+        return view
+
+    async def test_user_select_opens_the_link_modal(self):
+        event = _event()
+        with ExitStack() as es:
+            self._run_ctx(es, event, {})
+            inter = _Interaction(user=_FakeUser("admin", "Admin"))
+            await self._view(_FakeUser("u2", "Dana"))._user_selected(inter)
+        self.assertEqual(len(inter.response.modals), 1)
+        modal = inter.response.modals[0]
+        self.assertEqual(modal.title, bot.t("admin.add_caster", "en"))
+        self.assertFalse(inter.response.deferred, "a modal needs a fresh interaction")
+        self.assertEqual(event["casters"], {}, "nothing added until the modal is submitted")
+
+    async def test_submitting_the_modal_adds_the_caster_with_the_link(self):
+        event = _event()
+        with ExitStack() as es:
+            self._run_ctx(es, event, {})
+            inter = _Interaction(user=_FakeUser("admin", "Admin"))
+            await self._view(_FakeUser("u2", "Dana"))._user_selected(inter)
+            modal = inter.response.modals[0]
+            modal.stream_url._value = "https://twitch.tv/dana"
+            await modal.on_submit(_Interaction(user=_FakeUser("admin", "Admin")))
+        self.assertIn("u2", event["casters"])
+        self.assertEqual(event["caster_stream_urls"], {"u2": "https://twitch.tv/dana"})
+
+    async def test_empty_field_adds_the_caster_without_a_link(self):
+        event = _event()
+        with ExitStack() as es:
+            self._run_ctx(es, event, {})
+            inter = _Interaction(user=_FakeUser("admin", "Admin"))
+            await self._view(_FakeUser("u2", "Dana"))._user_selected(inter)
+            modal = inter.response.modals[0]
+            modal.stream_url._value = ""
+            await modal.on_submit(_Interaction(user=_FakeUser("admin", "Admin")))
+        self.assertIn("u2", event["casters"])
+        self.assertEqual(event["caster_stream_urls"], {})
+
+    async def test_invalid_link_adds_nobody(self):
+        event = _event()
+        with ExitStack() as es:
+            self._run_ctx(es, event, {})
+            inter = _Interaction(user=_FakeUser("admin", "Admin"))
+            await self._view(_FakeUser("u2", "Dana"))._user_selected(inter)
+            modal = inter.response.modals[0]
+            modal.stream_url._value = "twitch.tv/dana"
+            submit = _Interaction(user=_FakeUser("admin", "Admin"))
+            await modal.on_submit(submit)
+        self.assertEqual(submit.response.messages, [bot.t("caster.stream_link_invalid", "en")])
+        self.assertEqual(event["casters"], {})
+
+    async def test_no_modal_when_the_toggle_is_off(self):
+        event = _event(caster_stream_links_enabled=False)
+        with ExitStack() as es:
+            self._run_ctx(es, event, {})
+            inter = _Interaction(user=_FakeUser("admin", "Admin"))
+            await self._view(_FakeUser("u2", "Dana"))._user_selected(inter)
+        self.assertEqual(inter.response.modals, [])
+        self.assertIn("u2", event["casters"], "falls back to adding straight away")
+        self.assertEqual(event["caster_stream_urls"], {})
+
+    async def test_waitlisted_admin_add_keeps_the_link(self):
+        event = _event(max_caster_slots=1, caster_slots_used=1,
+                       casters={"u0": {"name": "First", "id": "u0"}})
+        with ExitStack() as es:
+            self._run_ctx(es, event, {"u0": ["__caster__"]})
+            inter = _Interaction(user=_FakeUser("admin", "Admin"))
+            await self._view(_FakeUser("u2", "Dana"))._user_selected(inter)
+            modal = inter.response.modals[0]
+            modal.stream_url._value = "https://twitch.tv/dana"
+            await modal.on_submit(_Interaction(user=_FakeUser("admin", "Admin")))
+        self.assertEqual([uid for uid, _ in event["caster_waitlist"]], ["u2"])
+        self.assertEqual(event["caster_stream_urls"], {"u2": "https://twitch.tv/dana"})
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

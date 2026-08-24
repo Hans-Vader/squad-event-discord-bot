@@ -288,7 +288,7 @@ Klicke auf den **Admin** (⚙️) Button im Event-Embed, um das Admin-Panel zu �
 |---|---|---|
 | Squad | **Squad hinzufügen** | Typ und Vertreter auswählen, dann Squad-Name eingeben |
 | Squad | **Squad entfernen** | Squad zum Entfernen auswählen (inkl. Warteliste) |
-| Caster | **Caster hinzufügen** | Discord-User als Caster hinzufügen |
+| Caster | **Caster hinzufügen** | Discord-User als Caster hinzufügen; bei aktivierten Caster-Stream-Links öffnet sich danach ein Formular für den optionalen Stream-Link dieses Users |
 | Caster | **Caster entfernen** | Caster zum Entfernen auswählen (inkl. Warteliste) |
 | Anmeldung | **Anmeldung öffnen** | Anmeldung manuell öffnen — hinter einer Bestätigungsabfrage abgesichert (beim Öffnen kann ein Ping an die konfigurierten Rollen gesendet werden) |
 | Anmeldung | **Anmeldung schließen** | Anmeldung manuell schließen — hinter einer Bestätigungsabfrage abgesichert. Bei Vertreter-/Caster-Events wird das Event in den Early-Access-Zustand zurückgesetzt (nur Early-Access-Rollen können sich anmelden) |

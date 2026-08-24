@@ -1864,16 +1864,22 @@ class CasterStreamLinkModal(ui.Modal):
     Shown when the caster button is pressed and the event allows stream links —
     for a new sign-up it registers them with the link, for an already-registered
     caster it edits the stored link (empty input clears it).
+
+    `on_url` lets a caller reuse the field with its own submit handler — the
+    admin panel's add-caster flow passes the link on to the user it picked
+    instead of to the person who pressed the button.
     """
 
-    def __init__(self, guild_id, channel_id, db_id, lang, current_url=None, editing=False):
-        super().__init__(title=t("caster.stream_modal_title_edit" if editing
-                                 else "caster.stream_modal_title", lang))
+    def __init__(self, guild_id, channel_id, db_id, lang, current_url=None, editing=False,
+                 on_url=None, title_key=None):
+        super().__init__(title=t(title_key or ("caster.stream_modal_title_edit" if editing
+                                               else "caster.stream_modal_title"), lang))
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.db_id = db_id
         self.lang = lang
         self.editing = editing
+        self.on_url = on_url
 
         self.stream_url = ui.TextInput(
             label=t("caster.stream_link_label", lang),
@@ -1888,7 +1894,9 @@ class CasterStreamLinkModal(ui.Modal):
             await interaction.response.send_message(t(err, self.lang), ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
-        if self.editing:
+        if self.on_url:
+            await self.on_url(interaction, url)
+        elif self.editing:
             await update_caster_stream_url(interaction, self.guild_id, self.db_id, url)
         else:
             await register_caster(interaction, self.guild_id, self.channel_id, self.db_id,
@@ -3677,9 +3685,20 @@ class _AdminAddCasterView(BaseView):
 
     async def _user_selected(self, interaction):
         selected_user = self.user_select.values[0]
+        event, _, _ = _get_event_by_dbid(self.guild_id, self.db_id)
+        if event and event.get("caster_stream_links_enabled", False):
+            # A modal only opens from an untouched interaction, so it has to come
+            # before any defer() — the add itself then runs on the modal submit.
+            await interaction.response.send_modal(CasterStreamLinkModal(
+                self.guild_id, self.channel_id, self.db_id,
+                get_guild_language(self.guild_id), title_key="admin.add_caster",
+                on_url=lambda i, url: self._add_caster(i, selected_user, url)))
+            return
         await interaction.response.defer(ephemeral=True)
+        await self._add_caster(interaction, selected_user, None)
+
+    async def _add_caster(self, interaction, selected_user, stream_url):
         gid = self.guild_id
-        cid = self.channel_id
         lang = get_guild_language(gid)
 
         lock = _get_guild_lock(gid)
@@ -3695,6 +3714,10 @@ class _AdminAddCasterView(BaseView):
                 return
 
             display_name = selected_user.display_name
+            if stream_url and event.get("caster_stream_links_enabled", False):
+                event.setdefault("caster_stream_urls", {})[user_id] = stream_url
+            else:
+                stream_url = None
 
             if event["caster_slots_used"] < event["max_caster_slots"]:
                 event["casters"][user_id] = {"name": display_name, "id": user_id}
@@ -3712,6 +3735,11 @@ class _AdminAddCasterView(BaseView):
         await send_to_log_channel(
             t("log.admin_caster_added", lang, admin=interaction.user.name, user=display_name),
             guild=interaction.guild)
+        if stream_url:
+            await send_to_log_channel(
+                t("log.caster_stream_link", lang, user=selected_user.name, uid=user_id,
+                  url=stream_url),
+                guild=interaction.guild)
         await update_event_displays(gid, db_id)
 
 
