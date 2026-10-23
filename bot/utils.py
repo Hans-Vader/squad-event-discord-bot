@@ -341,37 +341,34 @@ def dont_waste_slots_active(event: dict) -> bool:
     return bool(event.get("dont_waste_slots")) and dont_waste_slots_possible(event)
 
 
+def _plan_unit(event: dict) -> int:
+    """How many oversized squads of one size are planned together: a mirrored
+    pair with the pair rule, a single squad without it."""
+    return 2 if dont_waste_pairs(event) else 1
+
+
 def _allowed_extras(event: dict, free_pool: int) -> list:
     """Extra-seat values of the oversized sizes the organizer allows and whose
-    pair still fits `free_pool`."""
+    plan unit (pair or single squad) still fits `free_pool`."""
     base = event.get("infantry_squad_size", 6)
     allowed = event.get("dont_waste_allowed_sizes")
-    return [k - base
-            for k in range(base + 1, min(base + free_pool // 2, MAX_SQUAD_PLAYERS) + 1)
+    top = min(base + free_pool // _plan_unit(event), MAX_SQUAD_PLAYERS)
+    return [k - base for k in range(base + 1, top + 1)
             if not (allowed and k not in allowed)]
 
 
-def _max_pairs(event: dict, counts: dict | None = None):
-    """Remaining pair budget from the organizer's oversized-squad cap
-    (`dont_waste_max_squads`), or None when unlimited. With `counts`
-    (registered oversized squads per size, rep mode) an incomplete pair counts
-    as 2 — its mirror is reserved and completing it must never be blocked."""
-    cap = event.get("dont_waste_max_squads")
-    if not cap:
-        return None
-    used = sum(c + (c % 2) for c in (counts or {}).values())
-    return max(0, cap // 2 - used // 2)
-
-
 def _oversized_budget(event: dict, counts: dict | None = None):
-    """Remaining budget from the organizer's oversized-squad cap, or None when
-    unlimited. With the pair rule it counts pairs (an incomplete pair counts
-    as 2 — its mirror must never be blocked), without it single squads."""
-    if dont_waste_pairs(event):
-        return _max_pairs(event, counts)
+    """Remaining budget from the organizer's oversized-squad cap
+    (`dont_waste_max_squads`), or None when unlimited. With the pair rule it
+    counts pairs (an incomplete pair counts as 2 — its mirror must never be
+    blocked; an odd cap acts as the next lower even one), without it single
+    squads. `counts` are the registered oversized squads per size."""
     cap = event.get("dont_waste_max_squads")
     if not cap:
         return None
+    if dont_waste_pairs(event):
+        used = sum(c + (c % 2) for c in (counts or {}).values())
+        return max(0, cap // 2 - used // 2)
     return max(0, cap - sum((counts or {}).values()))
 
 
@@ -418,16 +415,18 @@ def _regular_capacity(event: dict, n_o: int, seats_o: int) -> int:
     return raw if cap < 2 else raw - raw % 2
 
 
-def _pair_plan(free_pool: int, extras: list, max_pairs: int | None = None) -> dict:
-    """Canonical plan for absorbing the remaining pool with oversized pairs:
-    least wasted seats first, then the fewest oversized squads, preferring
-    bigger squads on ties, using at most `max_pairs` pairs (None = unlimited).
-    Returns {extra_seats_per_squad: number_of_pairs}."""
-    coins = sorted({2 * e for e in extras if e > 0}, reverse=True)
-    if free_pool < 2 or not coins or max_pairs == 0:
+def _pair_plan(free_pool: int, extras: list, max_pairs: int | None = None,
+               unit: int = 2) -> dict:
+    """Canonical plan for absorbing the remaining pool with oversized units
+    (`unit` squads of one size — 2 = mirrored pair, 1 = single squad): least
+    wasted seats first, then the fewest oversized squads, preferring bigger
+    squads on ties, using at most `max_pairs` units (None = unlimited).
+    Returns {extra_seats_per_squad: number_of_units}."""
+    coins = sorted({unit * e for e in extras if e > 0}, reverse=True)
+    if free_pool < unit or not coins or max_pairs == 0:
         return {}
     reach = {0: {}}  # exactly-absorbed seats -> pair multiset {coin: n}
-    for total in range(2, free_pool + 1):
+    for total in range(1, free_pool + 1):
         best = None
         for coin in coins:
             prev = reach.get(total - coin)
@@ -440,19 +439,21 @@ def _pair_plan(free_pool: int, extras: list, max_pairs: int | None = None) -> di
         # the cap is unreachable within it (any larger total needs even more).
         if best is not None and (max_pairs is None or sum(best.values()) <= max_pairs):
             reach[total] = best
-    return {coin // 2: n for coin, n in reach[max(reach)].items()}
+    return {coin // unit: n for coin, n in reach[max(reach)].items()}
 
 
-def _pair_cover(target: int, extras: list, max_pairs: int | None = None) -> dict:
-    """Minimal set of oversized pairs whose extra seats cover AT LEAST
-    `target`: fewest pairs first, then least excess capacity, bigger squads
-    preferred, using at most `max_pairs` pairs. Returns {extra: n_pairs}
-    ({} when target <= 0, nothing fits, or the cap prevents covering)."""
-    coins = sorted({2 * e for e in extras if e > 0}, reverse=True)
+def _pair_cover(target: int, extras: list, max_pairs: int | None = None,
+                unit: int = 2) -> dict:
+    """Minimal set of oversized units (`unit` squads of one size) whose extra
+    seats cover AT LEAST `target`: fewest units first, then least excess
+    capacity, bigger squads preferred, using at most `max_pairs` units.
+    Returns {extra: n_units} ({} when target <= 0, nothing fits, or the cap
+    prevents covering)."""
+    coins = sorted({unit * e for e in extras if e > 0}, reverse=True)
     if target <= 0 or not coins or max_pairs == 0:
         return {}
     reach = {0: {}}
-    for total in range(2, target + max(coins) + 1):
+    for total in range(1, target + max(coins) + 1):
         cand = None
         for coin in coins:
             prev = reach.get(total - coin)
@@ -470,7 +471,7 @@ def _pair_cover(target: int, extras: list, max_pairs: int | None = None) -> dict
         key = (sum(combo.values()), total)
         if best is None or key < best[0]:
             best = (key, combo)
-    return {coin // 2: n for coin, n in best[1].items()} if best else {}
+    return {coin // unit: n for coin, n in best[1].items()} if best else {}
 
 
 def planned_infantry_capacities(event: dict) -> list:
@@ -482,10 +483,11 @@ def planned_infantry_capacities(event: dict) -> list:
     if not dont_waste_slots_active(event):
         return [base] * cap
     pool = infantry_unused_pool(event)
-    plan = _pair_plan(pool, _allowed_extras(event, pool), _max_pairs(event))
+    unit = _plan_unit(event)
+    plan = _pair_plan(pool, _allowed_extras(event, pool), _oversized_budget(event), unit)
     oversized = sorted(base + extra
-                       for extra, pairs in plan.items()
-                       for _ in range(2 * pairs))
+                       for extra, units in plan.items()
+                       for _ in range(unit * units))
     if len(oversized) > cap:
         # Tiny caps (exempt from the even rule) can't hold a full pair.
         return [base] * cap
@@ -638,8 +640,9 @@ def infantry_wasted_seats(event: dict) -> int:
     if event.get("mode", "rep") == "player":
         # Player mode plans the whole layout, so the plan absorption is the
         # full picture — the residual (incl. any cap-stranded seats) is waste.
-        plan = _pair_plan(pool, _allowed_extras(event, pool), _max_pairs(event))
-        return max(0, pool - sum(2 * extra * n for extra, n in plan.items()))
+        unit = _plan_unit(event)
+        plan = _pair_plan(pool, _allowed_extras(event, pool), _oversized_budget(event), unit)
+        return max(0, pool - sum(unit * extra * n for extra, n in plan.items()))
     return max(0, infantry_seat_budget(event) - infantry_best_case(event)[0])
 
 
@@ -761,11 +764,12 @@ def _replan_player_capacities(event: dict, squads: dict, type_names: list) -> li
     players = sum(len(squads[n].get("members", [])) for n in type_names)
     n_exist = len(type_names)
     overflow = max(0, players - n_exist * base)
+    unit = _plan_unit(event)
     cover = _pair_cover(overflow, _allowed_extras(event, infantry_unused_pool(event)),
-                        _max_pairs(event))
+                        _oversized_budget(event), unit)
     oversized = sorted(base + extra
-                       for extra, pairs in cover.items()
-                       for _ in range(2 * pairs))
+                       for extra, units in cover.items()
+                       for _ in range(unit * units))
     if len(oversized) > n_exist:
         return []
     assigned = [base] * (n_exist - len(oversized)) + oversized

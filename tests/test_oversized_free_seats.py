@@ -340,5 +340,43 @@ class TestWaitlistPromotion(unittest.IsolatedAsyncioTestCase):
         self.assertIn("w1", ev["squads"])
 
 
+def _pev(**over):
+    # 27 seats, base 6 → cap 4, leftover pool 3.
+    ev = _dcn(mode="player", max_player_slots=27, max_vehicle_squads=0, max_heli_squads=0,
+              player_slots_used=0, infantry_waitlist=[])
+    ev.update(over)
+    return ev
+
+
+class TestPlayerModePairRule(unittest.TestCase):
+    def test_layout_pool_three(self):
+        self.assertEqual(utils.planned_infantry_capacities(_pev()), [6, 6, 7, 7])
+        self.assertEqual(utils.infantry_wasted_seats(_pev()), 1)
+        self.assertEqual(utils.planned_infantry_capacities(_pev(dont_waste_pairs=False)), [6, 6, 6, 9])
+        self.assertEqual(utils.infantry_wasted_seats(_pev(dont_waste_pairs=False)), 0)
+
+    def test_single_leftover_seat(self):
+        self.assertFalse(utils.dont_waste_slots_active(_pev(max_player_slots=25)))
+        self.assertEqual(utils.planned_infantry_capacities(_pev(max_player_slots=25)), [6, 6, 6, 6])
+        ev = _pev(max_player_slots=25, dont_waste_pairs=False)
+        self.assertTrue(utils.dont_waste_slots_active(ev))
+        self.assertEqual(utils.planned_infantry_capacities(ev), [6, 6, 6, 7])
+
+    def test_max_cap_counts_squads(self):
+        ev = _pev(max_player_slots=44, dont_waste_pairs=False)           # cap 6, pool 8
+        self.assertEqual(utils.planned_infantry_capacities(ev), [6, 6, 6, 8, 9, 9])
+        ev["dont_waste_max_squads"] = 1
+        self.assertEqual(utils.planned_infantry_capacities(ev), [6, 6, 6, 6, 6, 9])
+        self.assertEqual(utils.infantry_wasted_seats(ev), 5)
+
+    def test_consolidation_singles(self):
+        ev, ua = _pev(dont_waste_pairs=False), {}
+        for i in range(27):
+            utils._player_register(ev, ua, f"u{i}", f"P{i}", "infantry")
+        utils.consolidate_all_player_squads(ev, ua)
+        self.assertEqual(sorted(d["size"] for d in ev["squads"].values()), [6, 6, 6, 9])
+        self.assertEqual(sum(len(d["members"]) for d in ev["squads"].values()), 27)
+
+
 if __name__ == "__main__":
     unittest.main()
