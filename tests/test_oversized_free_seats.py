@@ -334,6 +334,22 @@ class TestWaitlistPromotion(unittest.IsolatedAsyncioTestCase):
         await self._promote(ev, 9)
         self.assertIn("w1", ev["squads"])
 
+    async def test_freed_oversized_squad_promotes_by_free_seats(self):
+        # Spec §5.5: a freed oversized squad plus stranded seats can let several
+        # 6ers move up. 11×6 + 9 + 6 (3 seats stranded), then the 9 leaves → 12 free.
+        ev = self._ev([*SIX11, 6], dont_waste_pairs=False)
+        ev["infantry_waitlist"].append(("W2", "infantry", 6, "w2", "Rep"))
+        await self._promote(ev, 9)
+        self.assertIn("w1", ev["squads"])
+        self.assertIn("w2", ev["squads"])
+
+    async def test_freed_pair_promotes_up_to_regular_capacity(self):
+        # Pair rule: the last 9 of a pair leaves (mirror no longer held) → B 10 → 14.
+        ev = self._ev([6] * 10)
+        ev["infantry_waitlist"] += [("W2", "infantry", 6, "w2", "Rep"), ("W3", "infantry", 6, "w3", "Rep")]
+        await self._promote(ev, 9)
+        self.assertTrue(all(w in ev["squads"] for w in ("w1", "w2", "w3")))
+
     async def test_stale_smaller_entry_promoted(self):
         ev = self._ev([6] * 13, entry_size=5)
         await self._promote(ev, 6)

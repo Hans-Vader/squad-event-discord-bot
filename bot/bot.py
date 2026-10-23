@@ -1642,14 +1642,17 @@ async def _process_squad_waitlist(event, user_assignments, db_id, guild_id, chan
         wl = event.get(wl_key, [])
         to_remove = []
         for i, entry in enumerate(wl):
-            if remaining <= 0:
-                break
             squad_name, squad_type, size, squad_id, *_rest = entry
             rep_name = _rest[0] if _rest else None
-            type_full = (infantry_block_reason(event, size) is not None
-                         if squad_type == "infantry"
-                         else _is_squad_type_full(event, squad_type))
-            if size <= remaining and not type_full:
+            if squad_type == "infantry":
+                # The gate checks the free infantry seats themselves: a freed
+                # oversized squad plus stranded seats can let several squads up.
+                fits = infantry_block_reason(event, size) is None
+            else:
+                if remaining <= 0:
+                    break
+                fits = size <= remaining and not _is_squad_type_full(event, squad_type)
+            if fits:
                 squad_data = {"name": squad_name, "type": squad_type, "size": size}
                 if rep_name:
                     squad_data["rep_name"] = rep_name
