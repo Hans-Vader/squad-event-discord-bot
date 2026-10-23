@@ -42,7 +42,7 @@ Use this mode for pick-up matches or community seat-filling events where individ
 | Registration UI | Type picker + squad name modal | Type + optional role picker; Discord display name used |
 | Slot overview label | "🖥️ Server — 100 slots" | "📋 Seats — 17 slots" |
 | Admin-add | Add Squad (name + rep) | Add Player (multi-select users + type + optional roles) |
-| Don't waste slots | Registrants pick an oversized squad size | Bot pre-plans squad capacities automatically |
+| Oversized squads | Registrants pick an oversized squad size (any free infantry seat) | Bot pre-plans squad capacities from the leftover seats |
 
 ---
 
@@ -191,8 +191,8 @@ Player mode shows only the early-access % cap.
 - *Rep mode:* Max squads per user (1–20) — only asked when **no** registration-role gate is set. With a gate configured the limit is set in Step 4 (Slot Limits) instead and this step is skipped entirely.
 - *Player mode:* Role selection — whether players may pick an in-squad role (Squad Leader, Medic, Pilot, …) when registering. **When disabled, there is no role dropdown and roles are not shown in the embed.** Default: enabled. Can also be changed later via the DM editor.
 
-**Step 8 — Don't waste slots** *(only shown when the slot math leaves at least 2 unused seats)*:
-- The number of infantry squads is **always kept even** so both teams get the same count (see slot calculation below). When this step is enabled, the unused seats — the remainder plus, with an odd raw cap, the dropped squad's seats — can be absorbed by **oversized squads**. Offered are always the sizes that use the free seats with **as few oversized squads as possible** (least waste first, then fewest squads, bigger squads preferred): with 4 unused seats and squad size 6 that's one 8er pair (not two 7er pairs); with 8 unused seats a 9er pair plus a 7er pair. Oversized squads never exceed **9 players** — the in-game squad limit. The creator can additionally **restrict which oversized sizes are allowed** (e.g. only 7-player squads, or 7 and 8 but no 9) via a second dropdown in this step; default is all possible sizes. A third dropdown **caps the total number of oversized squads** (even values — they come in pairs; default: unlimited); the plan then absorbs as many seats as it can within that cap and the rest counts as unused. Oversized squads always come in **equal numbers per size** so organizers can mirror them across two teams — each offered size's complete **pair** fits the remaining unused seats, with the remaining count shown next to each option (e.g. 8 leftover seats: after a 9-player pair, a 7-player pair is offered for the remaining 2). If an oversized squad unregisters, its size is re-offered until the pair is complete again. Leftover seats that can't form a pair anymore stay unused and reappear as the "Unused" counter. That counter is only shown when there actually are wasted slots ("Unused: 0" is never displayed), and every size is permanently visible in the infantry field header with its own registered/possible counter — e.g. `⚔️ Infantry (1/16) [(0/14) Size: 6 | (1/2) Size: 7]` — in addition to each squad row showing its own seat count. **Player mode:** the same toggle works there too — nobody picks sizes; instead the bot pre-plans the squad capacities (base squads first, the minimal oversized pairs as the last squads) and players simply fill them. Consolidation (event start / admin button) re-derives the cleanest paired layout from the actual player count (e.g. 88 players at size 6 → 12× 6 + one 8-player pair). Default: disabled. Can also be changed later via the DM editor (properties 22–24) — enabling it there is rejected with an error while there are no unused slots, or only a single one (a lone slot can never form a pair). The wizard step itself only appears when at least 2 unused slots exist. Full details, worked examples, and guarantees: [docs/dont-waste-slots.md](docs/dont-waste-slots.md).
+**Step 8 — Oversized squads** *(rep mode: always, unless the infantry squad size is already 9; player mode: only when the slot math leaves unused seats)*:
+- Lets infantry squads be **bigger than the base size** — never more than **9 players**, the in-game squad limit. **Rep mode:** reps pick the size at registration and may use **any free infantry seat** (vehicle and heli seats stay reserved), first come, first served — so fewer squads may fit in the end. Every allowed size that still fits is offered, with how many squads of that size could still register next to it. The **pair rule** (second dropdown, default on) decides how: **on** — every oversized size only in pairs (one per team), the mirror's slot and seats are held back once the first of a pair registers, and the number of regular squads stays completable to an even count, so both teams can always be set up identically; **off** — any size on its own while it fits. With the pair rule on, enable the mode early: once the event is nearly full, an even regular count may leave no room for another pair. The creator can additionally **restrict which oversized sizes are allowed** (e.g. only 7-player squads, or 7 and 8 but no 9; default: all) and **cap the total number of oversized squads** (default: unlimited). The infantry header shows how many squads can still fit and every size with its own registered/possible counter — e.g. `⚔️ Infantry (12/13) [(11/12) Size: 6 | (0/1) Size: 7 | (0/1) Size: 8 | (1/2) Size: 9]`; the "Unused" counter appears only for seats no further registration can fill ("Unused: 0" is never displayed). A squad on the waitlist (always base size) moves up only if it fits under the same rules. **Player mode:** nobody picks sizes — the bot pre-plans the squad capacities from the unused seats (base squads first, the oversized squads last; in pairs with the pair rule on, single squads with it off) and players simply fill them; consolidation (event start / admin button) re-derives the cleanest layout from the actual player count (e.g. 88 players at size 6 → 12× 6 + one 8-player pair). Default: disabled. Can also be changed later via the DM editor (properties 22–24 and 26) — in player mode enabling is rejected while there are no unused seats, or only one while the pair rule is on. Full details, worked examples, and guarantees: [docs/dont-waste-slots.md](docs/dont-waste-slots.md).
 
 **Step 9 — Confirmation:**
 - Summary embed showing all configured settings including unused slots — confirm or cancel
@@ -209,7 +209,7 @@ Server: 100 slots
 - Unused: 2 slots
 ```
 
-The infantry squad count is always rounded down to an **even** number so both teams get the same count — if the raw math yields an odd cap (e.g. 15), the cap becomes 14 and the dropped squad's seats count as unused. With **Don't waste slots** enabled, unused slots are offered as oversized squads instead — in the example above, the 2 unused slots would allow one pair of 7-player infantry squads.
+The infantry squad count is always rounded down to an **even** number so both teams get the same count — if the raw math yields an odd cap (e.g. 15), the cap becomes 14 and the dropped squad's seats count as unused. With **Oversized squads** enabled, reps may use these and any other free infantry seats for bigger squads — in the example above, the 2 unused slots alone would already fit one pair of 7-player infantry squads.
 
 ### Editing an Event via DM
 
@@ -241,10 +241,11 @@ Organizers can edit a running event via DM: Click **Edit Event** in the admin pa
 19. Slot limit: early access (% of player slots)
 20. Max squads per early-access role
 21. Role selection at registration (player mode, on/off)
-22. Don't waste slots (bigger squads, on/off)
+22. Oversized squads (on/off)
 23. Allowed oversized sizes (comma-separated, e.g. "7, 8"; empty = all)
-24. Max. oversized squads (even number; empty/0 = unlimited)
+24. Max. oversized squads (at least 1; empty/0 = unlimited; with the pair rule an odd value counts as the next lower even one)
 25. Stream links for casters (rep mode, on/off)
+26. Pair rule for oversized squads (on/off)
 
 There's no separate confirm step — each edit applies as soon as you make it.
 

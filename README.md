@@ -14,7 +14,7 @@ A Discord bot for managing squad-based events with interactive registration, wai
 - **Guided squad registration** — Step-by-step flow with a dropdown for squad type (Infantry/Vehicle/Heli) in rep mode; type + optional multi-role picker (Squad Leader, Medic, Pilot, …) in player mode. The role picker is itself toggleable by the event creator — disable it and players pick no role and no roles show in the embed. Squad Leaders sort to the top of their squad and are routed into squads without an existing SL when capacity allows.
 - **Three squad types** — Infantry, Vehicle, and Heli squads with independent size and count limits
 - **Server slot calculation** — Automatic distribution of server capacity across all squad types and casters. The infantry squad cap is always even so both teams get the same count
-- **Don't waste slots** — Optional per-event mode that offers leftover seats as **oversized infantry squads in mirrored pairs** (equal numbers per size for two equal teams, at most 9 players, as few oversized squads as possible, optional size whitelist and squad-count cap). Reps pick the size at registration; in player mode the bot pre-plans squad capacities. See [docs/dont-waste-slots.md](docs/dont-waste-slots.md)
+- **Oversized squads** — Optional per-event mode for **infantry squads bigger than the base size** (at most 9 players). Reps pick the size at registration and may use **any free infantry seat** — regular squads can be crowded out; in player mode the bot pre-plans squad capacities from the leftover seats. A per-event **pair rule** (default on) keeps oversized sizes in mirrored pairs so both teams can be set up identically; optional size whitelist and squad-count cap. See [docs/dont-waste-slots.md](docs/dont-waste-slots.md)
 - **Multi-squad support** — Configurable number of squads per player (1–20)
 - **Caster + squad simultaneously** — Players can register as caster AND with squads
 - **Caster stream links** — Optional per-event: casters may add a link to their stream when registering (organizers adding a caster via the admin panel get the same field for them), shown as a clickable **🔴 Stream** link behind their name in the event embed. Pressing the caster button again reopens the field to change or clear the link. Toggled by the organizer during creation and later via DM edit property 25; off by default. Links are validated (http/https only, no whitespace or brackets) so they can't break the embed markup
@@ -127,8 +127,8 @@ Event creation uses a multi-step wizard:
 **Step 6 — Squad Limit:**
 - Max squads per user (1–20) — skipped entirely when a registration-role gate is configured, because the limit is then set in the Slot Limits step
 
-**Step 7 — Don't waste slots** (only when ≥ 2 slots stay unused):
-- Offer the leftover infantry seats as oversized squads — always in equal numbers per size so both teams can be mirrored; any size whose pair still fits the remaining seats is offered. The "Unused" counter only shows seats no pair can absorb anymore.
+**Step 7 — Oversized squads** (rep mode: unless the base size is 9; player mode: only when seats are left over):
+- Let reps register bigger squads (up to 9 players) from any free infantry seat, plus the pair rule (on: oversized sizes in mirrored pairs, squad count stays even; off: single squads while seats last), allowed sizes and a cap. The "Unused" counter only shows seats no further registration can fill.
 
 **Step 8 — Confirmation:**
 - Summary embed with all settings including unused slots — confirm or cancel
@@ -145,7 +145,7 @@ Server: 100 slots
 - Unused: 2 slots
 ```
 
-The infantry squad count is always rounded down to an even number so both teams get the same count; an odd cap's dropped squad counts as unused. With **Don't waste slots** enabled, unused slots are offered as oversized squads — here, one pair of 7-player infantry squads.
+The infantry squad count is always rounded down to an even number so both teams get the same count; an odd cap's dropped squad counts as unused. With **Oversized squads** enabled, reps may use these and any other free infantry seats for bigger squads — here, the 2 unused slots alone would already fit one pair of 7-player infantry squads.
 
 ## DM Event Editing
 
