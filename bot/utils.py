@@ -303,6 +303,14 @@ def infantry_seat_budget(event: dict) -> int:
     return max(0, event.get("max_player_slots", 0) - veh_slots - heli_slots)
 
 
+def free_player_seats(event: dict) -> int:
+    """Player seats no registered squad occupies. S only subtracts reserved
+    vehicle/heli seats, so after organizer edits (smaller vehicle size, an
+    enlarged squad) this real count is the tighter, hard limit."""
+    return event.get("max_player_slots", 0) - sum(
+        d.get("size", 0) for d in event.get("squads", {}).values())
+
+
 def infantry_unused_pool(event: dict) -> int:
     """Seats no base squad can use: the seat remainder plus — when the base
     squad count would be odd — one whole base squad, because the infantry
@@ -506,7 +514,7 @@ def infantry_block_reason(event: dict, size: int) -> Optional[str]:
     used, count = _infantry_usage(event)
     if count + 1 > _max_squads_for_type(event, "infantry"):
         return "full"
-    if size > infantry_seat_budget(event) - used:
+    if size > min(infantry_seat_budget(event) - used, free_player_seats(event)):
         return "seats"
 
     active = event.get("mode", "rep") != "player" and dont_waste_slots_active(event)
@@ -700,14 +708,19 @@ def _try_place_player(event: dict, user_assignments: dict, uid: str,
             layout = planned_infantry_capacities(event)
             if existing_count < len(layout):
                 size = layout[existing_count]
-        new_name = _next_auto_squad_name(event, squad_type)
-        squads[new_name] = {
-            "type": squad_type,
-            "size": size,
-            "id": generate_squad_id(new_name, squad_type),
-            "members": [],
-        }
-        return _add_member(new_name, squads[new_name])
+            # The plan can change mid-registration (pair rule, whitelist), so
+            # never hand out more capacity than seats are left.
+            size = min(size, infantry_seat_budget(event) - _infantry_usage(event)[0],
+                       free_player_seats(event))
+        if size > 0:
+            new_name = _next_auto_squad_name(event, squad_type)
+            squads[new_name] = {
+                "type": squad_type,
+                "size": size,
+                "id": generate_squad_id(new_name, squad_type),
+                "members": [],
+            }
+            return _add_member(new_name, squads[new_name])
 
     if is_sl:
         for name, squad in squads.items():

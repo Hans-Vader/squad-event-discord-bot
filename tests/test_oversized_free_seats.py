@@ -355,6 +355,28 @@ class TestWaitlistPromotion(unittest.IsolatedAsyncioTestCase):
         await self._promote(ev, 6)
         self.assertIn("w1", ev["squads"])
 
+    async def test_promotion_bounded_by_real_free_seats(self):
+        # Six 4-seat vehicles registered, then the vehicle size lowered to 2:
+        # S grows by 12, but the server has only 1 real seat left (a heli left).
+        ev = self._ev([6] * 12)
+        ev["squads"].update({f"v{i}": {"name": "v", "type": "vehicle", "size": 4} for i in range(6)})
+        ev["squads"]["h0"] = {"name": "h", "type": "heli", "size": 1}
+        ev["infantry_waitlist"].append(("W2", "infantry", 6, "w2", "Rep"))
+        await self._promote(ev, 1)
+        self.assertNotIn("w1", ev["squads"])
+        self.assertNotIn("w2", ev["squads"])
+
+    async def test_heli_promoted_after_infantry_used_stranded_seats(self):
+        # Infantry may move up into more seats than were freed (stranded ones
+        # too); a waitlisted heli that still fits must not be skipped for that.
+        ev = self._ev([9] * 7 + [7], dont_waste_pairs=False, max_heli_squads=3)
+        ev["squads"].update({f"v{i}": {"name": "v", "type": "vehicle", "size": 2} for i in range(6)})
+        ev["squads"].update({f"h{i}": {"name": "h", "type": "heli", "size": 1} for i in range(2)})
+        ev["infantry_waitlist"].append(("W2", "infantry", 6, "w2", "Rep"))
+        ev["heli_waitlist"].append(("HW", "heli", 1, "hw", "Rep"))
+        await self._promote(ev, 9)
+        self.assertTrue(all(w in ev["squads"] for w in ("w1", "w2", "hw")))
+
 
 def _pev(**over):
     # 27 seats, base 6 → cap 4, leftover pool 3.
@@ -392,6 +414,18 @@ class TestPlayerModePairRule(unittest.TestCase):
         utils.consolidate_all_player_squads(ev, ua)
         self.assertEqual(sorted(d["size"] for d in ev["squads"].values()), [6, 6, 6, 9])
         self.assertEqual(sum(len(d["members"]) for d in ev["squads"].values()), 27)
+
+    def test_pair_rule_flip_never_overbooks(self):
+        # [6, 6, 7] filled under the pair rule ([6, 6, 7, 7]); switched off, the
+        # plan says [6, 6, 6, 9] — the 4th squad may only get the 8 seats left.
+        ev, ua = _pev(), {}
+        for i in range(19):
+            utils._player_register(ev, ua, f"u{i}", f"P{i}", "infantry")
+        ev["dont_waste_pairs"] = False
+        for i in range(19, 30):
+            utils._player_register(ev, ua, f"u{i}", f"P{i}", "infantry")
+        self.assertEqual(sum(d["size"] for d in ev["squads"].values()), 27)
+        self.assertEqual(ev["player_slots_used"], 27)
 
 
 def _apply(ev, key, vtype, value):

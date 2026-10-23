@@ -50,7 +50,7 @@ from utils import (
     consolidate_all_player_squads,
     build_event_ics, _ics_slug,
     infantry_unused_pool, infantry_size_options, infantry_block_reason,
-    infantry_seat_budget, dont_waste_pairs,
+    infantry_seat_budget, free_player_seats, dont_waste_pairs,
     dont_waste_slots_active, MAX_SQUAD_PLAYERS,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
@@ -1635,7 +1635,6 @@ async def _process_squad_waitlist(event, user_assignments, db_id, guild_id, chan
         ordered_types.insert(0, freed_type)
 
     moved = []
-    remaining = free_slots
 
     for st in ordered_types:
         wl_key = _waitlist_key(st)
@@ -1649,16 +1648,13 @@ async def _process_squad_waitlist(event, user_assignments, db_id, guild_id, chan
                 # oversized squad plus stranded seats can let several squads up.
                 fits = infantry_block_reason(event, size) is None
             else:
-                if remaining <= 0:
-                    break
-                fits = size <= remaining and not _is_squad_type_full(event, squad_type)
+                fits = size <= free_player_seats(event) and not _is_squad_type_full(event, squad_type)
             if fits:
                 squad_data = {"name": squad_name, "type": squad_type, "size": size}
                 if rep_name:
                     squad_data["rep_name"] = rep_name
                 event["squads"][squad_id] = squad_data
                 event["player_slots_used"] += size
-                remaining -= size
                 to_remove.append(i)
                 moved.append((squad_name, squad_id, size))
         for i in sorted(to_remove, reverse=True):
