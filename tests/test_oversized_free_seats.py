@@ -291,5 +291,54 @@ class TestBestCaseAndEmbed(unittest.TestCase):
             self.assertLessEqual(len(opts), 9)
 
 
+class TestSquadGate(unittest.TestCase):
+    def test_regular_outcomes(self):
+        self.assertEqual(bot._squad_gate(_dcn(squads=_squads(*SIX11)), "infantry", 6, None), (6, "ok"))
+        self.assertEqual(bot._squad_gate(_dcn(dont_waste_pairs=False, squads=_squads(*SIX11, 9, 9)),
+                                         "infantry", 6, None), (6, "seats"))
+        self.assertEqual(bot._squad_gate(_dcn(squads=_squads(9, *[6] * 10)), "infantry", 6, None), (6, "mirror"))
+        self.assertEqual(bot._squad_gate(_dcn(squads=_squads(*[6] * 14)), "infantry", 6, None), (6, "full"))
+
+    def test_oversized_pick(self):
+        self.assertEqual(bot._squad_gate(_dcn(dont_waste_pairs=False, squads=_squads(*SIX11)),
+                                         "infantry", 6, 9), (9, "ok"))
+        self.assertEqual(bot._squad_gate(_dcn(squads=_squads(*SIX11)), "infantry", 6, 9), (9, "unavailable"))
+
+    def test_other_types_count_only(self):
+        full = _dcn(squads={f"v{i}": {"type": "vehicle", "size": 2} for i in range(6)})
+        self.assertEqual(bot._squad_gate(full, "vehicle", 2, None), (2, "full"))
+        self.assertEqual(bot._squad_gate(_dcn(), "heli", 1, None), (1, "ok"))
+
+
+class TestWaitlistPromotion(unittest.IsolatedAsyncioTestCase):
+    async def _promote(self, ev, free):
+        with patch.object(bot, "save_event"), \
+             patch.object(bot, "_send_squad_dm", new=AsyncMock()), \
+             patch.object(bot, "send_to_log_channel", new=AsyncMock()), \
+             patch.object(bot, "get_guild_language", return_value="de"), \
+             patch.object(bot, "_build_event_message_link", return_value=None):
+            await bot._process_squad_waitlist(ev, {}, 1, 1, 2, free, freed_type="infantry")
+
+    def _ev(self, squads, entry_size=6, **over):
+        return _dcn(squads=_squads(*squads), player_slots_used=0, vehicle_waitlist=[], heli_waitlist=[],
+                    infantry_waitlist=[("W", "infantry", entry_size, "w1", "Rep")], **over)
+
+    async def test_no_promotion_without_infantry_seats(self):
+        # Example E: option switched off after a pairs-off 9er pair — 13 < cap 14, but 0 seats.
+        ev = self._ev([*SIX11, 9, 9], dont_waste_slots=False, dont_waste_pairs=False)
+        await self._promote(ev, 6)
+        self.assertNotIn("w1", ev["squads"])
+
+    async def test_promotion_when_seats_free(self):
+        ev = self._ev([*SIX11, 9], dont_waste_pairs=False)
+        await self._promote(ev, 9)
+        self.assertIn("w1", ev["squads"])
+
+    async def test_stale_smaller_entry_promoted(self):
+        ev = self._ev([6] * 13, entry_size=5)
+        await self._promote(ev, 6)
+        self.assertIn("w1", ev["squads"])
+
+
 if __name__ == "__main__":
     unittest.main()

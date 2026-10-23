@@ -49,7 +49,7 @@ from utils import (
     _player_current_assignment, _select_tentative,
     consolidate_all_player_squads,
     build_event_ics, _ics_slug,
-    infantry_unused_pool, infantry_size_options,
+    infantry_unused_pool, infantry_size_options, infantry_block_reason,
     dont_waste_slots_active, dont_waste_slots_possible, MAX_SQUAD_PLAYERS,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
@@ -968,16 +968,19 @@ def _is_squad_type_full(event: dict, squad_type: str) -> bool:
     return _count_registered_squads_of_type(event, squad_type) >= _get_max_squads_for_type(event, squad_type)
 
 
-def _squad_slot_reserved(event: dict, squad_type: str, size: int) -> bool:
-    """True when a base-size infantry registration would take the squad slot
-    reserved for an incomplete oversized pair's mirror (don't-waste mode).
-    Sizes other than the current base (e.g. stale waitlist entries after a
-    squad-size edit) are never blocked by the reservation."""
-    if squad_type != "infantry" or not event.get("dont_waste_slots"):
-        return False
-    if size != _get_squad_sizes(event)["infantry"]:
-        return False
-    return dict(infantry_size_options(event)).get(size, 0) <= 0
+def _squad_gate(event: dict, squad_type: str, size: int, requested_size) -> tuple:
+    """Registration decision shared by the rep and admin add-squad paths.
+    Returns (size_to_register, outcome): 'ok', 'unavailable' (the oversized
+    pick is no longer offerable — never waitlist or silently resize it),
+    'full', 'mirror' (slot held for an oversized pair's mirror) or 'seats'
+    (not enough free infantry seats)."""
+    if squad_type != "infantry":
+        return size, "full" if _is_squad_type_full(event, squad_type) else "ok"
+    if requested_size is not None and requested_size != size:
+        ok = infantry_block_reason(event, requested_size) is None
+        return requested_size, "ok" if ok else "unavailable"
+    reason = infantry_block_reason(event, size)
+    return size, {None: "ok", "size": "full"}.get(reason, reason)
 
 
 SQUAD_TYPES = ("infantry", "vehicle", "heli")
@@ -1217,21 +1220,15 @@ async def register_squad(interaction, guild_id, channel_id, db_id, squad_name, s
         available = event["max_player_slots"] - event["player_slots_used"]
         rep_name = interaction.user.display_name
 
-        type_full = _is_squad_type_full(event, squad_type)
-        mirror_reserved = False
-        if squad_type == "infantry" and requested_size is not None and requested_size != size:
-            # Oversized pick: never waitlist or silently resize — the slot
-            # either still exists (infantry_size_options self-gates on the
-            # toggle, so a mid-dialog config change also lands here) or the
-            # user has to pick again.
-            if (dict(infantry_size_options(event)).get(requested_size, 0) <= 0
-                    or requested_size > available):
-                await send_feedback(interaction, t("squad.size_unavailable", lang), ephemeral=True)
-                return False
-            size = requested_size
-        elif not type_full and _squad_slot_reserved(event, squad_type, size):
-            type_full = True
-            mirror_reserved = True
+        # Re-validated under the lock: an oversized pick either still exists
+        # (a mid-dialog config change also lands here) or the user picks again.
+        size, outcome = _squad_gate(event, squad_type, size, requested_size)
+        if outcome == "unavailable":
+            await send_feedback(interaction, t("squad.size_unavailable", lang), ephemeral=True)
+            return False
+        type_full = outcome in ("full", "mirror")
+        mirror_reserved = outcome == "mirror"
+        no_seats = outcome == "seats"
 
         ok_lim, lim_key, lim_usage = _check_registration_limits(
             event, user_assignments, interaction.guild, interaction.user, size, "rep")
@@ -1246,7 +1243,7 @@ async def register_squad(interaction, guild_id, channel_id, db_id, squad_name, s
             save_event(db_id, event, user_assignments)
             result = "type_full_waitlisted"
             wl_pos = len(event[wl_key])
-        elif size <= available:
+        elif size <= available and not no_seats:
             event["squads"][squad_id] = {
                 "name": squad_name, "type": squad_type,
                 "size": size, "rep_name": rep_name,
@@ -1647,8 +1644,9 @@ async def _process_squad_waitlist(event, user_assignments, db_id, guild_id, chan
                 break
             squad_name, squad_type, size, squad_id, *_rest = entry
             rep_name = _rest[0] if _rest else None
-            type_full = (_is_squad_type_full(event, squad_type)
-                         or _squad_slot_reserved(event, squad_type, size))
+            type_full = (infantry_block_reason(event, size) is not None
+                         if squad_type == "infantry"
+                         else _is_squad_type_full(event, squad_type))
             if size <= remaining and not type_full:
                 squad_data = {"name": squad_name, "type": squad_type, "size": size}
                 if rep_name:
@@ -3610,22 +3608,18 @@ class _AdminSquadNameModal(ui.Modal):
             rep_name = self.rep_user.display_name
             rep_uid = str(self.rep_user.id)
 
-            type_full = _is_squad_type_full(event, self.squad_type)
-            if self.squad_type == "infantry" and self.requested_size is not None and self.requested_size != size:
-                if (dict(infantry_size_options(event)).get(self.requested_size, 0) <= 0
-                        or self.requested_size > available):
-                    await interaction.followup.send(t("squad.size_unavailable", lang), ephemeral=True)
-                    return
-                size = self.requested_size
-            elif not type_full and _squad_slot_reserved(event, self.squad_type, size):
-                type_full = True
+            size, outcome = _squad_gate(event, self.squad_type, size, self.requested_size)
+            if outcome == "unavailable":
+                await interaction.followup.send(t("squad.size_unavailable", lang), ephemeral=True)
+                return
+            type_full = outcome in ("full", "mirror")
 
             wl_key = _waitlist_key(self.squad_type)
             if type_full:
                 event[wl_key].append((squad_name, self.squad_type, size, squad_id, rep_name))
                 wl_pos = len(event[wl_key])
                 status = t("admin.squad_type_full_waitlist", lang, type=self.squad_type)
-            elif size <= available:
+            elif size <= available and outcome != "seats":
                 event["squads"][squad_id] = {
                     "name": squad_name, "type": self.squad_type,
                     "size": size, "rep_name": rep_name,

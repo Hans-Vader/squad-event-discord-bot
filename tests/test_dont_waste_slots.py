@@ -218,17 +218,6 @@ class TestSelectValuePlumbing(unittest.TestCase):
         opts = bot._squad_type_options(ev, "en")
         self.assertEqual([o.value for o in opts], ["infantry", "vehicle", "heli"])
 
-    def test_slot_reserved_helper(self):
-        # Base-size registration blocked while a mirror is pending...
-        ev = _event(squads=_squads(7, *([6] * 11)))
-        self.assertTrue(bot._squad_slot_reserved(ev, "infantry", 6))
-        # ...but stale sizes (e.g. waitlist entries from before a squad-size
-        # edit) and other types are never blocked by the reservation.
-        ev_edited = _event(infantry_squad_size=8, squads=_squads(*([8] * 9)))
-        self.assertFalse(bot._squad_slot_reserved(ev_edited, "infantry", 6))
-        self.assertFalse(bot._squad_slot_reserved(ev, "vehicle", 2))
-        self.assertFalse(bot._squad_slot_reserved(_event(dont_waste_slots=False), "infantry", 6))
-
 
 class TestModelPlumbing(unittest.TestCase):
     def test_default_and_override(self):
