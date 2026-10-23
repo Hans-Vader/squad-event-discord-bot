@@ -6,9 +6,7 @@ reservation), the select option/value plumbing, model defaults/carry-over,
 and presence of the new i18n keys.
 """
 
-import itertools
 import os
-import random
 import sys
 import unittest
 
@@ -72,28 +70,10 @@ class TestSizeOptions(unittest.TestCase):
         opts = utils.infantry_size_options(_event(mode="player"))
         self.assertEqual(opts, [(6, 12)])
 
-    def test_no_pool_base_only(self):
-        self.assertEqual(utils.infantry_size_options(_event(max_player_slots=86)),
-                         [(6, 12)])  # U=0
-        self.assertEqual(utils.infantry_size_options(_event(max_player_slots=87)),
-                         [(6, 12)])  # U=1 → strict pairs impossible
-
-    def test_initial_options_u4(self):
-        # U=4: one 8er pair absorbs everything with the fewest oversized
-        # squads — 7s are not offered (two 7er pairs would mean 4 oversized).
-        opts = utils.infantry_size_options(_event())
-        self.assertEqual(opts, [(6, 12), (8, 2)])
-
     def test_odd_base_cap_rounds_down_and_feeds_pool(self):
         # User-reported scenario: server 100, casters 2, 2 vehicle, 2 heli →
         # 92 infantry seats = 15 base squads. 15 can't split into two equal
         # teams, so the cap becomes 14 and 6+2=8 seats feed the oversized pool.
-        ev = _event(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
-        # Pool 8, minimal plan: one 9er pair + one 7er pair (4 oversized, 0
-        # waste); 8s are not offered (2x 8er pairs would tie on waste but the
-        # canonical plan prefers bigger squads) and nothing exceeds 9.
-        self.assertEqual(utils.infantry_size_options(ev),
-                         [(6, 14), (7, 2), (9, 2)])
         # The even cap holds regardless of the toggle — those seats just stay
         # unused when the mode is off.
         self.assertEqual(utils.infantry_size_options(
@@ -103,136 +83,6 @@ class TestSizeOptions(unittest.TestCase):
         # Caps below 2 are exempt so tiny configs stay usable.
         tiny = _event(max_player_slots=20, dont_waste_slots=False)  # 6 inf seats
         self.assertEqual(utils.infantry_size_options(tiny), [(6, 1)])
-
-    def test_pool_constrains_next_offers(self):
-        ev = _event(squads=_squads(7))
-        # one 7 registered (pool 4 → free 2 after mirror reservation): an 8er
-        # pair no longer fits, 7 continues (mirror + one more pair), base
-        # loses one slot to the reserved mirror.
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 10), (7, 3)])
-
-    def test_pair_completion_and_exhaustion(self):
-        self.assertEqual(utils.infantry_size_options(_event(squads=_squads(7, 7))),
-                         [(6, 10), (7, 2)])
-        self.assertEqual(utils.infantry_size_options(_event(squads=_squads(7, 7, 7, 7))),
-                         [(6, 8)])
-
-    def test_unregister_reoffers_and_resets(self):
-        # three 7s left after an unregister → mirror re-offered
-        self.assertEqual(utils.infantry_size_options(_event(squads=_squads(7, 7, 7))),
-                         [(6, 8), (7, 1)])
-        # all oversized gone → the plan resets (pool 4 → one 8er pair)
-        self.assertEqual(utils.infantry_size_options(_event(squads=_squads(6, 6))),
-                         [(6, 10), (8, 2)])
-
-    def test_odd_leftover_stays_unused(self):
-        # U=5: 8-pair consumes 4, the 5th seat can never be paired.
-        ev = _event(max_player_slots=91)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (8, 2)])
-        ev = _event(max_player_slots=91, squads=_squads(8, 8))
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 10)])
-
-    def test_pair_rule_uses_leftover_pool(self):
-        # Pool 8 (user scenario): a completed 9er pair leaves 2 seats — a 7er
-        # pair absorbs them instead of the old size lock stranding them.
-        big = dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
-        ev = _event(squads=_squads(9, 9), **big)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 2)])
-        # A 7er pair may even start before the 9er mirror completes — the
-        # mirror's seats stay reserved.
-        ev = _event(squads=_squads(9), **big)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 2), (9, 1)])
-        # Fully absorbed: 2x9 + 2x7 = all 8 pool seats used, base only.
-        ev = _event(squads=_squads(9, 9, 7, 7), **big)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 10)])
-
-    def test_allowed_sizes_whitelist(self):
-        big = dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)  # pool 8
-        # Only 7s allowed: 8 and 9 vanish from the offers.
-        ev = _event(dont_waste_allowed_sizes=[7], **big)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 14), (7, 8)])
-        # 7 and 8 allowed, 9 excluded: two 8er pairs absorb all 8 seats with
-        # the fewest squads, so no 7s are offered.
-        ev = _event(dont_waste_allowed_sizes=[7, 8], **big)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 14), (8, 4)])
-        # None/empty = no restriction → minimal plan 9er pair + 7er pair.
-        ev = _event(dont_waste_allowed_sizes=None, **big)
-        self.assertEqual(utils.infantry_size_options(ev),
-                         [(6, 14), (7, 2), (9, 2)])
-
-    def test_whitelist_never_blocks_a_mirror(self):
-        big = dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
-        # A 9 got registered, then the whitelist was restricted to [7]: the 9's
-        # mirror stays offered (equal counts win), but ONLY the mirror.
-        ev = _event(dont_waste_allowed_sizes=[7], squads=_squads(9), **big)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 2), (9, 1)])
-        # Pair complete → no further 9s.
-        ev = _event(dont_waste_allowed_sizes=[7], squads=_squads(9, 9), **big)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (7, 2)])
-
-    def test_minimal_count_priority(self):
-        # Priority order (user decision): 1. least waste, 2. fewest oversized
-        # squads, 3. prefer bigger squads. Pool 8 with whitelist [8, 9]: a 9er
-        # pair would waste 2 seats, so two 8er pairs win despite more squads.
-        ev = _event(dont_waste_allowed_sizes=[8, 9],
-                    max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 14), (8, 4)])
-        # Registering along the plan converges to zero waste.
-        ev["squads"] = _squads(8, 8, 8, 8)
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 10)])
-        self.assertEqual(utils.infantry_wasted_seats(ev), 0)
-
-    def test_wasted_seats(self):
-        big = dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2)
-        # Options still open → nothing counts as wasted yet.
-        self.assertEqual(utils.infantry_wasted_seats(_event(**big)), 0)
-        self.assertEqual(utils.infantry_wasted_seats(_event(squads=_squads(9, 9), **big)), 0)
-        # Fully absorbed → 0.
-        self.assertEqual(utils.infantry_wasted_seats(
-            _event(squads=_squads(9, 9, 7, 7), **big)), 0)
-        # U=5 after an 8er pair: 1 seat can never be paired.
-        self.assertEqual(utils.infantry_wasted_seats(
-            _event(max_player_slots=91, squads=_squads(8, 8))), 1)
-
-    def test_mirror_slot_reservation(self):
-        # 10 base squads + one unpaired 7 → 11 of 12 slots used; the last
-        # squad slot is reserved for the mirror: base drops to 0, 7 stays.
-        ev = _event(squads=_squads(7, *([6] * 10)))
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 0), (7, 1)])
-
-    def test_fresh_pair_needs_two_squad_slots(self):
-        # 11 base squads → only one squad slot free: no room for a new pair.
-        ev = _event(squads=_squads(*([6] * 11)))
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 1)])
-
-    def test_config_shrink_clamps(self):
-        # U shrank to 0 after an 8-pair registered → no oversized offered, no crash.
-        ev = _event(max_player_slots=86, squads=_squads(8, 8))
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 10)])
-        # ...but an incomplete pair is still offered so it can be equalized.
-        ev = _event(max_player_slots=86, squads=_squads(8))
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 10), (8, 1)])
-
-    def test_legacy_squads_without_size(self):
-        ev = _event(squads={"s0": {"name": "x", "type": "infantry"}})
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 11), (8, 2)])
-
-    def test_vehicle_heli_ignored(self):
-        ev = _event(squads={"v": {"type": "vehicle", "size": 2},
-                            "h": {"type": "heli", "size": 1}})
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 12), (8, 2)])
-
-    def test_new_pair_needs_two_free_squad_slots(self):
-        # 2x7 complete + 9 base squads → one squad slot free: a third 7 would
-        # start a pair whose mirror could never register, so it isn't offered.
-        ev = _event(squads=_squads(7, 7, *([6] * 9)))
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 1)])
-
-    def test_multiple_pending_mirrors_all_reserved(self):
-        # Degenerate post-config-edit state: two different oversized sizes,
-        # each unpaired. Both mirrors keep a reserved slot; base gets none.
-        ev = _event(squads=_squads(7, 8, *([6] * 8)))
-        self.assertEqual(utils.infantry_size_options(ev), [(6, 0), (7, 1), (8, 1)])
 
     def test_active_gate(self):
         self.assertTrue(utils.dont_waste_slots_active(_event()))
@@ -270,34 +120,6 @@ class TestEmbedHeader(unittest.TestCase):
                 return f
         return None
 
-    def test_oversized_sizes_shown_in_header(self):
-        # Over-committed mixed-size state (pool 4 fully consumed): no further
-        # 7s possible, the 8's mirror stays claimable.
-        ev = _embed_event(squads=_squads(7, 7, 8, 6))
-        field = self._infantry_field(utils.format_event_details(ev, "de"))
-        self.assertIn("[(1/8) Größe: 6 | (2/2) Größe: 7 | (1/2) Größe: 8]", field.name)
-        field = self._infantry_field(utils.format_event_details(ev, "en"))
-        self.assertIn("[(1/8) Size: 6 | (2/2) Size: 7 | (1/2) Size: 8]", field.name)
-
-    def test_header_after_nine_pair_offers_seven(self):
-        # User scenario (pool 8): the 9er pair leaves 2 seats → a 7er pair is
-        # offered instead of stranding them, permanently visible in the header.
-        ev = _embed_event(server_max_players=100, max_player_slots=98,
-                          max_vehicle_squads=2, max_heli_squads=2,
-                          squads=_squads(9, 9))
-        embed = utils.format_event_details(ev, "de")
-        field = self._infantry_field(embed)
-        self.assertIn("[(0/12) Größe: 6 | (0/2) Größe: 7 | (2/2) Größe: 9]", field.name)
-        # ...and nothing is reported as unused while the 7er pair is still open.
-        self.assertNotIn("Ungenutzt", self._all_values(embed))
-
-    def test_header_shows_possible_sizes_before_any_register(self):
-        # "Permanently visible": with the mode active the candidate sizes show
-        # up with (0/allowed) even before any oversized squad registers.
-        ev = _embed_event(squads=_squads(6, 6))
-        field = self._infantry_field(utils.format_event_details(ev, "de"))
-        self.assertIn("[(2/12) Größe: 6 | (0/2) Größe: 8]", field.name)
-
     def test_squad_rows_show_size_with_people_icon(self):
         ev = _embed_event(squads=_squads(7, 6))
         field = self._infantry_field(utils.format_event_details(ev, "de"))
@@ -328,15 +150,6 @@ class TestEmbedHeader(unittest.TestCase):
         field = self._infantry_field(utils.format_event_details(ev, "de"))
         self.assertIsNotNone(field)
         self.assertIn("(1/0)", field.name)
-
-    def test_header_user_example(self):
-        # Server 100, 2 casters, no vehicle/heli → 16 base squads, 2 leftover
-        # seats, one 7er registered: ⚔️ Infanterie (1/16) [Größe: 6 | (1/2) Größe: 7]
-        ev = _embed_event(server_max_players=100, max_player_slots=98,
-                          max_vehicle_squads=0, max_heli_squads=0,
-                          squads=_squads(7))
-        field = self._infantry_field(utils.format_event_details(ev, "de"))
-        self.assertIn("(1/16) [(0/14) Größe: 6 | (1/2) Größe: 7]", field.name)
 
     def test_embed_shows_even_squad_cap(self):
         # User-reported scenario: 92 infantry seats → 15 raw squads. The embed
@@ -392,15 +205,10 @@ class TestSelectValuePlumbing(unittest.TestCase):
     def test_squad_type_options_mode_on_expanded(self):
         opts = bot._squad_type_options(_event(), "en")
         self.assertEqual([o.value for o in opts],
-                         ["infantry", "infantry:8", "vehicle", "heli"])
+                         ["infantry", "infantry:7", "infantry:8", "infantry:9", "vehicle", "heli"])
         # oversized labels carry the remaining count
         by_value = {o.value: o.label for o in opts}
-        self.assertIn("2x", by_value["infantry:8"])
-
-    def test_squad_type_options_locked_size(self):
-        opts = bot._squad_type_options(_event(squads=_squads(7)), "en")
-        self.assertEqual([o.value for o in opts],
-                         ["infantry", "infantry:7", "vehicle", "heli"])
+        self.assertIn("10x", by_value["infantry:7"])
 
     def test_no_sizes_above_game_limit(self):
         # Squads hold at most 9 players in-game: a base size at/above the limit
@@ -525,91 +333,6 @@ class TestModelPlumbing(unittest.TestCase):
         self.assertEqual(ev["infantry_squad_size"], 9)
 
 
-class TestPairingInvariants(unittest.TestCase):
-    """Seeded random-walk property test: drive register/unregister sequences
-    through the real gates and verify after every step that the squads can
-    always be split into two teams with equal oversized counts per size —
-    i.e. every incomplete pair stays registerable and the pool is never
-    overbooked. (A deeper exhaustive audit of the same invariants ran during
-    development; this guards against regressions.)"""
-
-    _ids = itertools.count()
-
-    def _register(self, ev, size):
-        """Replicate register_squad's infantry gates. True if registered."""
-        base = ev["infantry_squad_size"]
-        available = ev["max_player_slots"] - ev["player_slots_used"]
-        opts = dict(utils.infantry_size_options(ev))
-        if size != base:
-            if opts.get(size, 0) <= 0 or size > available:
-                return False
-        elif (bot._is_squad_type_full(ev, "infantry")
-                or bot._squad_slot_reserved(ev, "infantry", size)
-                or size > available):
-            return False
-        ev["squads"][f"p{next(self._ids)}"] = {"name": "x", "type": "infantry", "size": size}
-        ev["player_slots_used"] += size
-        return True
-
-    def _check(self, ev, trace):
-        base = ev["infantry_squad_size"]
-        pool = utils.infantry_unused_pool(ev)
-        cap = utils._max_squads_for_type(ev, "infantry")
-        squads = [d for d in ev["squads"].values() if d["type"] == "infantry"]
-        counts = {}
-        for d in squads:
-            if d["size"] > base:
-                counts[d["size"]] = counts.get(d["size"], 0) + 1
-        consumed = sum((k - base) * c for k, c in counts.items())
-        reserved = sum(k - base for k, c in counts.items() if c % 2)
-        pending = sum(1 for c in counts.values() if c % 2)
-        ctx = f"trace={trace} sizes={sorted(d['size'] for d in squads)}"
-        self.assertLessEqual(consumed, pool, f"pool overbooked: {ctx}")
-        self.assertLessEqual(consumed + reserved, pool, f"reservation overbooked: {ctx}")
-        self.assertGreaterEqual(cap - len(squads), pending, f"mirror slot lost: {ctx}")
-        # Every incomplete pair must be completable RIGHT NOW, and greedily
-        # completing all of them must end with even counts per size.
-        probe = {**ev, "squads": dict(ev["squads"]),
-                 "player_slots_used": ev["player_slots_used"]}
-        for _ in range(pending):
-            odd = sorted(k for k, c in counts.items() if c % 2)
-            for k in odd:
-                self.assertTrue(self._register(probe, k), f"mirror {k} blocked: {ctx}")
-            counts = {}
-            for d in probe["squads"].values():
-                if d["type"] == "infantry" and d["size"] > base:
-                    counts[d["size"]] = counts.get(d["size"], 0) + 1
-        self.assertFalse(any(c % 2 for c in counts.values()), f"odd counts remain: {ctx}")
-
-    def test_random_walks_keep_teams_mirrorable(self):
-        rng = random.Random(42)
-        configs = [
-            dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2),  # pool 8
-            dict(max_player_slots=90),                                           # pool 4
-            dict(max_player_slots=91),                                           # pool 5 (odd rest)
-            dict(max_player_slots=98, max_vehicle_squads=0, max_heli_squads=0,
-                 infantry_squad_size=7),
-            dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2,
-                 dont_waste_allowed_sizes=[7, 9]),                            # whitelist
-            dict(max_player_slots=98, max_vehicle_squads=2, max_heli_squads=2,
-                 dont_waste_max_squads=2),                                    # squad cap
-        ]
-        for cfg in configs:
-            for _run in range(5):
-                ev = _event(squads={}, player_slots_used=0, **cfg)
-                trace = []
-                for _step in range(150):
-                    if rng.random() < 0.6 or not ev["squads"]:
-                        size = rng.choice([s for s, _ in utils.infantry_size_options(ev)])
-                        if self._register(ev, size):
-                            trace.append(f"+{size}")
-                    else:
-                        sid = rng.choice(list(ev["squads"]))
-                        trace.append(f"-{ev['squads'][sid]['size']}")
-                        ev["player_slots_used"] -= ev["squads"].pop(sid)["size"]
-                    self._check(ev, trace[-15:])
-
-
 class TestMaxSquadsCap(unittest.TestCase):
     """Organizer cap on the total number of oversized squads
     (`dont_waste_max_squads`, always even — pairs)."""
@@ -629,11 +352,6 @@ class TestMaxSquadsCap(unittest.TestCase):
         self.assertEqual(utils._pair_cover(6, [1, 2, 3], max_pairs=1), {3: 1})
         # Cap prevents covering the target → {} (replan keeps capacities).
         self.assertEqual(utils._pair_cover(8, [1, 2, 3], max_pairs=1), {})
-
-    def test_options_offer_only_capped_plan(self):
-        opts = dict(utils.infantry_size_options(self._ev(dont_waste_max_squads=2)))
-        self.assertEqual(opts.get(9), 2)
-        self.assertNotIn(7, opts)
 
     def test_cap_reached_stops_offers_and_reports_waste(self):
         ev = self._ev(dont_waste_max_squads=2, squads=_squads(9, 9))

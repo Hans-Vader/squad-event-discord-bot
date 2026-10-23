@@ -538,62 +538,33 @@ def infantry_size_options(event: dict) -> list:
     """Infantry squad sizes currently offerable, as [(size, remaining), ...]
     ascending with the base size always first.
 
-    With "don't waste slots" mode off (or in player mode) only the base size is
-    returned. When on, the unused pool may be absorbed by oversized squads that
-    must always come in equal numbers per size (mirrored across two manually
-    split teams): the first oversized registration locks its size until all
-    oversized squads are gone, an incomplete pair keeps its size offered and
-    reserves one squad slot for the mirror, and a pool remainder that cannot
-    form a pair stays unused.
-    """
+    Player mode (the bot plans capacities) and an inactive oversized-squads
+    mode offer only the base size. Otherwise every allowed oversized size —
+    plus the mirror of an incomplete pair — is offered while it still fits.
+    `remaining` is how many squads of exactly that size could register one
+    after another right now, so an option is shown iff infantry_block_reason
+    lets it register."""
     base = event.get("infantry_squad_size", 6)
-    base_max = _max_squads_for_type(event, "infantry")
-    inf_squads = [d for d in event.get("squads", {}).values()
-                  if d.get("type") == "infantry"]
-    free_slots = max(0, base_max - len(inf_squads))
+    if event.get("mode", "rep") == "player":
+        inf_count = _infantry_usage(event)[1]
+        return [(base, max(0, _max_squads_for_type(event, "infantry") - inf_count))]
 
-    pool = infantry_unused_pool(event)
-    active = event.get("mode", "rep") != "player" and bool(event.get("dont_waste_slots"))
-    if not active:
-        return [(base, free_slots)]
-
-    counts: dict[int, int] = {}
-    for d in inf_squads:
-        size = d.get("size", base)
-        if size > base:
-            counts[size] = counts.get(size, 0) + 1
-
-    if not counts and pool < 2:
-        return [(base, free_slots)]
-
-    pending = sum(1 for c in counts.values() if c % 2)
-    consumed = sum((size - base) * c for size, c in counts.items())
-    reserved = sum(size - base for size, c in counts.items() if c % 2)
-    free_pool = max(0, pool - consumed - reserved)
-    options = [(base, max(0, free_slots - pending))]
-
-    # Offered are the pairs of the canonical plan (least waste, then fewest
-    # oversized squads — so as many regular squads as possible), plus mirrors
-    # of incomplete pairs. The organizer may additionally whitelist sizes.
-    plan = _pair_plan(free_pool, _allowed_extras(event, free_pool),
-                      _max_pairs(event, counts))
-    candidates = set(counts) | {base + e for e in plan}
-    for size in sorted(candidates):
-        c = counts.get(size, 0)
-        extra = size - base
-        others_pending = pending - (1 if c % 2 else 0)
-        avail = max(0, free_slots - others_pending)
-        if c % 2:
-            # Incomplete pair: the mirror stays registerable (even if a config
-            # edit shrank the pool or excluded the size — equal counts win);
-            # anything beyond it only per plan.
-            if avail < 1:
-                remaining = 0
-            else:
-                remaining = 1 + 2 * min(plan.get(extra, 0), (avail - 1) // 2)
-        else:
-            remaining = 2 * min(plan.get(extra, 0), avail // 2)
-        if remaining > 0:
+    sizes = [base]
+    if dont_waste_slots_active(event):
+        allowed = event.get("dont_waste_allowed_sizes")
+        sizes += sorted(set(_oversized_counts(event))
+                        | {k for k in range(base + 1, MAX_SQUAD_PLAYERS + 1)
+                           if not (allowed and k not in allowed)})
+    options = []
+    for size in sizes:
+        # ponytail: simulate registrations one by one — at most the squad cap
+        # per size, each check O(squads); fine for <= 100 seats.
+        probe = {**event, "squads": dict(event.get("squads", {}))}
+        remaining = 0
+        while infantry_block_reason(probe, size) is None:
+            probe["squads"][f"__probe{remaining}"] = {"type": "infantry", "size": size}
+            remaining += 1
+        if size == base or remaining > 0:
             options.append((size, remaining))
     return options
 

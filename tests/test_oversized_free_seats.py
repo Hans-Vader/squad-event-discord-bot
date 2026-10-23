@@ -133,5 +133,101 @@ class TestBlockReason(unittest.TestCase):
         self.assertEqual(_reason(_dcn(squads=_squads(*[6] * 12, 12)), 6), "seats")
 
 
+class TestSizeOptionsFreeSeats(unittest.TestCase):
+    def _opts(self, **over):
+        return utils.infantry_size_options(_dcn(**over))
+
+    def test_example_a(self):
+        self.assertEqual(self._opts(dont_waste_pairs=False, squads=_squads(*SIX11)),
+                         [(6, 3), (7, 2), (8, 2), (9, 2)])
+        self.assertEqual(self._opts(dont_waste_pairs=False, squads=_squads(*SIX11, 9)),
+                         [(6, 1), (7, 1), (8, 1), (9, 1)])
+        self.assertEqual(self._opts(dont_waste_pairs=False, squads=_squads(*SIX11, 9, 9)), [(6, 0)])
+        self.assertEqual(self._opts(dont_waste_pairs=False, squads=_squads(*SIX11, 9, 6)), [(6, 0)])
+
+    def test_example_b(self):
+        self.assertEqual(self._opts(squads=_squads(*SIX11)), [(6, 3)])
+
+    def test_example_c(self):
+        self.assertEqual(self._opts(), [(6, 14), (7, 12), (8, 10), (9, 8)])
+        self.assertEqual(self._opts(squads=_squads(9)), [(6, 10), (7, 8), (8, 8), (9, 7)])
+
+    def test_example_d_and_e(self):
+        self.assertEqual(self._opts(dont_waste_pairs=False, dont_waste_max_squads=1,
+                                    squads=_squads(*SIX11, 9)), [(6, 1)])
+        self.assertEqual(self._opts(dont_waste_slots=False, dont_waste_pairs=False,
+                                    squads=_squads(*SIX11, 9, 9)), [(6, 0)])
+
+    def test_switch_on_with_odd_counts(self):
+        self.assertEqual(self._opts(squads=_squads(*SIX11, 9)), [(6, 0), (9, 1)])
+        self.assertEqual(self._opts(squads=_squads(*[6] * 10, 9, 8)), [(6, 0)])
+
+    def test_player_mode_and_edge_inputs(self):
+        self.assertEqual(self._opts(mode="player"), [(6, 14)])
+        legacy = _dcn(squads={"s0": {"name": "x", "type": "infantry"}})
+        self.assertEqual(utils.infantry_size_options(legacy), self._opts(squads=_squads(6)))
+        veh = _dcn(squads={"v": {"type": "vehicle", "size": 2}, "h": {"type": "heli", "size": 1}})
+        self.assertEqual(utils.infantry_size_options(veh), self._opts())
+
+
+class TestFreeSeatInvariants(unittest.TestCase):
+    """Seeded random walks through the real gate, both pair rules."""
+
+    CONFIGS = [dict(), dict(max_player_slots=90), dict(max_player_slots=91),
+               dict(dont_waste_allowed_sizes=[7, 9]), dict(dont_waste_max_squads=2),
+               dict(dont_waste_max_squads=3),
+               dict(infantry_squad_size=7, max_vehicle_squads=0, max_heli_squads=0),
+               dict(max_player_slots=8, max_vehicle_squads=0, max_heli_squads=0),
+               dict(infantry_squad_size=1, max_player_slots=40, max_vehicle_squads=0, max_heli_squads=0)]
+
+    _ids = itertools.count()
+
+    def _add(self, ev, size):
+        ev["squads"][f"p{next(self._ids)}"] = {"name": "x", "type": "infantry", "size": size}
+
+    def _check(self, ev, trace):
+        base, pairs = ev["infantry_squad_size"], utils.dont_waste_pairs(ev)
+        S, cap = utils.infantry_seat_budget(ev), utils._max_squads_for_type(ev, "infantry")
+        inf = list(ev["squads"].values())
+        ctx = f"pairs={pairs} trace={trace}"
+        self.assertLessEqual(sum(d["size"] for d in inf), S, ctx)
+        self.assertLessEqual(len(inf), cap, ctx)
+        counts = utils._oversized_counts(ev)
+        if ev.get("dont_waste_max_squads"):
+            m = ev["dont_waste_max_squads"]
+            used = sum(c + (c % 2 if pairs else 0) for c in counts.values())
+            self.assertLessEqual(used, m - m % 2 if pairs else m, ctx)
+        opts = dict(utils.infantry_size_options(ev))
+        for k in range(base, utils.MAX_SQUAD_PLAYERS + 1):
+            self.assertEqual(opts.get(k, 0) > 0, utils.infantry_block_reason(ev, k) is None, f"{k} {ctx}")
+        if pairs:
+            probe = {**ev, "squads": dict(ev["squads"])}
+            for k in sorted(k for k, c in counts.items() if c % 2):
+                self.assertIsNone(utils.infantry_block_reason(probe, k), f"mirror {k} {ctx}")
+                self._add(probe, k)
+            self.assertFalse(any(c % 2 for c in utils._oversized_counts(probe).values()), ctx)
+            n_reg = sum(1 for d in probe["squads"].values() if d["size"] <= base)
+            if n_reg % 2 and cap >= 2:
+                self.assertIsNone(utils.infantry_block_reason(probe, base), f"parity {ctx}")
+
+    def test_random_walks(self):
+        rng = random.Random(42)
+        for cfg in self.CONFIGS:
+            for pairs in (True, False):
+                for _run in range(10):
+                    ev = _dcn(dont_waste_pairs=pairs, **cfg)
+                    trace = []
+                    for _step in range(150):
+                        if rng.random() < 0.6 or not ev["squads"]:
+                            k = rng.choice([s for s, _ in utils.infantry_size_options(ev)])
+                            if utils.infantry_block_reason(ev, k) is None:
+                                self._add(ev, k)
+                                trace.append(f"+{k}")
+                        else:
+                            sid = rng.choice(sorted(ev["squads"]))
+                            trace.append(f"-{ev['squads'].pop(sid)['size']}")
+                        self._check(ev, trace[-12:])
+
+
 if __name__ == "__main__":
     unittest.main()
