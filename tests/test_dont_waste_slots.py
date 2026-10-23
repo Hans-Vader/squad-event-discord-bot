@@ -239,7 +239,13 @@ class TestSizeOptions(unittest.TestCase):
         # Player mode is supported too (capacities are pre-planned by the bot).
         self.assertTrue(utils.dont_waste_slots_active(_event(mode="player")))
         self.assertFalse(utils.dont_waste_slots_active(_event(dont_waste_slots=False)))
-        self.assertFalse(utils.dont_waste_slots_active(_event(max_player_slots=87)))  # U=1
+        # Rep mode uses every free infantry seat, so no leftover is needed.
+        self.assertTrue(utils.dont_waste_slots_active(_event(max_player_slots=87)))  # U=1
+        self.assertTrue(utils.dont_waste_slots_active(_event(max_player_slots=86)))  # U=0
+        # Player mode plans the leftover: a lone seat only fits without the pair rule.
+        self.assertFalse(utils.dont_waste_slots_active(_event(mode="player", max_player_slots=87)))
+        self.assertTrue(utils.dont_waste_slots_active(
+            _event(mode="player", max_player_slots=87, dont_waste_pairs=False)))
         # An odd base cap always makes the mode meaningful (a whole squad feeds the pool).
         self.assertTrue(utils.dont_waste_slots_active(_event(max_player_slots=96)))
         # Base size at the in-game limit → no bigger squads can ever exist.

@@ -459,6 +459,7 @@ def _ensure_event_keys(event: dict):
         "mode": "rep",
         "dont_waste_slots": False,
         "dont_waste_allowed_sizes": None,
+        "dont_waste_pairs": True,
         "player_roles_enabled": True,
         "caster_stream_links_enabled": False,
         "caster_stream_urls": {},

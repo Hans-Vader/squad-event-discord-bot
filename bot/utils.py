@@ -295,29 +295,45 @@ def _even_infantry_max(raw_max: int) -> int:
     return raw_max if raw_max < 2 else raw_max - raw_max % 2
 
 
+def infantry_seat_budget(event: dict) -> int:
+    """S: the infantry seats — player seats minus every vehicle and heli seat
+    (those stay reserved for their types even while unclaimed)."""
+    veh_slots = event.get("max_vehicle_squads", 0) * event.get("vehicle_squad_size", 0)
+    heli_slots = event.get("max_heli_squads", 0) * event.get("heli_squad_size", 0)
+    return max(0, event.get("max_player_slots", 0) - veh_slots - heli_slots)
+
+
 def infantry_unused_pool(event: dict) -> int:
-    """Seats the don't-waste mode can hand out as oversized squads: the seat
-    remainder plus — when the base squad count would be odd — one whole base
-    squad, because the infantry squad count must stay even (two equal teams)."""
+    """Seats no base squad can use: the seat remainder plus — when the base
+    squad count would be odd — one whole base squad, because the infantry
+    squad count must stay even (two equal teams). Player mode plans its
+    oversized squads from this pool."""
     inf_size = event.get("infantry_squad_size", 6)
     if inf_size <= 0:
         return 0
-    veh_slots = event.get("max_vehicle_squads", 0) * event.get("vehicle_squad_size", 0)
-    heli_slots = event.get("max_heli_squads", 0) * event.get("heli_squad_size", 0)
-    inf_slots = max(0, event.get("max_player_slots", 0) - veh_slots - heli_slots)
+    inf_slots = infantry_seat_budget(event)
     return inf_slots - _even_infantry_max(inf_slots // inf_size) * inf_size
 
 
 MAX_SQUAD_PLAYERS = 9  # hard in-game limit — no squad can hold more players
 
 
+def dont_waste_pairs(event: dict) -> bool:
+    """Pair rule (default on): oversized sizes only in mirrored pairs, so the
+    two teams can always be set up identically."""
+    return bool(event.get("dont_waste_pairs", True))
+
+
 def dont_waste_slots_possible(event: dict) -> bool:
-    """True when the don't-waste-slots mode could do anything at all: a base
-    size below the in-game squad limit and a pool that fits at least one
-    oversized pair. Applies to both modes — reps pick oversized sizes
-    themselves, player mode pre-plans squad capacities."""
-    return (event.get("infantry_squad_size", 6) < MAX_SQUAD_PLAYERS
-            and infantry_unused_pool(event) >= 2)
+    """True when the oversized-squads mode could do anything at all: a base
+    size below the in-game squad limit and — in rep mode — nothing more, since
+    reps may use every free infantry seat. Player mode only plans the leftover
+    pool, which must fit one oversized squad (a pair with the pair rule)."""
+    if event.get("infantry_squad_size", 6) >= MAX_SQUAD_PLAYERS:
+        return False
+    if event.get("mode", "rep") != "player":
+        return True
+    return infantry_unused_pool(event) >= (2 if dont_waste_pairs(event) else 1)
 
 
 def dont_waste_slots_active(event: dict) -> bool:
@@ -345,6 +361,61 @@ def _max_pairs(event: dict, counts: dict | None = None):
         return None
     used = sum(c + (c % 2) for c in (counts or {}).values())
     return max(0, cap // 2 - used // 2)
+
+
+def _oversized_budget(event: dict, counts: dict | None = None):
+    """Remaining budget from the organizer's oversized-squad cap, or None when
+    unlimited. With the pair rule it counts pairs (an incomplete pair counts
+    as 2 — its mirror must never be blocked), without it single squads."""
+    if dont_waste_pairs(event):
+        return _max_pairs(event, counts)
+    cap = event.get("dont_waste_max_squads")
+    if not cap:
+        return None
+    return max(0, cap - sum((counts or {}).values()))
+
+
+def _oversized_counts(event: dict) -> dict:
+    """Registered infantry squads above the base size, counted per size."""
+    base = event.get("infantry_squad_size", 6)
+    counts: dict[int, int] = {}
+    for d in event.get("squads", {}).values():
+        size = d.get("size", base)
+        if d.get("type") == "infantry" and size > base:
+            counts[size] = counts.get(size, 0) + 1
+    return counts
+
+
+def _infantry_usage(event: dict) -> tuple:
+    """(seats used, squad count) of the registered infantry squads."""
+    base = event.get("infantry_squad_size", 6)
+    sizes = [d.get("size", base) for d in event.get("squads", {}).values()
+             if d.get("type") == "infantry"]
+    return sum(sizes), len(sizes)
+
+
+def _reserved_mirrors(event: dict, counts: dict) -> list:
+    """Sizes of incomplete pairs whose mirror is held back, ascending. A mirror
+    is only held while its squad slot and seats still fit — after an organizer
+    override that shrank the budget, an unreachable mirror reserves nothing."""
+    used, count = _infantry_usage(event)
+    seats = infantry_seat_budget(event)
+    cap = _max_squads_for_type(event, "infantry")
+    held = []
+    for size in sorted(k for k, c in counts.items() if c % 2):
+        if count + len(held) + 1 <= cap and used + sum(held) + size <= seats:
+            held.append(size)
+    return held
+
+
+def _regular_capacity(event: dict, n_o: int, seats_o: int) -> int:
+    """B: how many regular squads fit next to `n_o` oversized squads holding
+    `seats_o` seats — rounded down to even so both teams can mirror them.
+    Caps below 2 are exempt, like the squad cap itself."""
+    base = max(1, event.get("infantry_squad_size", 6))
+    cap = _max_squads_for_type(event, "infantry")
+    raw = min(cap - n_o, (infantry_seat_budget(event) - seats_o) // base)
+    return raw if cap < 2 else raw - raw % 2
 
 
 def _pair_plan(free_pool: int, extras: list, max_pairs: int | None = None) -> dict:
@@ -419,6 +490,48 @@ def planned_infantry_capacities(event: dict) -> list:
         # Tiny caps (exempt from the even rule) can't hold a full pair.
         return [base] * cap
     return [base] * (cap - len(oversized)) + oversized
+
+
+def infantry_block_reason(event: dict, size: int) -> Optional[str]:
+    """Why an infantry squad of `size` can't register right now (rep mode), or
+    None when it can. Oversized squads may use every free infantry seat;
+    regular squads may be crowded out. Reasons: 'full' (squad cap reached),
+    'seats' (not enough free infantry seats), 'mirror' (the slot is held for
+    an oversized pair's mirror) or 'size' (that oversized size isn't
+    offerable). With the pair rule, sizes come in mirrored pairs and the
+    regular squad count stays completable to an even number."""
+    base = event.get("infantry_squad_size", 6)
+    used, count = _infantry_usage(event)
+    if count + 1 > _max_squads_for_type(event, "infantry"):
+        return "full"
+    if size > infantry_seat_budget(event) - used:
+        return "seats"
+
+    active = event.get("mode", "rep") != "player" and dont_waste_slots_active(event)
+    pairs = dont_waste_pairs(event)
+    counts = _oversized_counts(event)
+    held = _reserved_mirrors(event, counts) if pairs else []
+    n_o = sum(counts.values()) + len(held)
+    seats_o = sum(k * c for k, c in counts.items()) + sum(held)
+    n_regular = count - sum(counts.values())
+
+    if size > base:
+        if not active:
+            return "size"
+        if pairs and counts.get(size, 0) % 2:
+            return None  # the mirror — whitelist and cap never block it
+        allowed = event.get("dont_waste_allowed_sizes")
+        if size > MAX_SQUAD_PLAYERS or (allowed and size not in allowed):
+            return "size"
+        budget = _oversized_budget(event, counts)
+        if budget is not None and budget < 1:
+            return "size"
+        if pairs and _regular_capacity(event, n_o + 2, seats_o + 2 * size) < n_regular:
+            return "size"
+        return None
+    if active and pairs and n_regular + 1 > _regular_capacity(event, n_o, seats_o):
+        return "mirror" if held else "full"
+    return None
 
 
 def infantry_size_options(event: dict) -> list:
