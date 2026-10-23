@@ -50,7 +50,8 @@ from utils import (
     consolidate_all_player_squads,
     build_event_ics, _ics_slug,
     infantry_unused_pool, infantry_size_options, infantry_block_reason,
-    dont_waste_slots_active, dont_waste_slots_possible, MAX_SQUAD_PLAYERS,
+    infantry_seat_budget, dont_waste_pairs,
+    dont_waste_slots_active, MAX_SQUAD_PLAYERS,
 )
 from i18n import t, SUPPORTED_LANGUAGES, get_language_name
 
@@ -138,10 +139,11 @@ _EDIT_PROPERTIES = [
     (23, "dont_waste_allowed_sizes", "edit.property.dont_waste_sizes",  "size_list",    None),
     (24, "dont_waste_max_squads",  "edit.property.dont_waste_max",      "int_nullable", None),
     (25, "caster_stream_links_enabled", "edit.property.caster_stream_links", "bool",    None),
+    (26, "dont_waste_pairs",       "edit.property.dont_waste_pairs",    "bool",         None),
 ]
-# ponytail: 25 rows = Discord's hard select cap, and _visible_edit_properties hides
-#           exactly one per mode, so the dropdown sits at 24. One more property needs
-#           a second chained select — slicing [:25] would silently drop the tail.
+# ponytail: 26 rows; _visible_edit_properties hides exactly one per mode, so the
+#           dropdown sits at Discord's hard cap of 25. One more property needs a
+#           second chained select — slicing [:25] would silently drop the tail.
 
 
 def _get_guild_lock(guild_id: int) -> asyncio.Lock:
@@ -4250,8 +4252,9 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
                             base=_base, max=MAX_SQUAD_PLAYERS)
 
     if key == "dont_waste_max_squads" and new_value:
-        # Oversized squads always come in pairs, so the cap must be even.
-        if new_value < 2 or new_value % 2:
+        # Any positive cap; with the pair rule an odd one acts as the next
+        # lower even one (pairs).
+        if new_value < 1:
             return False, t("edit.dont_waste_max_invalid", lang)
 
     if key == "dont_waste_slots" and new_value:
@@ -4259,11 +4262,13 @@ def _apply_property_change(event, key, vtype, special, new_value, lang):
             return False, t("edit.dont_waste_max_size", lang,
                             max=MAX_SQUAD_PLAYERS,
                             size=event.get("infantry_squad_size", 6))
-        unused = infantry_unused_pool(event)
-        if unused == 1:
-            return False, t("edit.dont_waste_single_unused", lang)
-        if unused < 2:
-            return False, t("edit.dont_waste_no_unused", lang)
+        if is_player_mode(event):
+            # Player mode only plans the leftover pool; reps use every free seat.
+            unused = infantry_unused_pool(event)
+            if unused == 0:
+                return False, t("edit.dont_waste_no_unused", lang)
+            if unused == 1 and dont_waste_pairs(event):
+                return False, t("edit.dont_waste_single_unused", lang)
 
     if key == "registration_start_time":
         if new_value == "__immediate__":
@@ -5937,15 +5942,24 @@ class WizardPlayerRolesView(BaseView):
         await self._to_confirmation(interaction)
 
 
+def _dont_waste_step_available(event: dict) -> bool:
+    """True when the oversized-squads step is worth asking: a base size below
+    the in-game limit and — in player mode, which only plans the leftover — at
+    least one unused seat. The pair rule is picked in the same step, so a
+    single seat already counts."""
+    return (event.get("infantry_squad_size", 6) < MAX_SQUAD_PLAYERS
+            and (not is_player_mode(event) or infantry_unused_pool(event) >= 1))
+
+
 async def _advance_to_dont_waste_or_confirmation(interaction, guild_id, channel_id, event,
                                                  user_assignments, settings, interaction_user):
-    """Show the don't-waste-slots step, or go straight to confirmation when the
-    unused pool can't fit an oversized pair anyway."""
-    if dont_waste_slots_possible(event):
-        unused = infantry_unused_pool(event)
+    """Show the oversized-squads step, or go straight to confirmation when the
+    option couldn't do anything for this event anyway."""
+    if _dont_waste_step_available(event):
         lang = get_guild_language(guild_id)
-        content = (f"**{t('wizard.dont_waste_step_title', lang)}**\n"
-                   f"{t('wizard.dont_waste_step_desc', lang, unused=unused)}")
+        desc = (t("wizard.dont_waste_step_desc_player", lang, unused=infantry_unused_pool(event))
+                if is_player_mode(event) else t("wizard.dont_waste_step_desc", lang))
+        content = f"**{t('wizard.dont_waste_step_title', lang)}**\n{desc}"
         view = WizardDontWasteSlotsView(guild_id, channel_id, event, user_assignments,
                                         settings, interaction_user)
         await interaction.response.edit_message(content=content, embed=None, view=view)
@@ -5957,8 +5971,8 @@ async def _advance_to_dont_waste_or_confirmation(interaction, guild_id, channel_
 
 
 class WizardDontWasteSlotsView(BaseView):
-    """Step: enable or disable the "don't waste slots" mode, which offers the
-    unused infantry seats as oversized squads in mirrored pairs."""
+    """Step: enable or disable oversized squads (reps may use every free
+    infantry seat, player mode plans the leftover) and pick the pair rule."""
 
     def __init__(self, guild_id, channel_id, event, user_assignments, settings, interaction_user):
         super().__init__(timeout=300, title="Wizard Dont Waste Slots")
@@ -5983,10 +5997,25 @@ class WizardDontWasteSlotsView(BaseView):
         self.mode_select.callback = self._mode_selected
         self.add_item(self.mode_select)
 
+        pairs_default = dont_waste_pairs(event)
+        self.pairs_select = ui.Select(
+            placeholder=t("wizard.dont_waste_pairs_placeholder", lang),
+            options=[
+                discord.SelectOption(label=t("wizard.dont_waste_pairs_on", lang),
+                                     value="yes", default=pairs_default),
+                discord.SelectOption(label=t("wizard.dont_waste_pairs_off", lang),
+                                     value="no", default=not pairs_default),
+            ],
+            min_values=1, max_values=1, row=1)
+        self.pairs_select.callback = self._pairs_selected
+        self.add_item(self.pairs_select)
+
         # Which oversized sizes the organizer allows (default: all candidates).
+        # Reps may use every free infantry seat; player mode plans the leftover.
         base = event.get("infantry_squad_size", 6)
         pool = infantry_unused_pool(event)
-        self._candidates = list(range(base + 1, min(base + pool // 2, MAX_SQUAD_PLAYERS) + 1))
+        top = base + pool if is_player_mode(event) else MAX_SQUAD_PLAYERS
+        self._candidates = list(range(base + 1, min(top, MAX_SQUAD_PLAYERS) + 1))
         self.sizes_select = None
         if len(self._candidates) > 1:
             current = event.get("dont_waste_allowed_sizes") or self._candidates
@@ -5995,13 +6024,15 @@ class WizardDontWasteSlotsView(BaseView):
                 options=[discord.SelectOption(
                     label=t("wizard.dont_waste_size_option", lang, size=k),
                     value=str(k), default=k in current) for k in self._candidates],
-                min_values=1, max_values=len(self._candidates), row=1)
+                min_values=1, max_values=len(self._candidates), row=2)
             self.sizes_select.callback = self._sizes_selected
             self.add_item(self.sizes_select)
 
-        # Cap on the total number of oversized squads (always even — they come
-        # in pairs). Only offered when more than one pair fits at all.
-        max_total = min(2 * (pool // 2), _get_max_infantry_squads(event))
+        # Cap on the total number of oversized squads. Even values only, so it
+        # fits either pair rule (odd caps via the DM editor). Only offered when
+        # more than one pair fits at all.
+        room = pool if is_player_mode(event) else infantry_seat_budget(event) // (base + 1)
+        max_total = min(room, _get_max_infantry_squads(event))
         self.max_select = None
         if max_total >= 4:
             current_max = event.get("dont_waste_max_squads") or 0
@@ -6011,28 +6042,33 @@ class WizardDontWasteSlotsView(BaseView):
                     label=t("wizard.dont_waste_max_unlimited", lang),
                     value="0", default=current_max == 0)] + [
                     discord.SelectOption(
-                        label=t("wizard.dont_waste_max_option", lang,
-                                n=n, per_team=n // 2),
+                        label=t("wizard.dont_waste_max_option", lang, n=n),
                         value=str(n), default=n == current_max)
-                    for n in range(2, max_total + 1, 2)],
-                min_values=1, max_values=1, row=2)
+                    # ponytail: 24 values + "unlimited" = Discord's 25-option cap.
+                    for n in range(2, min(max_total, 48) + 1, 2)],
+                min_values=1, max_values=1, row=3)
             self.max_select.callback = self._max_selected
             self.add_item(self.max_select)
 
-        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=3)
+        skip_btn = ui.Button(label=t("general.skip", lang), style=discord.ButtonStyle.secondary, row=4)
         skip_btn.callback = self._skip
         self.add_item(skip_btn)
 
-        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=3)
+        continue_btn = ui.Button(label=t("wizard.continue", lang), style=discord.ButtonStyle.success, row=4)
         continue_btn.callback = self._continue
         self.add_item(continue_btn)
 
         self._selected_enabled = None
+        self._selected_pairs = None
         self._selected_sizes = None
         self._selected_max = None
 
     async def _mode_selected(self, interaction):
         self._selected_enabled = self.mode_select.values[0] == "yes"
+        await interaction.response.defer()
+
+    async def _pairs_selected(self, interaction):
+        self._selected_pairs = self.pairs_select.values[0] == "yes"
         await interaction.response.defer()
 
     async def _sizes_selected(self, interaction):
@@ -6046,6 +6082,8 @@ class WizardDontWasteSlotsView(BaseView):
     def _save_selections(self):
         if self._selected_enabled is not None:
             self.event["dont_waste_slots"] = self._selected_enabled
+        if self._selected_pairs is not None:
+            self.event["dont_waste_pairs"] = self._selected_pairs
         if self._selected_sizes is not None:
             # All candidates picked == no restriction.
             self.event["dont_waste_allowed_sizes"] = (
@@ -6130,7 +6168,7 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
                       else t("wizard.summary_caster_stream_no", lang))
         embed.add_field(name=t("wizard.summary_caster_stream", lang), value=stream_val, inline=True)
 
-    if dont_waste_slots_possible(event):
+    if _dont_waste_step_available(event):
         dw_val = (t("wizard.summary_dont_waste_yes", lang)
                   if event.get("dont_waste_slots", False)
                   else t("wizard.summary_dont_waste_no", lang))
@@ -6140,6 +6178,9 @@ def _build_confirmation_embed(event: dict, guild_id: int) -> discord.Embed:
         max_squads = event.get("dont_waste_max_squads")
         if event.get("dont_waste_slots", False) and max_squads:
             dw_val += f" · max. {max_squads}"
+        if event.get("dont_waste_slots", False):
+            dw_val += " · " + t("wizard.summary_dont_waste_pairs_on" if dont_waste_pairs(event)
+                                else "wizard.summary_dont_waste_pairs_off", lang)
         embed.add_field(name=t("wizard.summary_dont_waste", lang), value=dw_val, inline=True)
 
     if event.get("registration_start_time") is not None:

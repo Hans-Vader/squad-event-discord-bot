@@ -378,5 +378,73 @@ class TestPlayerModePairRule(unittest.TestCase):
         self.assertEqual(sum(len(d["members"]) for d in ev["squads"].values()), 27)
 
 
+def _apply(ev, key, vtype, value):
+    return bot._apply_property_change(ev, key, vtype, None, value, "de")
+
+
+class TestConfigUi(unittest.TestCase):
+    def test_step_available(self):
+        self.assertTrue(bot._dont_waste_step_available(_dcn()))
+        self.assertFalse(bot._dont_waste_step_available(_dcn(infantry_squad_size=9)))
+        self.assertFalse(bot._dont_waste_step_available(_dcn(mode="player")))                    # pool 0
+        self.assertTrue(bot._dont_waste_step_available(_dcn(mode="player", max_player_slots=99)))  # pool 1
+
+    def test_editor_enable_rules(self):
+        ev = _dcn(dont_waste_slots=False)
+        self.assertTrue(_apply(ev, "dont_waste_slots", "bool", True)[0])               # rep, no leftover
+        ok, err = _apply(_dcn(mode="player", dont_waste_slots=False), "dont_waste_slots", "bool", True)
+        self.assertFalse(ok)
+        self.assertIn("keine ungenutzten Slots", err)
+        ev = _dcn(mode="player", max_player_slots=99, dont_waste_slots=False)
+        ok, err = _apply(ev, "dont_waste_slots", "bool", True)
+        self.assertFalse(ok)
+        self.assertIn("nur 1 Slot", err)
+        ev["dont_waste_pairs"] = False
+        self.assertTrue(_apply(ev, "dont_waste_slots", "bool", True)[0])
+        ok, err = _apply(_dcn(infantry_squad_size=9, dont_waste_slots=False), "dont_waste_slots", "bool", True)
+        self.assertFalse(ok)
+        self.assertIn("maximal 9 Spieler", err)
+
+    def test_editor_max_values(self):
+        ev = _dcn()
+        for good in (1, 3, 4):
+            self.assertTrue(_apply(ev, "dont_waste_max_squads", "int_nullable", good)[0], good)
+        self.assertFalse(_apply(ev, "dont_waste_max_squads", "int_nullable", -2)[0])
+        self.assertTrue(_apply(ev, "dont_waste_max_squads", "int_nullable", None)[0])
+        self.assertIsNone(ev["dont_waste_max_squads"])
+
+    def test_pair_property_row(self):
+        self.assertIn((26, "dont_waste_pairs", "edit.property.dont_waste_pairs", "bool", None), bot._EDIT_PROPERTIES)
+        for ev in (_dcn(), _dcn(mode="player"), _dcn(max_caster_slots=0)):
+            keys = [p[1] for p in bot._visible_edit_properties(ev)]
+            self.assertIn("dont_waste_pairs", keys)
+            self.assertLessEqual(len(keys), 25)
+
+    def test_wizard_view(self):
+        with patch.object(bot, "get_guild_language", return_value="de"):
+            view = bot.WizardDontWasteSlotsView(0, 0, _dcn(), {}, {}, None)
+        self.assertEqual({o.value for o in view.pairs_select.options}, {"yes", "no"})
+        self.assertEqual([o.value for o in view.sizes_select.options], ["7", "8", "9"])
+        self.assertLessEqual(len(view.max_select.options), 25)
+        self.assertTrue(all(c.row is not None and c.row <= 4 for c in view.children))
+
+    def test_summary_shows_pair_rule(self):
+        ev = _dcn_embed(dont_waste_pairs=False)   # summary reads only name/date by index, rest via .get
+        with patch.object(bot, "get_guild_language", return_value="de"):
+            fields = {f.name: f.value for f in bot._build_confirmation_embed(ev, 0).fields}
+        self.assertIn(t("wizard.summary_dont_waste_pairs_off", "de"), fields[t("wizard.summary_dont_waste", "de")])
+        self.assertIn("Übergroße Squads", t("wizard.summary_dont_waste", "de"))
+        self.assertIn("Oversized squads", t("wizard.summary_dont_waste", "en"))
+
+    def test_i18n_keys(self):
+        for key in ("edit.property.dont_waste_pairs", "wizard.dont_waste_step_desc_player",
+                    "wizard.dont_waste_pairs_placeholder", "wizard.dont_waste_pairs_on",
+                    "wizard.dont_waste_pairs_off", "wizard.summary_dont_waste_pairs_on",
+                    "wizard.summary_dont_waste_pairs_off"):
+            for lang in ("de", "en"):
+                self.assertIn(lang, _STRINGS.get(key, {}), f"{key}:{lang}")
+        self.assertNotIn("{", t("wizard.dont_waste_step_desc", "de"))
+
+
 if __name__ == "__main__":
     unittest.main()

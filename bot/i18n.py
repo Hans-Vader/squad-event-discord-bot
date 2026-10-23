@@ -1659,8 +1659,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "21. Role selection at registration",
     },
     "edit.property.dont_waste_slots": {
-        "de": "22. Slots nicht verschwenden (größere Squads)",
-        "en": "22. Don't waste slots (bigger squads)",
+        "de": "22. Übergroße Squads",
+        "en": "22. Oversized squads",
     },
     "edit.property.dont_waste_sizes": {
         "de": "23. Erlaubte Übergrößen (leer = alle)",
@@ -1702,13 +1702,17 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "25. Stream-Links für Caster",
         "en": "25. Stream links for casters",
     },
+    "edit.property.dont_waste_pairs": {
+        "de": "26. Paar-Regel für übergroße Squads (Teams spiegelbar)",
+        "en": "26. Pair rule for oversized squads (mirrorable teams)",
+    },
     "edit.max_unlimited": {
         "de": "Unbegrenzt",
         "en": "Unlimited",
     },
     "edit.dont_waste_max_invalid": {
-        "de": "Ungültiger Wert: Übergroße Squads entstehen paarweise (eins pro Team) — die Obergrenze muss eine gerade Zahl ab 2 sein, oder 0 für unbegrenzt.",
-        "en": "Invalid value: oversized squads come in pairs (one per team) — the cap must be an even number of at least 2, or 0 for unlimited.",
+        "de": "Ungültiger Wert: Die Obergrenze muss mindestens 1 sein, oder 0 für unbegrenzt. Mit Paar-Regel zählt ein ungerader Wert wie der nächstkleinere gerade (übergroße Squads entstehen dann paarweise).",
+        "en": "Invalid value: the cap must be at least 1, or 0 for unlimited. With the pair rule an odd value counts as the next lower even one (oversized squads then come in pairs).",
     },
     "edit.dont_waste_single_unused": {
         "de": "Diese Option kann nicht aktiviert werden: Es ist nur 1 Slot ungenutzt — übergroße Squads müssen immer in gleicher Anzahl (paarweise, eins pro Team) gebildet werden.",
@@ -2320,25 +2324,52 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Disabled",
     },
     "wizard.dont_waste_step_title": {
-        "de": "Slots nicht verschwenden",
-        "en": "Don't waste slots",
+        "de": "Übergroße Squads",
+        "en": "Oversized squads",
     },
     "wizard.dont_waste_step_desc": {
+        "de": ("Wenn aktiviert, können Squad-Vertreter auch größere Squads (bis 9 Spieler) "
+               "anmelden — dafür werden beliebige freie Infanterie-Plätze genutzt. Dadurch "
+               "passen am Ende eventuell weniger Squads ins Event.\n"
+               "**Paar-Regel an:** jede Übergröße nur paarweise (eins pro Team), die "
+               "Squad-Anzahl bleibt gerade — beide Teams lassen sich spiegeln.\n"
+               "**Paar-Regel aus:** jede Größe einzeln, solange Platz ist."),
+        "en": ("When enabled, squad reps can also register bigger squads (up to 9 players) "
+               "— they use any free infantry seats, so fewer squads may fit into the "
+               "event in the end.\n"
+               "**Pair rule on:** every oversized size only in pairs (one per team), the "
+               "squad count stays even — both teams can be mirrored.\n"
+               "**Pair rule off:** any size on its own, as long as seats last."),
+    },
+    "wizard.dont_waste_step_desc_player": {
         "de": ("Die Anzahl der Infanterie-Squads ist immer gerade (gleich viele pro Team), "
-               "dadurch bleiben **{unused}** Plätze ungenutzt. Wenn aktiviert, können diese "
-               "Plätze durch größere Squads genutzt werden — immer in gleicher Anzahl pro "
-               "Größe, damit beide Teams gespiegelt werden können. Angeboten werden die "
-               "Größen, die die freien Plätze mit möglichst wenigen übergroßen Squads "
-               "ausnutzen."),
+               "dadurch bleiben **{unused}** Plätze ungenutzt. Wenn aktiviert, plant der Bot "
+               "dafür größere Squads ein.\n"
+               "**Paar-Regel an:** immer in gleicher Anzahl pro Größe, damit beide Teams "
+               "gespiegelt werden können.\n"
+               "**Paar-Regel aus:** auch einzelne größere Squads."),
         "en": ("The infantry squad count is always even (same number per team), which "
-               "leaves **{unused}** seats unused. When enabled, those seats can be used by "
-               "bigger squads — always in equal numbers per size so both teams can be "
-               "mirrored. Offered are the sizes that use the free seats with as few "
-               "oversized squads as possible."),
+               "leaves **{unused}** seats unused. When enabled, the bot plans bigger "
+               "squads for them.\n"
+               "**Pair rule on:** always in equal numbers per size so both teams can be "
+               "mirrored.\n"
+               "**Pair rule off:** single bigger squads too."),
     },
     "wizard.dont_waste_select_placeholder": {
-        "de": "Ungenutzte Plätze verwenden...",
-        "en": "Use leftover slots...",
+        "de": "Übergroße Squads erlauben...",
+        "en": "Allow oversized squads...",
+    },
+    "wizard.dont_waste_pairs_placeholder": {
+        "de": "Paar-Regel (Standard: an)...",
+        "en": "Pair rule (default: on)...",
+    },
+    "wizard.dont_waste_pairs_on": {
+        "de": "Paar-Regel an — paarweise, Teams spiegelbar",
+        "en": "Pair rule on — in pairs, mirrorable teams",
+    },
+    "wizard.dont_waste_pairs_off": {
+        "de": "Paar-Regel aus — einzeln, solange Platz ist",
+        "en": "Pair rule off — single squads while seats last",
     },
     "wizard.dont_waste_sizes_placeholder": {
         "de": "Erlaubte Übergrößen wählen (Standard: alle)...",
@@ -2357,20 +2388,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Unlimited",
     },
     "wizard.dont_waste_max_option": {
-        "de": "{n} übergroße Squads ({per_team} pro Team)",
-        "en": "{n} oversized squads ({per_team} per team)",
+        "de": "{n} übergroße Squads",
+        "en": "{n} oversized squads",
     },
     "wizard.dont_waste_enabled": {
-        "de": "Slots nicht verschwenden aktivieren",
-        "en": "Enable don't waste slots",
+        "de": "Übergroße Squads aktivieren",
+        "en": "Enable oversized squads",
     },
     "wizard.dont_waste_disabled": {
-        "de": "Slots nicht verschwenden deaktivieren",
-        "en": "Disable don't waste slots",
+        "de": "Übergroße Squads deaktivieren",
+        "en": "Disable oversized squads",
     },
     "wizard.summary_dont_waste": {
-        "de": "Slots nicht verschwenden",
-        "en": "Don't waste slots",
+        "de": "Übergroße Squads",
+        "en": "Oversized squads",
     },
     "wizard.summary_dont_waste_yes": {
         "de": "Aktiviert",
@@ -2379,6 +2410,14 @@ _STRINGS: dict[str, dict[str, str]] = {
     "wizard.summary_dont_waste_no": {
         "de": "Deaktiviert",
         "en": "Disabled",
+    },
+    "wizard.summary_dont_waste_pairs_on": {
+        "de": "Paar-Regel an",
+        "en": "Pair rule on",
+    },
+    "wizard.summary_dont_waste_pairs_off": {
+        "de": "Paar-Regel aus",
+        "en": "Pair rule off",
     },
     "ping.reg_closed": {
         "de": "**Die Registrierung für {name} ist geschlossen.**",

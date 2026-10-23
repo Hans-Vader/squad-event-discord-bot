@@ -246,14 +246,19 @@ class TestModelPlumbing(unittest.TestCase):
         self.assertIn("dont_waste_slots", keys)
 
     def test_enable_via_editor_requires_unused_slots(self):
-        # No unused slots (72 infantry seats = 12 even squads) → rejected.
-        ev = _event(max_player_slots=86, dont_waste_slots=False)
+        # Player mode plans only the leftover: no unused slots (72 infantry
+        # seats = 12 even squads) → rejected.
+        ev = _event(mode="player", max_player_slots=86, dont_waste_slots=False)
         ok, err = bot._apply_property_change(ev, "dont_waste_slots", "bool", None, True, "de")
         self.assertFalse(ok)
         self.assertIn("keine ungenutzten Slots", err)
         self.assertFalse(ev["dont_waste_slots"])
+        # Rep mode uses every free infantry seat → accepted without leftover.
+        ev = _event(max_player_slots=86, dont_waste_slots=False)
+        ok, err = bot._apply_property_change(ev, "dont_waste_slots", "bool", None, True, "de")
+        self.assertTrue(ok, err)
         # A single unused slot can never form a pair → rejected with its own message.
-        ev = _event(max_player_slots=87, dont_waste_slots=False)
+        ev = _event(mode="player", max_player_slots=87, dont_waste_slots=False)
         ok, err = bot._apply_property_change(ev, "dont_waste_slots", "bool", None, True, "de")
         self.assertFalse(ok)
         self.assertIn("nur 1 Slot", err)
@@ -393,10 +398,13 @@ class TestMaxSquadsCap(unittest.TestCase):
 
     def test_editor_validation(self):
         ev = self._ev()
-        for bad in (3, 1, -2):
-            ok, _err = bot._apply_property_change(
-                ev, "dont_waste_max_squads", "int_nullable", None, bad, "de")
-            self.assertFalse(ok, f"odd/invalid cap {bad} accepted")
+        for good in (3, 1):
+            ok, err = bot._apply_property_change(
+                ev, "dont_waste_max_squads", "int_nullable", None, good, "de")
+            self.assertTrue(ok, f"cap {good} rejected: {err}")
+        ok, _err = bot._apply_property_change(
+            ev, "dont_waste_max_squads", "int_nullable", None, -2, "de")
+        self.assertFalse(ok, "negative cap accepted")
         ok, err = bot._apply_property_change(
             ev, "dont_waste_max_squads", "int_nullable", None, 4, "de")
         self.assertTrue(ok, err)
