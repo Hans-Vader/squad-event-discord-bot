@@ -569,35 +569,78 @@ def infantry_size_options(event: dict) -> list:
     return options
 
 
+def infantry_best_case(event: dict) -> tuple:
+    """(seats, squads): the most infantry seats and the most infantry squads
+    that further rep registrations could still reach under the current rules
+    (never less than what is registered now). The two maxima may come from
+    different futures — seats feed "Unused", squads the header's squad max."""
+    base = max(1, event.get("infantry_squad_size", 6))
+    seats_total = infantry_seat_budget(event)
+    cap = _max_squads_for_type(event, "infantry")
+    active = event.get("mode", "rep") != "player" and dont_waste_slots_active(event)
+    allowed = event.get("dont_waste_allowed_sizes")
+    sizes = [k for k in range(base + 1, MAX_SQUAD_PLAYERS + 1)
+             if active and not (allowed and k not in allowed)]
+    counts = _oversized_counts(event)
+
+    if not (active and dont_waste_pairs(event)):
+        used, count = _infantry_usage(event)
+        slots, free = max(0, cap - count), max(0, seats_total - used)
+        budget = _oversized_budget(event, counts) if sizes else 0
+        most = slots if budget is None else min(budget, slots)
+        # reach[o]: seat sums of exactly o further oversized squads that fit.
+        reach = [{0}]
+        for _ in range(most):
+            nxt = {a + k for a in reach[-1] for k in sizes if a + k <= free}
+            if not nxt:
+                break
+            reach.append(nxt)
+        best = max(a + min(slots - o, (free - a) // base) * base
+                   for o, sums in enumerate(reach) for a in sums)
+        return used + best, count + min(slots, free // base)
+
+    # Pair rule: held mirrors complete first, then new pairs, then as many
+    # regular squads as stay even (B).
+    probe = {**event, "squads": dict(event.get("squads", {}))}
+    for i, size in enumerate(_reserved_mirrors(event, counts)):
+        probe["squads"][f"__mirror{i}"] = {"type": "infantry", "size": size}
+    used, count = _infantry_usage(probe)
+    counts = _oversized_counts(probe)
+    n_o = sum(counts.values())
+    seats_o = sum(k * c for k, c in counts.items())
+    n_regular = count - n_o
+    most = max(0, (cap - n_o) // 2)
+    budget = _oversized_budget(probe, counts)
+    if budget is not None:
+        most = min(most, budget)
+    reach = [{0}]
+    for _ in range(most):
+        nxt = {a + 2 * k for a in reach[-1] for k in sizes if seats_o + a + 2 * k <= seats_total}
+        if not nxt:
+            break
+        reach.append(nxt)
+    best_seats, best_squads = used, count
+    for p, sums in enumerate(reach):
+        for a in sums:
+            regular = _regular_capacity(probe, n_o + 2 * p, seats_o + a)
+            if regular < n_regular:
+                continue
+            best_seats = max(best_seats, used + a + (regular - n_regular) * base)
+            best_squads = max(best_squads, count + 2 * p + regular - n_regular)
+    return best_seats, best_squads
+
+
 def infantry_wasted_seats(event: dict) -> int:
-    """Pool seats that can no longer be absorbed by oversized squads: the
-    leftover once no oversized size is offerable anymore (0 while any option —
-    including a pending mirror — is still open). In player mode the bot plans
-    capacities itself, so the waste is simply the plan's static residual."""
-    base = event.get("infantry_squad_size", 6)
+    """Infantry seats no further registration can fill anymore, even in the
+    best case. In player mode the bot plans capacities itself, so the waste is
+    simply the plan's static residual."""
     pool = infantry_unused_pool(event)
     if event.get("mode", "rep") == "player":
         # Player mode plans the whole layout, so the plan absorption is the
         # full picture — the residual (incl. any cap-stranded seats) is waste.
         plan = _pair_plan(pool, _allowed_extras(event, pool), _max_pairs(event))
         return max(0, pool - sum(2 * extra * n for extra, n in plan.items()))
-    counts: dict[int, int] = {}
-    for d in event.get("squads", {}).values():
-        size = d.get("size", base)
-        if d.get("type") == "infantry" and size > base:
-            counts[size] = counts.get(size, 0) + 1
-    consumed = sum((size - base) * c for size, c in counts.items())
-    if any(size != base for size, _ in infantry_size_options(event)):
-        # Optimistic while options are open: only seats no further pair can
-        # absorb (cap/whitelist-stranded, given what's already registered) are
-        # wasted. Reserved mirror seats of incomplete pairs will be filled, so
-        # they leave the free pool and don't count as waste.
-        reserved = sum(size - base for size, c in counts.items() if c % 2)
-        free_pool = max(0, pool - consumed - reserved)
-        plan = _pair_plan(free_pool, _allowed_extras(event, free_pool),
-                          _max_pairs(event, counts))
-        return max(0, free_pool - sum(2 * extra * n for extra, n in plan.items()))
-    return max(0, pool - consumed)
+    return max(0, infantry_seat_budget(event) - infantry_best_case(event)[0])
 
 
 def _next_auto_squad_name(event: dict, squad_type: str) -> str:
@@ -1592,6 +1635,9 @@ def format_event_details(event: dict, lang: str = "de",
         # Only the residual that no oversized squad can absorb anymore counts
         # as unused while the mode is active.
         unused = infantry_wasted_seats(event)
+        if not is_player_mode:
+            # Oversized squads use up free seats, so fewer squads still fit.
+            max_inf_squads = infantry_best_case(event)[1]
     if unused > 0:
         overview_value = t("embed.server_overview_value", lang,
                            cap=server_cap, free=available, unused=unused)

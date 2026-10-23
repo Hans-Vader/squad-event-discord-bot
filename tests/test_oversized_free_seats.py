@@ -200,6 +200,7 @@ class TestFreeSeatInvariants(unittest.TestCase):
         opts = dict(utils.infantry_size_options(ev))
         for k in range(base, utils.MAX_SQUAD_PLAYERS + 1):
             self.assertEqual(opts.get(k, 0) > 0, utils.infantry_block_reason(ev, k) is None, f"{k} {ctx}")
+        self.assertGreaterEqual(utils.infantry_wasted_seats(ev), 0, ctx)
         if pairs:
             probe = {**ev, "squads": dict(ev["squads"])}
             for k in sorted(k for k, c in counts.items() if c % 2):
@@ -227,6 +228,67 @@ class TestFreeSeatInvariants(unittest.TestCase):
                             sid = rng.choice(sorted(ev["squads"]))
                             trace.append(f"-{ev['squads'].pop(sid)['size']}")
                         self._check(ev, trace[-12:])
+
+
+def _dcn_embed(**over):
+    ev = _dcn(name="Test Event", date="01.01.2099", time="20:00", server_max_players=100,
+              max_caster_slots=2, player_slots_used=0, caster_slots_used=0, casters={},
+              infantry_waitlist=[], vehicle_waitlist=[], heli_waitlist=[], caster_waitlist=[],
+              tentative=[], declined=[])
+    ev.update(over)
+    return ev
+
+
+class TestBestCaseAndEmbed(unittest.TestCase):
+    def _embed(self, **over):
+        return utils.format_event_details(_dcn_embed(**over), "de")
+
+    def _inf_name(self, embed):
+        return next(f.name for f in embed.fields if "Infan" in f.name)
+
+    def _values(self, embed):
+        return "\n".join(str(f.value) for f in embed.fields)
+
+    def test_best_case_values(self):
+        self.assertEqual(utils.infantry_best_case(_dcn(dont_waste_pairs=False, squads=_squads(*SIX11, 9))), (84, 13))
+        self.assertEqual(utils.infantry_best_case(_dcn(dont_waste_pairs=False, squads=_squads(*SIX11, 9, 6))), (81, 13))
+        self.assertEqual(utils.infantry_best_case(_dcn(squads=_squads(9))), (84, 12))
+        self.assertEqual(utils.infantry_best_case(_dcn(squads=_squads(9, 9, *[6] * 10))), (78, 12))
+        self.assertEqual(utils.infantry_best_case(_dcn(dont_waste_pairs=False, dont_waste_max_squads=1,
+                                                       squads=_squads(*SIX11, 9))), (81, 13))
+
+    def test_header_example_a(self):
+        name = self._inf_name(self._embed(dont_waste_pairs=False, squads=_squads(*SIX11, 9)))
+        self.assertIn("(12/13) [(11/12) Größe: 6 | (0/1) Größe: 7 | (0/1) Größe: 8 | (1/2) Größe: 9]", name)
+
+    def test_header_example_b_plain(self):
+        self.assertIn("(11/14) [Größe: 6]", self._inf_name(self._embed(squads=_squads(*SIX11))))
+
+    def test_header_example_c(self):
+        name = self._inf_name(self._embed(squads=_squads(9)))
+        self.assertIn("(1/12) [(0/10) Größe: 6 | (0/8) Größe: 7 | (0/8) Größe: 8 | (1/8) Größe: 9]", name)
+
+    def test_unused(self):
+        self.assertIn("Ungenutzt: 3", self._values(self._embed(dont_waste_pairs=False, squads=_squads(*SIX11, 9, 6))))
+        self.assertIn("Ungenutzt: 6", self._values(self._embed(squads=_squads(9, 9, *[6] * 10))))
+        self.assertNotIn("Ungenutzt", self._values(self._embed(squads=_squads(9))))       # best case fills 84
+        self.assertNotIn("Ungenutzt", self._values(self._embed(dont_waste_pairs=False, squads=_squads(*SIX11))))
+
+    def test_overbooked_header_never_negative(self):
+        embed = self._embed(max_vehicle_squads=7, squads=_squads(*[6] * 14))
+        self.assertIn("(14/14)", self._inf_name(embed))
+        self.assertNotIn("Ungenutzt", self._values(embed))
+        self.assertEqual(utils.infantry_wasted_seats(_dcn(squads=_squads(*[6] * 12, 12))), 0)
+
+    def test_base_one_is_fast(self):
+        for pairs in (True, False):
+            ev = _dcn(infantry_squad_size=1, max_player_slots=200, max_vehicle_squads=0,
+                      max_heli_squads=0, dont_waste_pairs=pairs)
+            t0 = time.monotonic()
+            opts = utils.infantry_size_options(ev)
+            utils.infantry_best_case(ev)
+            self.assertLess(time.monotonic() - t0, 0.5)
+            self.assertLessEqual(len(opts), 9)
 
 
 if __name__ == "__main__":
